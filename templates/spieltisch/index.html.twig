@@ -1,0 +1,40 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Spieltisch: {{ tisch.name }} – Doppelkopf Online{% endblock %}
+
+{% block body %}
+<div class="bg-tisch-900 rounded-2xl shadow-2xl min-h-[calc(100vh-12rem)] p-4 flex flex-col"
+     {% if spiel and mercureTopic %}
+     data-controller="spieltisch"
+     data-spieltisch-mercure-url-value="{{ mercurePublicUrl }}"
+     data-spieltisch-topic-value="{{ mercureTopic }}"
+     data-spieltisch-zustand-url-value="{{ path('app_spieltisch_zustand', {id: tisch.id}) }}"
+     {% endif %}>
+
+    {# ── Kopfzeile ───────────────────────────────────────────────────── #}
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <a href="{{ path('app_lobby') }}" class="text-tisch-300 hover:text-white text-sm transition-colors">
+                ← Lobby
+            </a>
+            <span class="text-tisch-400">|</span>
+            <h1 class="text-white font-bold text-lg">{{ tisch.name }}</h1>
+            {% if spiel %}
+                <span class="text-tisch-300 text-sm">{{ spiel.variante.value }}</span>
+            {% endif %}
+        </div>
+        <div class="text-tisch-300 text-xs">Stich {{ spiel ? spiel.aktuellerStichNr : 0 }}/12</div>
+    </div>
+
+    {# ── Fehler-Banner (per Stimulus gesetzt) ───────────────────────── #}
+    <div data-spieltisch-target="fehler"
+         class="hidden bg-red-900 border border-red-600 text-red-200 rounded-lg px-4 py-2 mb-4 text-sm text-center">
+    </div>
+
+    {# ── Spielzustand (via Mercure aktualisiert) ─────────────────────── #}
+    <div data-spieltisch-target="zustand" class="flex-1 flex flex-col">
+        {% include 'spieltisch/_spielzustand.html.twig' %}
+    </div>
+
+</div>
+{% endblock %}

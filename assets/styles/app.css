@@ -1,0 +1,78 @@
+/* Tailwind v4 – CSS-basierte Konfiguration */
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+/* Quellpfade für Content-Detection */
+@source "../../templates/**/*.html.twig";
+@source "../**/*.{js,jsx,ts,tsx}";
+
+/* Eigene Design-Tokens */
+@theme {
+    /* Spieltisch-Grün als Primärfarbe */
+    --color-tisch-50:  #f0fdf4;
+    --color-tisch-100: #dcfce7;
+    --color-tisch-200: #bbf7d0;
+    --color-tisch-300: #86efac;
+    --color-tisch-400: #4ade80;
+    --color-tisch-500: #22c55e;
+    --color-tisch-600: #16a34a;
+    --color-tisch-700: #15803d;
+    --color-tisch-800: #166534;
+    --color-tisch-900: #14532d;
+    --color-tisch-950: #052e16;
+
+    --font-family-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer components {
+    .btn-primary {
+        @apply inline-flex items-center px-4 py-2 bg-tisch-700 text-white text-sm font-medium rounded-md hover:bg-tisch-800 focus:outline-none focus:ring-2 focus:ring-tisch-500 focus:ring-offset-2 transition-colors;
+    }
+
+    .btn-secondary {
+        @apply inline-flex items-center px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-tisch-500 focus:ring-offset-2 transition-colors;
+    }
+
+    .form-input {
+        @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-tisch-500 focus:ring-tisch-500 sm:text-sm;
+    }
+
+    .flash-success {
+        @apply rounded-md bg-green-50 p-4 text-sm text-green-800 border border-green-200;
+    }
+
+    .flash-error {
+        @apply rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-200;
+    }
+
+    .flash-warning {
+        @apply rounded-md bg-yellow-50 p-4 text-sm text-yellow-800 border border-yellow-200;
+    }
+
+    /* ── Spielkarten ──────────────────────────────────────────────── */
+    .spielkarte {
+        @apply relative inline-flex flex-col items-center justify-center
+               bg-white rounded-lg border border-gray-200 shadow-sm
+               select-none font-bold leading-none;
+    }
+
+    .spielkarte--klein   { @apply w-7 h-10 text-xs; }
+    .spielkarte--mittel  { @apply w-12 h-16 text-sm; }
+    .spielkarte--gross   { @apply w-14 h-20 text-base; }
+
+    .spielkarte--rot     { @apply text-red-600; }
+    .spielkarte--schwarz { @apply text-gray-900; }
+
+    .spielkarte--ruecken {
+        @apply bg-tisch-700 border-tisch-500;
+    }
+
+    .spielkarte--spielbar {
+        @apply cursor-pointer hover:scale-110 hover:-translate-y-2 hover:shadow-lg
+               hover:border-yellow-400 transition-all duration-150
+               focus:outline-none focus:ring-2 focus:ring-yellow-400;
+    }
+
+    .spielkarte__symbol { @apply text-[0.6em] leading-none; }
+    .spielkarte__wert   { @apply leading-none mt-0.5; }
+}

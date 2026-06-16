@@ -1,0 +1,103 @@
+services:
+
+  # ── PHP-App + Mercure-Hub (FrankenPHP) ──────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"        # HTTP/3
+    volumes:
+      - .:/app
+      - vendor_data:/app/vendor   # Eigenes Volume: composer install läuft im Container (PHP 8.3)
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      SERVER_NAME: "${SERVER_NAME:-localhost}"
+      APP_ENV: "${APP_ENV:-dev}"
+      APP_SECRET: "${APP_SECRET}"
+      DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
+      MAILER_DSN: "${MAILER_DSN:-smtp://localhost:1025}"
+      # Mercure – integriert in FrankenPHP
+      MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"
+      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost/.well-known/mercure}"
+      MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
+      MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
+      # Bot-Service
+      BOT_API_URL: "http://bot:8001"
+      BOT_API_TOKEN: "${BOT_API_TOKEN}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: doppelkopf
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"          # Nur für lokale DB-Tools (in Prod entfernen)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d doppelkopf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Bot-Worker: erkennt Timeouts und spielt für inaktive Spieler ────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: dev
+    restart: unless-stopped
+    command: ["php", "bin/console", "app:bot:spielzuge", "--no-interaction"]
+    volumes:
+      - .:/app
+      - vendor_data:/app/vendor
+    environment:
+      APP_ENV: "${APP_ENV:-dev}"
+      APP_SECRET: "${APP_SECRET}"
+      DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
+      MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"
+      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost/.well-known/mercure}"
+      MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
+      MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
+      BOT_API_URL: "http://bot:8001"
+      BOT_API_TOKEN: "${BOT_API_TOKEN}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Bot-Service (Stub) ───────────────────────────────────────────────────────
+  bot:
+    build:
+      context: docker/bot
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      BOT_API_TOKEN: "${BOT_API_TOKEN}"
+      SYMFONY_API_URL: "http://app"
+
+  # ── Mailpit (lokaler Mailcatcher für Dev) ────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"          # Web-UI
+      - "1025:1025"          # SMTP
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
+  vendor_data:    # vendor/ wird im Container verwaltet, nicht vom Host überschrieben

@@ -1,0 +1,27 @@
+{
+    # Worker-Mode nur in Produktion aktivieren.
+    # In Entwicklung läuft PHP ohne Worker (einfacher zu debuggen).
+    frankenphp
+}
+
+{$SERVER_NAME:localhost} {
+    root * /app/public
+
+    @static {
+        path *.css *.js *.ico *.jpg *.jpeg *.png *.svg *.woff *.woff2
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    encode zstd gzip
+
+    route {
+        mercure {
+            publisher_jwt {$MERCURE_PUBLISHER_JWT_KEY} HS256
+            subscriber_jwt {$MERCURE_SUBSCRIBER_JWT_KEY} HS256
+            anonymous
+            cors_origins {$MERCURE_CORS_ORIGINS:*}
+        }
+
+        php_server
+    }
+}

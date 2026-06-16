@@ -1,0 +1,39 @@
+{# Parameter: teilnehmer, istDran (bool), anzahlKarten (int), ansagen (string[]), vertikal (bool) #}
+{% set vertikal = vertikal ?? false %}
+{% set ansagen  = ansagen ?? [] %}
+
+<div class="flex flex-col items-center gap-1">
+
+    <div class="flex items-center gap-1 flex-wrap justify-center">
+        {% if teilnehmer %}
+            <span class="text-white text-xs font-medium">
+                {{ teilnehmer.user ? teilnehmer.user.username : 'Bot' }}
+            </span>
+            {% if teilnehmer.team %}
+                <span class="text-xs px-1 rounded {{ teilnehmer.team.value == 'RE' ? 'bg-blue-500' : 'bg-red-500' }} text-white">
+                    {{ teilnehmer.team.value }}
+                </span>
+            {% endif %}
+            {% if istDran %}
+                <span class="text-yellow-300 text-xs font-bold">►</span>
+            {% endif %}
+            {# Ansagen-Badges #}
+            {% for typWert in ansagen %}
+                <span class="text-xs px-1 rounded font-bold
+                    {{ typWert == 'RE' ? 'bg-blue-700 text-white' : 'bg-red-700 text-white' }}">
+                    {{ typWert|replace({'_': ' '}) }}!
+                </span>
+            {% endfor %}
+        {% else %}
+            <span class="text-tisch-300 text-xs">—</span>
+        {% endif %}
+    </div>
+
+    <div class="flex gap-0.5 flex-wrap justify-center max-w-xs">
+        {% if anzahlKarten is defined %}
+            {% for i in 1..anzahlKarten %}
+                <div class="spielkarte spielkarte--klein spielkarte--ruecken"></div>
+            {% endfor %}
+        {% endif %}
+    </div>
+</div>

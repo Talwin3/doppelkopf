@@ -1,0 +1,173 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controller;
+
+use App\Application\Doppelkopf\AnsageService;
+use App\Application\Doppelkopf\KarteAusspielenService;
+use App\Application\Doppelkopf\SpielStartService;
+use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
+use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
+use App\Entity\Tisch;
+use App\Enum\AnsageTyp;
+use App\Infrastructure\Mercure\SpielMercurePublisher;
+use App\Repository\GespielteKarteRepository;
+use App\Repository\SpielAnsageRepository;
+use App\Repository\SpielRepository;
+use App\Repository\SpielTeilnehmerRepository;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+
+#[Route('/spieltisch')]
+#[IsGranted('ROLE_USER')]
+class SpielController extends AbstractController
+{
+    public function __construct(
+        private readonly SpielRepository $spielRepo,
+        private readonly SpielTeilnehmerRepository $teilnehmerRepo,
+        private readonly GespielteKarteRepository $gespielteKarteRepo,
+        private readonly SpielAnsageRepository $ansageRepo,
+        private readonly SpielStartService $spielStartService,
+        private readonly KarteAusspielenService $karteAusspielenService,
+        private readonly AnsageService $ansageService,
+        private readonly SpielMercurePublisher $mercurePublisher,
+        #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
+        private readonly string $mercurePublicUrl,
+    ) {}
+
+    #[Route('/{id}', name: 'app_spieltisch', methods: ['GET'])]
+    public function index(Tisch $tisch): Response
+    {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+
+        $istSpieler = false;
+        foreach ($tisch->getAktiveSpieler() as $ts) {
+            if ($ts->getUser()?->getId() == $user->getId()) {
+                $istSpieler = true;
+                break;
+            }
+        }
+
+        if (!$istSpieler) {
+            $this->addFlash('error', 'Du sitzt nicht an diesem Tisch.');
+            return $this->redirectToRoute('app_lobby');
+        }
+
+        $spiel = $tisch->anzahlAktiveSpieler() === 4
+            ? $this->spielStartService->starten($tisch)
+            : $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen] = $this->spielDaten($spiel, $user);
+
+        return $this->render('spieltisch/index.html.twig', [
+            'tisch'              => $tisch,
+            'spiel'              => $spiel,
+            'teilnehmer'         => $teilnehmer,
+            'hand'               => $hand,
+            'ansagen'            => $ansagen,
+            'verfuegbareAnsagen' => $verfuegbareAnsagen,
+            'mercurePublicUrl'   => $this->mercurePublicUrl,
+            'mercureTopic'       => $spiel ? $this->mercurePublisher->topic($spiel) : null,
+        ]);
+    }
+
+    #[Route('/{id}/zustand', name: 'app_spieltisch_zustand', methods: ['GET'])]
+    public function zustand(Tisch $tisch): Response
+    {
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen] = $this->spielDaten($spiel, $user);
+
+        return $this->render('spieltisch/_spielzustand.html.twig', [
+            'tisch'              => $tisch,
+            'spiel'              => $spiel,
+            'teilnehmer'         => $teilnehmer,
+            'hand'               => $hand,
+            'ansagen'            => $ansagen,
+            'verfuegbareAnsagen' => $verfuegbareAnsagen,
+        ]);
+    }
+
+    #[Route('/{id}/karte-spielen', name: 'app_karte_spielen', methods: ['POST'])]
+    public function karteAusspielen(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('karte_spielen_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        if ($spiel === null) {
+            return new JsonResponse(['fehler' => 'Kein laufendes Spiel.'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->karteAusspielenService->spielen($spiel, $user, $request->request->get('karte_id', ''));
+            return new JsonResponse(['ok' => true]);
+        } catch (UngueltigerZugException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    #[Route('/{id}/ansagen', name: 'app_ansagen', methods: ['POST'])]
+    public function ansagen(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('ansagen_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        if ($spiel === null) {
+            return new JsonResponse(['fehler' => 'Kein laufendes Spiel.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $typWert = $request->request->get('ansage_typ', '');
+        $typ     = AnsageTyp::tryFrom($typWert);
+
+        if ($typ === null) {
+            return new JsonResponse(['fehler' => 'Unbekannter Ansage-Typ.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->ansageService->machen($spiel, $user, $typ);
+            return new JsonResponse(['ok' => true]);
+        } catch (UngueltigeAnsageException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    /** Hilfsmethode: Spiel-Kontextdaten für ein Template aufbereiten. */
+    private function spielDaten(?object $spiel, object $user): array
+    {
+        $teilnehmer        = null;
+        $hand              = [];
+        $ansagen           = [];
+        $verfuegbareAnsagen = [];
+
+        if ($spiel !== null) {
+            $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
+            if ($teilnehmer !== null) {
+                $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
+                $hand         = $teilnehmer->aktuelleHand($gespielteIds);
+                $verfuegbareAnsagen = $this->ansageService->verfuegbareAnsagen($spiel, $user);
+            }
+            $ansagen = $this->ansageRepo->findFuerSpiel($spiel);
+        }
+
+        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen];
+    }
+}

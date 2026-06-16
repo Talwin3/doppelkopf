@@ -1,0 +1,80 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Datenschutzerklärung – Doppelkopf Online{% endblock %}
+
+{% block body %}
+<div class="max-w-2xl prose prose-gray">
+    <h1 class="text-2xl font-bold text-gray-900 mb-2">Datenschutzerklärung</h1>
+    <p class="text-sm text-gray-500 mb-8">Stand: {{ "now"|date("d.m.Y") }}</p>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">1. Verantwortliche Stelle</h2>
+        <p class="text-gray-700">
+            Verantwortlich im Sinne der DSGVO ist die im Impressum genannte Privatperson.
+        </p>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Welche Daten wir speichern</h2>
+        <ul class="list-disc list-inside text-gray-700 space-y-1">
+            <li><strong>Benutzername</strong> – frei gewählt, öffentlich sichtbar</li>
+            <li><strong>E-Mail-Adresse</strong> – für Anmeldung und Verifizierung, niemals öffentlich</li>
+            <li><strong>Passwort</strong> – nur als nicht umkehrbarer Hash (bcrypt)</li>
+            <li><strong>Spielverläufe</strong> – zum Nachspielen und für Statistiken</li>
+            <li><strong>Chat-Nachrichten</strong> – am Spieltisch, für alle Tisch-Teilnehmer sichtbar</li>
+            <li><strong>Log-Daten</strong> – technische Betriebslogs, max. 30 Tage, kein Personenbezug</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">3. Rechtsgrundlagen (Art. 6 DSGVO)</h2>
+        <ul class="list-disc list-inside text-gray-700 space-y-1">
+            <li>Vertragserfüllung (Art. 6 Abs. 1 lit. b): Bereitstellung des Spiels</li>
+            <li>Einwilligung (Art. 6 Abs. 1 lit. a): Registrierung und E-Mail-Verifizierung</li>
+            <li>Berechtigte Interessen (Art. 6 Abs. 1 lit. f): Sicherheit und Betriebslogs</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">4. Speicherdauer</h2>
+        <ul class="list-disc list-inside text-gray-700 space-y-1">
+            <li>Kontodaten: bis zur Löschung durch den Nutzer oder auf Antrag</li>
+            <li>Spielverläufe: dauerhaft (für Statistiken und Replay-Funktion)</li>
+            <li>Chat-Nachrichten: 90 Tage, dann automatische Löschung</li>
+            <li>Technische Logs: 30 Tage, dann automatische Löschung</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">5. Deine Rechte</h2>
+        <p class="text-gray-700 mb-2">Du hast folgende Rechte gemäß DSGVO:</p>
+        <ul class="list-disc list-inside text-gray-700 space-y-1">
+            <li>Auskunft (Art. 15) – welche Daten wir über dich haben</li>
+            <li>Berichtigung (Art. 16) – falsche Daten korrigieren lassen</li>
+            <li>Löschung (Art. 17) – Konto und personenbezogene Daten löschen lassen</li>
+            <li>Einschränkung (Art. 18) – Verarbeitung einschränken</li>
+            <li>Datenübertragbarkeit (Art. 20) – Daten in maschinenlesbarem Format erhalten</li>
+            <li>Widerspruch (Art. 21) – gegen Verarbeitung Widerspruch einlegen</li>
+            <li>Beschwerde – bei der zuständigen Datenschutzaufsichtsbehörde</li>
+        </ul>
+        <p class="text-gray-700 mt-3">
+            Zur Ausübung deiner Rechte wende dich per E-Mail an die im Impressum genannte Adresse.
+        </p>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">6. Cookies</h2>
+        <p class="text-gray-700">
+            Wir verwenden ausschließlich technisch notwendige Session-Cookies für die Anmeldung.
+            Es werden keine Tracking- oder Analyse-Cookies gesetzt.
+        </p>
+    </section>
+
+    <section>
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">7. Drittanbieter</h2>
+        <p class="text-gray-700">
+            Es werden keine Daten an Drittanbieter weitergegeben. Kein Google Analytics, kein Facebook, keine externen Werbenetze.
+        </p>
+    </section>
+</div>
+{% endblock %}

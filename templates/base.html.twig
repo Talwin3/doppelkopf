@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Doppelkopf Online{% endblock %}</title>
+    <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+
+    {% block stylesheets %}
+        {{ encore_entry_link_tags('app') }}
+    {% endblock %}
+
+    {% block head_extra %}{% endblock %}
+
+    {# FrankenPHP Hot-Reload (nur in Entwicklung aktiv) #}
+    {% set frankenphpHotReload = app.request.server.get('FRANKENPHP_HOT_RELOAD') %}
+    {% if frankenphpHotReload %}
+        <meta name="frankenphp-hot-reload:url" content="{{ frankenphpHotReload }}">
+        <script src="https://cdn.jsdelivr.net/npm/idiomorph"></script>
+        <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
+    {% endif %}
+</head>
+<body class="h-full">
+
+{# Navigation #}
+<nav class="bg-tisch-800 shadow-lg">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="flex h-16 items-center justify-between">
+            <div class="flex items-center space-x-8">
+                <a href="{{ path('app_start') }}" class="text-white font-bold text-lg tracking-tight">
+                    Doppelkopf Online
+                </a>
+                {% if app.user %}
+                    <a href="{{ path('app_lobby') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                        Lobby
+                    </a>
+                    <a href="{{ path('app_bestenlisten') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                        Bestenlisten
+                    </a>
+                {% endif %}
+            </div>
+            <div class="flex items-center space-x-4">
+                {% if app.user %}
+                    <a href="{{ path('app_profil', {username: app.user.username}) }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                        {{ app.user.username }}
+                    </a>
+                    {% if is_granted('ROLE_ADMIN') %}
+                        <a href="{{ path('app_admin') }}" class="text-yellow-300 hover:text-yellow-100 text-sm font-medium transition-colors">
+                            Admin
+                        </a>
+                    {% endif %}
+                    <a href="{{ path('app_logout') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                        Abmelden
+                    </a>
+                {% else %}
+                    <a href="{{ path('app_login') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                        Anmelden
+                    </a>
+                    <a href="{{ path('app_registrieren') }}" class="btn-primary text-xs">
+                        Registrieren
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</nav>
+
+{# Flash-Nachrichten #}
+{% for typ, nachrichten in app.flashes %}
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-4">
+        {% for nachricht in nachrichten %}
+            <div class="flash-{{ typ }} mb-2">{{ nachricht }}</div>
+        {% endfor %}
+    </div>
+{% endfor %}
+
+{# Seiteninhalt #}
+<main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    {% block body %}{% endblock %}
+</main>
+
+{# Footer #}
+<footer class="mt-auto border-t border-gray-200 bg-white">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between text-sm text-gray-500">
+        <p>&copy; {{ "now"|date("Y") }} Doppelkopf Online. Kostenlos und werbefrei.</p>
+        <div class="flex space-x-6 mt-2 sm:mt-0">
+            <a href="{{ path('app_regeln') }}" class="hover:text-gray-700">Regeln</a>
+            <a href="{{ path('app_impressum') }}" class="hover:text-gray-700">Impressum</a>
+            <a href="{{ path('app_datenschutz') }}" class="hover:text-gray-700">Datenschutz</a>
+        </div>
+    </div>
+</footer>
+
+{% block javascripts %}
+    {{ encore_entry_script_tags('app') }}
+{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,194 @@
+{% if spiel is null %}
+    <div class="text-center py-16 text-gray-400">
+        <p class="text-xl font-medium">Warte auf Spieler…</p>
+        <p class="text-sm mt-2">{{ tisch.aktiveSpieler.count }}/4 Spieler am Tisch</p>
+    </div>
+
+{% elseif spiel.status.value == 'BEENDET' %}
+    <div class="text-center py-12">
+        <h2 class="text-2xl font-bold text-white mb-6">Spiel beendet!</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-lg mx-auto">
+            {% for t in spiel.teilnehmer %}
+                <div class="bg-white rounded-xl p-4 text-center shadow">
+                    <p class="font-bold text-gray-900 text-sm truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    <p class="text-xs mt-1 {{ t.team.value == 'RE' ? 'text-blue-600' : 'text-red-600' }}">{{ t.team.value }}</p>
+                    <p class="text-2xl font-bold mt-2 {{ t.gewonnen ? 'text-green-600' : 'text-gray-400' }}">
+                        {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
+                    </p>
+                </div>
+            {% endfor %}
+        </div>
+        <a href="{{ path('app_lobby') }}" class="btn-primary mt-8 inline-block">Zurück zur Lobby</a>
+    </div>
+
+{% else %}
+    {# Teilnehmer nach Sitzplatz indexieren #}
+    {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}
+    {% set teilnehmerMap = {} %}
+    {% for t in spiel.teilnehmer %}
+        {% set teilnehmerMap = teilnehmerMap|merge({(t.sitzplatz): t}) %}
+    {% endfor %}
+
+    {% set linkerSitz  = (meinSitzplatz % 4) + 1 %}
+    {% set obererSitz  = (linkerSitz % 4) + 1 %}
+    {% set rechterSitz = (obererSitz % 4) + 1 %}
+
+    {% set stichKarten = spiel.aktuelleStichKarten %}
+
+    {# Ansagen pro Sitzplatz indexieren (für Gegner-Anzeige) #}
+    {% set ansagenBySitzplatz = {} %}
+    {% for a in ansagen %}
+        {% set bisherige = ansagenBySitzplatz[a.sitzplatz] ?? [] %}
+        {% set ansagenBySitzplatz = ansagenBySitzplatz|merge({(a.sitzplatz): bisherige|merge([a.ansageTyp.value])}) %}
+    {% endfor %}
+
+    <div class="flex flex-col h-full gap-2">
+
+        {# ── Oberer Spieler ─────────────────────────────────────────────── #}
+        <div class="flex justify-center">
+            {% include 'spieltisch/_gegner_strip.html.twig' with {
+                teilnehmer: teilnehmerMap[obererSitz] ?? null,
+                istDran: spiel.aktuellerSpielerSitzplatz == obererSitz,
+                anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == obererSitz)|length),
+                ansagen: ansagenBySitzplatz[obererSitz] ?? []
+            } %}
+        </div>
+
+        {# ── Mittlere Reihe ──────────────────────────────────────────────── #}
+        <div class="flex flex-1 items-center gap-4">
+
+            <div class="flex-none w-28">
+                {% include 'spieltisch/_gegner_strip.html.twig' with {
+                    teilnehmer: teilnehmerMap[linkerSitz] ?? null,
+                    istDran: spiel.aktuellerSpielerSitzplatz == linkerSitz,
+                    anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == linkerSitz)|length),
+                    ansagen: ansagenBySitzplatz[linkerSitz] ?? [],
+                    vertikal: true
+                } %}
+            </div>
+
+            {# ── Tisch-Mitte: Stich + aktive Ansagen ────────────────────── #}
+            <div class="flex-1 min-h-40 bg-tisch-800 rounded-2xl border-4 border-tisch-600 shadow-inner flex flex-col items-center justify-center gap-3 p-4">
+
+                {# Aktive Ansagen-Badges #}
+                {% if ansagen is not empty %}
+                    <div class="flex flex-wrap gap-1 justify-center">
+                        {% set angezeigt = [] %}
+                        {% for a in ansagen %}
+                            {% if a.ansageTyp.value not in angezeigt %}
+                                {% set angezeigt = angezeigt|merge([a.ansageTyp.value]) %}
+                                {% set istRe = a.ansageTyp.value == 'RE' %}
+                                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold
+                                    {{ istRe ? 'bg-blue-600 text-white' : 'bg-red-600 text-white' }}">
+                                    {{ a.ansageTyp.value|replace({'_': ' '}) }}
+                                </span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {# Stichkarten #}
+                {% if stichKarten is not empty %}
+                    <div class="flex gap-3">
+                        {% for gk in stichKarten %}
+                            {% set karte = gk.alsKarte() %}
+                            <div class="spielkarte spielkarte--mittel {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
+                                <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
+                                <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-tisch-300 text-sm">Warte auf ersten Zug…</p>
+                {% endif %}
+
+                <p class="text-tisch-200 text-xs">Stich {{ spiel.aktuellerStichNr }}/12</p>
+            </div>
+
+            <div class="flex-none w-28">
+                {% include 'spieltisch/_gegner_strip.html.twig' with {
+                    teilnehmer: teilnehmerMap[rechterSitz] ?? null,
+                    istDran: spiel.aktuellerSpielerSitzplatz == rechterSitz,
+                    anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == rechterSitz)|length),
+                    ansagen: ansagenBySitzplatz[rechterSitz] ?? [],
+                    vertikal: true
+                } %}
+            </div>
+        </div>
+
+        {# ── Eigener Bereich: Ansage-Buttons + Karten ───────────────────── #}
+        <div class="mt-2 space-y-2">
+            {% set ichBinDran = spiel.aktuellerSpielerSitzplatz == meinSitzplatz %}
+            {% set meinTeam   = teilnehmer ? teilnehmer.team : null %}
+
+            {# Kopfzeile: Team-Badge, Dran-Anzeige #}
+            <div class="flex items-center justify-between px-1">
+                <span class="text-white text-sm font-medium flex items-center gap-2">
+                    {% if meinTeam %}
+                        <span class="px-2 py-0.5 rounded text-xs font-bold {{ meinTeam.value == 'RE' ? 'bg-blue-500' : 'bg-red-500' }} text-white">
+                            {{ meinTeam.value }}
+                        </span>
+                    {% endif %}
+                    Deine Karten ({{ hand|length }})
+                    {# Eigene aktive Ansagen anzeigen #}
+                    {% for typWert in ansagenBySitzplatz[meinSitzplatz] ?? [] %}
+                        <span class="px-2 py-0.5 rounded text-xs font-bold bg-yellow-500 text-black">
+                            {{ typWert|replace({'_': ' '}) }}!
+                        </span>
+                    {% endfor %}
+                </span>
+                {% if ichBinDran %}
+                    <span class="text-yellow-300 text-xs font-bold animate-pulse">► Du bist dran!</span>
+                {% endif %}
+            </div>
+
+            {# Ansage-Buttons #}
+            {% if verfuegbareAnsagen is not empty %}
+                <div class="flex flex-wrap gap-2 px-1">
+                    {% for ansageTyp in verfuegbareAnsagen %}
+                        {% set istReTyp = ansageTyp.value == 'RE' %}
+                        <form method="post"
+                              action="{{ path('app_ansagen', {id: tisch.id}) }}"
+                              data-action="submit->spieltisch#ansagen">
+                            <input type="hidden" name="_token" value="{{ csrf_token('ansagen_' ~ tisch.id) }}">
+                            <input type="hidden" name="ansage_typ" value="{{ ansageTyp.value }}">
+                            <button type="submit"
+                                    class="rounded-full px-3 py-1 text-xs font-bold border-2 transition-all
+                                        {{ istReTyp
+                                            ? 'border-blue-400 text-blue-300 hover:bg-blue-800'
+                                            : 'border-red-400 text-red-300 hover:bg-red-900' }}">
+                                {{ ansageTyp.value|replace({'_': ' '}) }}!
+                            </button>
+                        </form>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {# Eigene Karten #}
+            <div class="flex flex-wrap gap-2 justify-center">
+                {% for karte in hand %}
+                    {% if ichBinDran %}
+                        <form method="post"
+                              action="{{ path('app_karte_spielen', {id: tisch.id}) }}"
+                              data-action="submit->spieltisch#karteAusspielen">
+                            <input type="hidden" name="_token" value="{{ csrf_token('karte_spielen_' ~ tisch.id) }}">
+                            <input type="hidden" name="karte_id" value="{{ karte.id() }}">
+                            <button type="submit"
+                                    class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }} spielkarte--spielbar"
+                                    title="{{ karte.farbe.value }} {{ karte.wert.value }}">
+                                <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
+                                <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                            </button>
+                        </form>
+                    {% else %}
+                        <div class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
+                            <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
+                            <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+{% endif %}
