@@ -42,5 +42,19 @@
         {% include 'spieltisch/_spielzustand.html.twig' %}
     </div>
 
+    {# ── Tisch-Einstellungen (nur für aktive Spieler, unterhalb des Spielfelds) #}
+    {% set meinTischSpieler = null %}
+    {% for ts in tisch.aktiveSpieler %}
+        {% if ts.user and ts.user.id == app.user.id %}
+            {% set meinTischSpieler = ts %}
+        {% endif %}
+    {% endfor %}
+    {% include 'spieltisch/_tisch_einstellungen.html.twig' with {
+        tisch: tisch,
+        spiel: spiel,
+        istAktiverSpieler: meinTischSpieler is not null,
+        meinTischSpieler: meinTischSpieler,
+    } %}
+
 </div>
 {% endblock %}

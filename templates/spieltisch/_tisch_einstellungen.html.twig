@@ -1,0 +1,116 @@
+{#
+  Tisch-Einstellungen-Panel für aktive Spieler.
+  Variablen: tisch, spiel (nullable), istAktiverSpieler
+#}
+{% if istAktiverSpieler %}
+<details class="bg-tisch-800 border border-tisch-600 rounded-xl overflow-hidden">
+    <summary class="px-4 py-2 text-tisch-300 text-sm cursor-pointer hover:text-white flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Tisch-Einstellungen
+    </summary>
+
+    <div class="px-4 pb-4 pt-2 space-y-3">
+
+        {# Auto-Start Toggle #}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white text-sm font-medium">Auto-Start</p>
+                <p class="text-tisch-400 text-xs">Neues Spiel startet automatisch nach Pause</p>
+            </div>
+            <form method="post"
+                  action="{{ path('app_auto_start_toggle', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#autoStartToggle">
+                <input type="hidden" name="_token" value="{{ csrf_token('auto_start_' ~ tisch.id) }}">
+                <button type="submit"
+                        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                            {{ tisch.autoStart ? 'bg-green-600' : 'bg-tisch-600' }}">
+                    <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                        {{ tisch.autoStart ? 'translate-x-6' : 'translate-x-1' }}"></span>
+                </button>
+            </form>
+        </div>
+
+        {# Nach Spiel verlassen #}
+        {% if spiel and spiel.status.value in ['VORBEHALT', 'LAUFEND'] %}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white text-sm font-medium">Nach Spiel verlassen</p>
+                <p class="text-tisch-400 text-xs">Tisch nach dem aktuellen Spiel verlassen</p>
+            </div>
+            <form method="post"
+                  action="{{ path('app_nach_spiel_verlassen', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#nachSpielVerlassen">
+                <input type="hidden" name="_token" value="{{ csrf_token('nach_spiel_verlassen_' ~ tisch.id) }}">
+                <button type="submit"
+                        class="px-3 py-1 rounded-lg text-xs font-medium transition-colors
+                            {{ meinTischSpieler and meinTischSpieler.moechteNachSpielVerlassen
+                                ? 'bg-red-700 text-red-200 hover:bg-red-600'
+                                : 'bg-tisch-600 text-tisch-200 hover:bg-tisch-500' }}">
+                    {{ meinTischSpieler and meinTischSpieler.moechteNachSpielVerlassen ? '↩ Abbrechen' : 'Verlassen' }}
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        {# Regelwerk — nur zwischen Spielen änderbar #}
+        {% if not spiel or spiel.status.value == 'BEENDET' %}
+            {% set rw = tisch.regelEinstellungen %}
+            <div class="border-t border-tisch-700 pt-3">
+                <p class="text-tisch-300 text-xs font-medium mb-2 uppercase tracking-wider">Regelwerk</p>
+                <form method="post"
+                      action="{{ path('app_regelwerk_speichern', {id: tisch.id}) }}"
+                      data-action="submit->spieltisch#regelwerkSpeichern">
+                    <input type="hidden" name="_token" value="{{ csrf_token('regelwerk_' ~ tisch.id) }}">
+
+                    {# Sonderregeln als Checkboxen #}
+                    <div class="space-y-1.5 mb-3">
+                        {% set boolFelder = [
+                            {key: 'solist_kommt_raus', label: 'Solist kommt raus'},
+                            {key: 'schweinchen', label: 'Schweinchen'},
+                            {key: 'superschweinchen', label: 'Superschweinchen'},
+                            {key: 'ohne_neuner', label: 'Ohne Neuner'},
+                            {key: 'zweite_dulle_sticht', label: 'Zweite Dulle sticht'},
+                        ] %}
+                        {% for feld in boolFelder %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   name="{{ feld.key }}"
+                                   value="1"
+                                   {{ rw[feld.key] ?? false ? 'checked' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500">
+                            <span class="text-white text-xs">{{ feld.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    {# Erlaubte Soli #}
+                    <p class="text-tisch-400 text-xs mb-1">Erlaubte Soli:</p>
+                    <div class="grid grid-cols-2 gap-1 mb-3">
+                        {% set alleVarianten = ['SOLO_BUBEN', 'SOLO_DAMEN', 'SOLO_FLEISCHLOS', 'SOLO_KARO', 'SOLO_HERZ', 'SOLO_PIK', 'SOLO_KREUZ'] %}
+                        {% for v in alleVarianten %}
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox"
+                                   name="soli_erlaubt[]"
+                                   value="{{ v }}"
+                                   {{ v in (rw.soli_erlaubt ?? alleVarianten) ? 'checked' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-yellow-500">
+                            <span class="text-white text-xs">{{ v|replace({'SOLO_': '', '_': '-'}) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="w-full py-1.5 rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-xs font-medium">
+                        Regelwerk speichern
+                    </button>
+                </form>
+            </div>
+        {% else %}
+            <p class="text-tisch-500 text-xs text-center">Regelwerk nur zwischen Spielen änderbar</p>
+        {% endif %}
+
+    </div>
+</details>
+{% endif %}

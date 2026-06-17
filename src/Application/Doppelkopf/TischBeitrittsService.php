@@ -145,6 +145,23 @@ final class TischBeitrittsService
         return $neuerWert;
     }
 
+    /**
+     * Aktualisiert das Regelwerk des Tisches (nur zwischen Spielen; Caller muss das prüfen).
+     *
+     * @param array<string, mixed> $regelwerk
+     */
+    public function regelwerkAktualisieren(Tisch $tisch, array $regelwerk, User $user): void
+    {
+        $tischSpieler = $this->tischSpielerRepo->findByTischAndUser($tisch, $user);
+        if ($tischSpieler === null || !$tischSpieler->istAktiv()) {
+            return;
+        }
+
+        $tisch->setRegelEinstellungen($regelwerk);
+        $this->em->flush();
+        $this->mercurePublisher->lobbyAktualisiert();
+    }
+
     /** Setzt autoStart des Tisches und aktualisiert naechsterSpielstartAm entsprechend. */
     public function autoStartToggle(Tisch $tisch, User $user): bool
     {
