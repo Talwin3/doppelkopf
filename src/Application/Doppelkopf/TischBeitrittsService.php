@@ -6,13 +6,16 @@ namespace App\Application\Doppelkopf;
 
 use App\Domain\Doppelkopf\Exception\TischGesperrtException;
 use App\Domain\Doppelkopf\Exception\TischZugangVerweigertException;
+use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Entity\User;
 use App\Enum\ZugangsListenTyp;
 use App\Enum\ZugangsModusTyp;
 use App\Infrastructure\Mercure\LobbyMercurePublisher;
+use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\SpielerZugangsListeRepository;
+use App\Repository\SpielRepository;
 use App\Repository\TischSpielerRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -23,6 +26,8 @@ final class TischBeitrittsService
         private readonly TischSpielerRepository $tischSpielerRepo,
         private readonly SpielerZugangsListeRepository $zugangsListeRepo,
         private readonly LobbyMercurePublisher $mercurePublisher,
+        private readonly SpielMercurePublisher $spielPublisher,
+        private readonly SpielRepository $spielRepo,
     ) {}
 
     public function erstelleTisch(User $ersteller, string $name, ZugangsModusTyp $zugangsmodus): Tisch
@@ -87,6 +92,12 @@ final class TischBeitrittsService
         $this->em->persist($tischSpieler);
         $this->em->flush();
 
+        // Mensch beitritt → menschenloseSeitAm zurücksetzen
+        if ($tisch->getMenschenloseSeitAm() !== null) {
+            $tisch->setMenschenloseSeitAm(null);
+            $this->em->flush();
+        }
+
         $this->mercurePublisher->lobbyAktualisiert();
 
         return $tischSpieler;
@@ -109,6 +120,51 @@ final class TischBeitrittsService
         }
 
         $this->mercurePublisher->lobbyAktualisiert();
+    }
+
+    /**
+     * Setzt das "Nach Spiel verlassen"-Flag für einen aktiven Spieler.
+     * Nur während eines laufenden Spiels sinnvoll — zwischen Spielen direkt verlassen.
+     */
+    public function nachSpielVerlassenToggle(Tisch $tisch, User $user): bool
+    {
+        $tischSpieler = $this->tischSpielerRepo->findByTischAndUser($tisch, $user);
+        if ($tischSpieler === null || !$tischSpieler->istAktiv()) {
+            return false;
+        }
+
+        $neuerWert = !$tischSpieler->isMoechteNachSpielVerlassen();
+        $tischSpieler->setMoechteNachSpielVerlassen($neuerWert);
+        $this->em->flush();
+
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+        if ($spiel !== null) {
+            $this->spielPublisher->tischZustandAktualisiert($spiel);
+        }
+
+        return $neuerWert;
+    }
+
+    /** Setzt autoStart des Tisches und aktualisiert naechsterSpielstartAm entsprechend. */
+    public function autoStartToggle(Tisch $tisch, User $user): bool
+    {
+        $tischSpieler = $this->tischSpielerRepo->findByTischAndUser($tisch, $user);
+        if ($tischSpieler === null || !$tischSpieler->istAktiv()) {
+            return $tisch->isAutoStart();
+        }
+
+        $neuerWert = !$tisch->isAutoStart();
+        $tisch->setAutoStart($neuerWert);
+
+        // Countdown abbrechen wenn autoStart deaktiviert wird
+        if (!$neuerWert) {
+            $tisch->setNaechsterSpielstartAm(null);
+        }
+
+        $this->em->flush();
+        $this->mercurePublisher->lobbyAktualisiert();
+
+        return $neuerWert;
     }
 
     private function warteschlangeNachruecken(Tisch $tisch, int $freierPlatz): void

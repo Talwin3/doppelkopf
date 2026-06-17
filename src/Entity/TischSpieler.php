@@ -45,6 +45,14 @@ class TischSpieler
     #[ORM\Column(options: ['default' => false])]
     private bool $istBot = false;
 
+    /** Spieler hat gewünscht, nach dem laufenden Spiel den Tisch zu verlassen. */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $moechteNachSpielVerlassen = false;
+
+    /** Zeitpunkt des letzten bekannten Verbindungsverlustes (für Disconnect-Handling). */
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $disconnectSeitAm = null;
+
     #[ORM\Column]
     private \DateTimeImmutable $beigetretenAm;
 
@@ -123,6 +131,12 @@ class TischSpieler
     {
         return $this->beigetretenAm;
     }
+
+    public function isMoechteNachSpielVerlassen(): bool { return $this->moechteNachSpielVerlassen; }
+    public function setMoechteNachSpielVerlassen(bool $moechte): static { $this->moechteNachSpielVerlassen = $moechte; return $this; }
+
+    public function getDisconnectSeitAm(): ?\DateTimeImmutable { return $this->disconnectSeitAm; }
+    public function setDisconnectSeitAm(?\DateTimeImmutable $am): static { $this->disconnectSeitAm = $am; return $this; }
 
     public function istAktiv(): bool
     {

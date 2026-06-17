@@ -31,6 +31,11 @@ final class SpielMercurePublisher
         $this->publizieren($spiel, 'SPIEL_BEENDET');
     }
 
+    public function tischZustandAktualisiert(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'TISCH_ZUSTAND');
+    }
+
     private function publizieren(Spiel $spiel, string $typ): void
     {
         $topic = $this->topic($spiel);

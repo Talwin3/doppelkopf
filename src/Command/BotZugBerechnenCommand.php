@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Application\Doppelkopf\BotZugService;
+use App\Application\Doppelkopf\SpielStartService;
+use App\Application\SystemEinstellungService;
+use App\Entity\Tisch;
 use App\Enum\SpielStatus;
+use App\Infrastructure\Logger\BotApiLogger;
 use App\Repository\SpielRepository;
-use Psr\Log\LoggerInterface;
+use App\Repository\TischRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,7 +20,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Erkennt Spielzug-Timeouts und lässt den Bot für inaktive Spieler einspringen.
+ * Tisch-Worker: Bot-Züge, Auto-Start, Tisch-Löschung.
  *
  * Ausführung als Docker-Worker-Service (Dauerschleife):
  *   bin/console app:bot:spielzuge
@@ -25,23 +30,21 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 #[AsCommand(
     name: 'app:bot:spielzuge',
-    description: 'Bot-Züge berechnen: erkennt Timeouts und spielt für inaktive Spieler.',
+    description: 'Tisch-Worker: Bot-Züge berechnen, Auto-Start, menschenlose Tische löschen.',
 )]
 class BotZugBerechnenCommand extends Command
 {
-    /** Bot-Spieler reagieren nach dieser Zeit (Sekunden). */
-    private const BOT_TIMEOUT_SEK = 3;
-
-    /** Menschliche Spieler werden nach dieser Zeit vom Bot übernommen. */
-    private const HUMAN_TIMEOUT_SEK = 30;
-
-    /** Wartezeit zwischen Prüfungen im Loop-Modus (Mikrosekunden). */
-    private const SCHLAF_US = 2_000_000; // 2 Sekunden
+    private const BOT_TIMEOUT_SEK   = 3;
+    private const SCHLAF_US         = 2_000_000; // 2 Sekunden
 
     public function __construct(
         private readonly SpielRepository $spielRepo,
+        private readonly TischRepository $tischRepo,
         private readonly BotZugService $botZugService,
-        private readonly LoggerInterface $logger,
+        private readonly SpielStartService $spielStartService,
+        private readonly SystemEinstellungService $einstellungService,
+        private readonly EntityManagerInterface $em,
+        private readonly BotApiLogger $logger,
     ) {
         parent::__construct();
     }
@@ -55,12 +58,14 @@ class BotZugBerechnenCommand extends Command
     {
         $einmalig = $input->getOption('einmalig');
         $output->writeln(sprintf(
-            '<info>Bot-Worker gestartet</info> (Modus: %s)',
+            '<info>Tisch-Worker gestartet</info> (Modus: %s)',
             $einmalig ? 'einmalig' : 'Dauerschleife',
         ));
 
         do {
-            $this->pruefeTimeouts($output);
+            $this->pruefeZugTimeouts($output);
+            $this->pruefeAutoStart($output);
+            $this->pruefeMenschenloseTische($output);
 
             if (!$einmalig) {
                 usleep(self::SCHLAF_US);
@@ -70,9 +75,9 @@ class BotZugBerechnenCommand extends Command
         return Command::SUCCESS;
     }
 
-    private function pruefeTimeouts(OutputInterface $output): void
+    private function pruefeZugTimeouts(OutputInterface $output): void
     {
-        // Alle Spiele holen, die den kürzeren (Bot-)Timeout überschritten haben
+        $humanTimeout = $this->einstellungService->getInt('disconnect_timeout_sekunden');
         $spiele = $this->spielRepo->findMitZugTimeout(self::BOT_TIMEOUT_SEK);
 
         foreach ($spiele as $spiel) {
@@ -89,15 +94,14 @@ class BotZugBerechnenCommand extends Command
             }
 
             $wartezeit = (new \DateTimeImmutable())->getTimestamp() - $zeitpunkt->getTimestamp();
-
             $istBot    = $teilnehmer->isIstBot();
-            $benoetigtSek = $istBot ? self::BOT_TIMEOUT_SEK : self::HUMAN_TIMEOUT_SEK;
+            $benoetigtSek = $istBot ? self::BOT_TIMEOUT_SEK : $humanTimeout;
 
             if ($wartezeit < $benoetigtSek) {
                 continue;
             }
 
-            $grund = $istBot ? 'Bot-Spieler' : sprintf('Timeout nach %ds', $wartezeit);
+            $grund = $istBot ? 'Bot-Spieler' : sprintf('Disconnect-Timeout nach %ds', $wartezeit);
             $output->writeln(sprintf(
                 '  Spiel %s – Sitzplatz %d spielt (%s)',
                 substr((string) $spiel->getId(), 0, 8),
@@ -105,22 +109,58 @@ class BotZugBerechnenCommand extends Command
                 $grund,
             ));
 
-            $this->logger->info('Bot übernimmt Zug.', [
-                'spiel_id'  => (string) $spiel->getId(),
-                'sitzplatz' => $sitzplatz,
-                'ist_bot'   => $istBot,
-                'wartezeit' => $wartezeit,
-            ]);
-
             try {
                 $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz);
             } catch (\Throwable $e) {
-                $output->writeln(sprintf('  <error>Fehler: %s</error>', $e->getMessage()));
-                $this->logger->error('Bot-Zug fehlgeschlagen.', [
-                    'spiel_id' => (string) $spiel->getId(),
-                    'fehler'   => $e->getMessage(),
-                ]);
+                $output->writeln(sprintf('  <error>Bot-Zug Fehler: %s</error>', $e->getMessage()));
             }
+        }
+    }
+
+    private function pruefeAutoStart(OutputInterface $output): void
+    {
+        $tische = $this->tischRepo->findMitFaelligemAutoStart();
+
+        foreach ($tische as $tisch) {
+            $output->writeln(sprintf(
+                '  Auto-Start Tisch %s',
+                substr((string) $tisch->getId(), 0, 8),
+            ));
+
+            // Countdown zurücksetzen bevor Spiel startet
+            $tisch->setNaechsterSpielstartAm(null);
+            $this->em->flush();
+
+            try {
+                if ($tisch->anzahlAktiveSpieler() === 4) {
+                    $this->spielStartService->starten($tisch);
+                }
+            } catch (\Throwable $e) {
+                $output->writeln(sprintf('  <error>Auto-Start Fehler: %s</error>', $e->getMessage()));
+            }
+        }
+    }
+
+    private function pruefeMenschenloseTische(OutputInterface $output): void
+    {
+        $loeschenNachMinuten = $this->einstellungService->getInt('tisch_loeschen_nach_minuten');
+        $tische = $this->tischRepo->findMenschenloseFuerLoeschung($loeschenNachMinuten);
+
+        foreach ($tische as $tisch) {
+            // Nicht löschen wenn gerade ein Spiel läuft (Bots spielen durch)
+            $laufendesSpiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+            if ($laufendesSpiel !== null) {
+                continue;
+            }
+
+            $output->writeln(sprintf(
+                '  Lösche menschenlosen Tisch %s (seit %s)',
+                substr((string) $tisch->getId(), 0, 8),
+                $tisch->getMenschenloseSeitAm()?->format('H:i:s') ?? '-',
+            ));
+
+            $this->em->remove($tisch);
+            $this->em->flush();
         }
     }
 }

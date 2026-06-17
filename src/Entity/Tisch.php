@@ -37,6 +37,32 @@ class Tisch
     #[ORM\Column(options: ['default' => false])]
     private bool $istGesperrt = false;
 
+    #[ORM\Column(options: ['default' => true])]
+    private bool $autoStart = true;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $naechsterSpielstartAm = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $menschenloseSeitAm = null;
+
+    /**
+     * Regelwerk-JSON: soli_erlaubt, schweinchen, ohne_neuner, etc.
+     * Nur zwischen Spielen änderbar.
+     *
+     * @var array<string, mixed>
+     */
+    #[ORM\Column(type: 'json')]
+    private array $regelEinstellungen = [
+        'soli_erlaubt'      => ['SOLO_BUBEN', 'SOLO_DAMEN', 'SOLO_FLEISCHLOS', 'SOLO_KARO', 'SOLO_HERZ', 'SOLO_PIK', 'SOLO_KREUZ'],
+        'solist_kommt_raus' => true,
+        'schweinchen'       => false,
+        'superschweinchen'  => false,
+        'ohne_neuner'       => false,
+        'armut'             => false,
+        'zweite_dulle_sticht' => false,
+    ];
+
     #[ORM\Column]
     private \DateTimeImmutable $erstelltAm;
 
@@ -158,5 +184,36 @@ class Tisch
     public function anzahlAktiveSpieler(): int
     {
         return $this->getAktiveSpieler()->count();
+    }
+
+    public function isAutoStart(): bool { return $this->autoStart; }
+    public function setAutoStart(bool $autoStart): static { $this->autoStart = $autoStart; return $this; }
+
+    public function getNaechsterSpielstartAm(): ?\DateTimeImmutable { return $this->naechsterSpielstartAm; }
+    public function setNaechsterSpielstartAm(?\DateTimeImmutable $am): static { $this->naechsterSpielstartAm = $am; return $this; }
+
+    public function getMenschenloseSeitAm(): ?\DateTimeImmutable { return $this->menschenloseSeitAm; }
+    public function setMenschenloseSeitAm(?\DateTimeImmutable $am): static { $this->menschenloseSeitAm = $am; return $this; }
+
+    /** @return array<string, mixed> */
+    public function getRegelEinstellungen(): array { return $this->regelEinstellungen; }
+
+    /** @param array<string, mixed> $einstellungen */
+    public function setRegelEinstellungen(array $einstellungen): static { $this->regelEinstellungen = $einstellungen; return $this; }
+
+    public function getRegelEinstellung(string $schluessel, mixed $default = null): mixed
+    {
+        return $this->regelEinstellungen[$schluessel] ?? $default;
+    }
+
+    /** Prüft ob ein Mensch (kein Bot) unter den aktiven Spielern ist. */
+    public function hatMenschAmTisch(): bool
+    {
+        foreach ($this->getAktiveSpieler() as $ts) {
+            if (!$ts->isIstBot()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

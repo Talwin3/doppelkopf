@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Application\Doppelkopf\AnsageService;
 use App\Application\Doppelkopf\KarteAusspielenService;
 use App\Application\Doppelkopf\SpielStartService;
+use App\Application\Doppelkopf\TischBeitrittsService;
 use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
 use App\Entity\Tisch;
@@ -37,6 +38,7 @@ class SpielController extends AbstractController
         private readonly KarteAusspielenService $karteAusspielenService,
         private readonly AnsageService $ansageService,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly TischBeitrittsService $beitrittsService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -148,6 +150,34 @@ class SpielController extends AbstractController
         } catch (UngueltigeAnsageException $e) {
             return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
+    }
+
+    #[Route('/{id}/nach-spiel-verlassen', name: 'app_nach_spiel_verlassen', methods: ['POST'])]
+    public function nachSpielVerlassen(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('nach_spiel_verlassen_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user       = $this->getUser();
+        $neuerWert  = $this->beitrittsService->nachSpielVerlassenToggle($tisch, $user);
+
+        return new JsonResponse(['moechteVerlassen' => $neuerWert]);
+    }
+
+    #[Route('/{id}/auto-start-toggle', name: 'app_auto_start_toggle', methods: ['POST'])]
+    public function autoStartToggle(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('auto_start_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user      = $this->getUser();
+        $neuerWert = $this->beitrittsService->autoStartToggle($tisch, $user);
+
+        return new JsonResponse(['autoStart' => $neuerWert]);
     }
 
     /** Hilfsmethode: Spiel-Kontextdaten für ein Template aufbereiten. */

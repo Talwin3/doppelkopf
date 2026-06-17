@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Application\SystemEinstellungService;
 use App\Entity\User;
+use App\Repository\SystemEinstellungRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,6 +20,8 @@ class AdminController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly SystemEinstellungService $einstellungService,
+        private readonly SystemEinstellungRepository $einstellungRepo,
     ) {}
 
     #[Route('', name: '')]
@@ -44,6 +48,34 @@ class AdminController extends AbstractController
         return $this->render('admin/benutzer_liste.html.twig', [
             'benutzer' => $benutzer,
         ]);
+    }
+
+    #[Route('/einstellungen', name: '_einstellungen')]
+    public function einstellungen(): Response
+    {
+        return $this->render('admin/einstellungen.html.twig', [
+            'einstellungen' => $this->einstellungRepo->findAlle(),
+        ]);
+    }
+
+    #[Route('/einstellungen/{schluessel}', name: '_einstellung_speichern', methods: ['POST'])]
+    public function einstellungSpeichern(string $schluessel, Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('einstellung_' . $schluessel, $request->request->get('_token'))) {
+            $this->addFlash('error', 'Ungültiger CSRF-Token.');
+            return $this->redirectToRoute('app_admin_einstellungen');
+        }
+
+        $wert = trim((string) $request->request->get('wert', ''));
+        if ($wert === '') {
+            $this->addFlash('error', 'Wert darf nicht leer sein.');
+            return $this->redirectToRoute('app_admin_einstellungen');
+        }
+
+        $this->einstellungService->set($schluessel, $wert);
+        $this->addFlash('success', sprintf('Einstellung „%s" gespeichert.', $schluessel));
+
+        return $this->redirectToRoute('app_admin_einstellungen');
     }
 
     #[Route('/benutzer/{id}/admin-toggle', name: '_benutzer_admin_toggle', methods: ['POST'])]

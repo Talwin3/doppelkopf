@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
+use App\Application\SystemEinstellungService;
 use App\Domain\Doppelkopf\Service\PunkteZaehler;
 use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Entity\GespielteKarte;
 use App\Entity\Spiel;
+use App\Entity\Tisch;
+use App\Entity\TischSpieler;
 use App\Enum\SpielStatus;
 use App\Enum\Team;
+use App\Infrastructure\Mercure\LobbyMercurePublisher;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\GespielteKarteRepository;
 use App\Repository\SpielAnsageRepository;
@@ -24,19 +28,19 @@ final class SpielAbschlussService
         private readonly StichGewinner $stichGewinner,
         private readonly PunkteZaehler $punkteZaehler,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly LobbyMercurePublisher $lobbyPublisher,
+        private readonly SystemEinstellungService $einstellungService,
     ) {}
 
     public function abschliessen(Spiel $spiel): void
     {
         $alleGespielten = $this->gespielteKarteRepo->findAlleGespieltenKarten($spiel);
 
-        // Nach Stich gruppieren
         $sticheRoh = [];
         foreach ($alleGespielten as $gk) {
             $sticheRoh[$gk->getStichNr()][] = $gk;
         }
 
-        // Team pro Sitzplatz
         $teamProSitzplatz = [];
         foreach ($spiel->getTeilnehmer() as $t) {
             $teamProSitzplatz[$t->getSitzplatz()] = $t->getTeam();
@@ -44,12 +48,10 @@ final class SpielAbschlussService
 
         $augenProTeam = [Team::RE->value => 0, Team::KONTRA->value => 0];
 
-        foreach ($sticheRoh as $stichNr => $stichKartenRoh) {
-            // Sortiere nach positionImStich → ergibt Spielreihenfolge
+        foreach ($sticheRoh as $stichKartenRoh) {
             usort($stichKartenRoh, fn(GespielteKarte $a, GespielteKarte $b)
                 => $a->getPositionImStich() <=> $b->getPositionImStich());
 
-            // Sitzplatz → Karte in korrekter Reihenfolge (als geordnetes Array)
             $kartenFuerGewinner = [];
             $stichAugen = 0;
             foreach ($stichKartenRoh as $gk) {
@@ -64,21 +66,17 @@ final class SpielAbschlussService
             }
         }
 
-        $ergebnis = $this->punkteZaehler->berechneErgebnis($augenProTeam);
-
-        // Jede Ansage (Re, Contra, Keine-X) erhöht den Spielwert um 1
+        $ergebnis    = $this->punkteZaehler->berechneErgebnis($augenProTeam);
         $anzahlAnsagen = count($this->ansageRepo->findFuerSpiel($spiel));
-        $ansageBonus   = $anzahlAnsagen;
 
         foreach ($spiel->getTeilnehmer() as $teilnehmer) {
             $team = $teilnehmer->getTeam();
             if ($team === null) continue;
 
             $basisDelta = $ergebnis['punkteDelta'][$team->value];
-            // Bonus hat dasselbe Vorzeichen wie der Basisdelta (+Gewinner, -Verlierer)
             $delta = $basisDelta > 0
-                ? $basisDelta + $ansageBonus
-                : $basisDelta - $ansageBonus;
+                ? $basisDelta + $anzahlAnsagen
+                : $basisDelta - $anzahlAnsagen;
 
             $teilnehmer->setGewonnen($team === $ergebnis['sieger']);
             $teilnehmer->setPunkteDelta($delta);
@@ -86,9 +84,159 @@ final class SpielAbschlussService
 
         $spiel->setStatus(SpielStatus::BEENDET);
         $spiel->setBeendetAm(new \DateTimeImmutable());
-
         $this->em->flush();
 
         $this->mercurePublisher->spielBeendet($spiel);
+
+        $this->nachSpielAbrechnungDurchfuehren($spiel->getTisch());
+    }
+
+    /**
+     * Tisch-Lifecycle nach Spielende:
+     * 1. Vorgemerkte Spieler entfernen
+     * 2. Bots durch wartende Menschen ersetzen
+     * 3. menschenloseSeitAm setzen/prüfen
+     * 4. Auto-Start vorbereiten (naechsterSpielstartAm setzen)
+     */
+    private function nachSpielAbrechnungDurchfuehren(Tisch $tisch): void
+    {
+        $this->vorgemerkteEntfernen($tisch);
+        $this->botsErsetzten($tisch);
+        $this->menschenlosePruefen($tisch);
+        $this->autoStartVorbereiten($tisch);
+
+        $this->em->flush();
+        $this->lobbyPublisher->lobbyAktualisiert();
+    }
+
+    /** Entfernt alle aktiven Spieler, die moechteNachSpielVerlassen=true gesetzt haben. */
+    private function vorgemerkteEntfernen(Tisch $tisch): void
+    {
+        $zuEntfernen = [];
+        foreach ($tisch->getAktiveSpieler() as $ts) {
+            if ($ts->isMoechteNachSpielVerlassen()) {
+                $zuEntfernen[] = $ts;
+            }
+        }
+
+        foreach ($zuEntfernen as $ts) {
+            $freigesetzterPlatz = $ts->getSitzplatz();
+            $this->em->remove($ts);
+            $this->em->flush(); // flush nach jedem Entfernen damit Warteschlange korrekt zählt
+
+            if ($freigesetzterPlatz !== null) {
+                $this->warteschlangeNachruecken($tisch, $freigesetzterPlatz);
+            }
+        }
+    }
+
+    /**
+     * Ersetzt Bots 1:1 durch wartende Menschen.
+     * Bei 2 Bots + 1 Mensch in Queue → 1 Bot raus, 1 Mensch rein.
+     */
+    private function botsErsetzten(Tisch $tisch): void
+    {
+        $warteschlange = $tisch->getWarteschlange()->toArray();
+        usort($warteschlange, fn(TischSpieler $a, TischSpieler $b)
+            => $a->getPositionInWarteschlange() <=> $b->getPositionInWarteschlange());
+
+        $menschenInQueue = array_filter($warteschlange, fn(TischSpieler $ts) => !$ts->isIstBot());
+
+        foreach ($menschenInQueue as $mensch) {
+            // Suche einen Bot-Sitzplatz
+            $botZuErsetzen = null;
+            foreach ($tisch->getAktiveSpieler() as $aktiver) {
+                if ($aktiver->isIstBot()) {
+                    $botZuErsetzen = $aktiver;
+                    break;
+                }
+            }
+
+            if ($botZuErsetzen === null) {
+                break; // Keine Bots mehr am Tisch
+            }
+
+            $freigesetzterPlatz = $botZuErsetzen->getSitzplatz();
+            $this->em->remove($botZuErsetzen);
+            $this->em->flush();
+
+            // Mensch aus Queue auf Bot-Platz setzen
+            $mensch->setSitzplatz($freigesetzterPlatz);
+            $mensch->setPositionInWarteschlange(null);
+
+            // Queue-Positionen neu nummerieren
+            $verbleibende = array_values(array_filter(
+                $tisch->getWarteschlange()->toArray(),
+                fn(TischSpieler $ts) => $ts !== $mensch,
+            ));
+            usort($verbleibende, fn(TischSpieler $a, TischSpieler $b)
+                => $a->getPositionInWarteschlange() <=> $b->getPositionInWarteschlange());
+            foreach ($verbleibende as $i => $ts) {
+                $ts->setPositionInWarteschlange($i + 1);
+            }
+
+            $this->em->flush();
+        }
+    }
+
+    /** Setzt menschenloseSeitAm wenn kein Mensch mehr am Tisch sitzt. */
+    private function menschenlosePruefen(Tisch $tisch): void
+    {
+        if ($tisch->hatMenschAmTisch()) {
+            if ($tisch->getMenschenloseSeitAm() !== null) {
+                $tisch->setMenschenloseSeitAm(null);
+            }
+        } else {
+            if ($tisch->getMenschenloseSeitAm() === null) {
+                $tisch->setMenschenloseSeitAm(new \DateTimeImmutable());
+            }
+        }
+    }
+
+    /**
+     * Setzt naechsterSpielstartAm wenn:
+     * - autoStart aktiv
+     * - 4 Spieler am Tisch
+     * - noch kein Startzeit gesetzt
+     */
+    private function autoStartVorbereiten(Tisch $tisch): void
+    {
+        if (!$tisch->isAutoStart()) {
+            return;
+        }
+
+        if ($tisch->anzahlAktiveSpieler() < 4) {
+            return;
+        }
+
+        if ($tisch->getNaechsterSpielstartAm() !== null) {
+            return;
+        }
+
+        $pauseSek = $this->einstellungService->getInt('pause_zwischen_spielen_sekunden');
+        $tisch->setNaechsterSpielstartAm(
+            (new \DateTimeImmutable())->modify("+{$pauseSek} seconds"),
+        );
+    }
+
+    private function warteschlangeNachruecken(Tisch $tisch, int $freierPlatz): void
+    {
+        $warteschlange = $tisch->getWarteschlange()->toArray();
+        if (empty($warteschlange)) {
+            return;
+        }
+
+        usort($warteschlange, fn(TischSpieler $a, TischSpieler $b)
+            => $a->getPositionInWarteschlange() <=> $b->getPositionInWarteschlange());
+
+        $naechster = $warteschlange[0];
+        $naechster->setSitzplatz($freierPlatz);
+        $naechster->setPositionInWarteschlange(null);
+
+        foreach (array_slice($warteschlange, 1) as $i => $spieler) {
+            $spieler->setPositionInWarteschlange($i + 1);
+        }
+
+        $this->em->flush();
     }
 }
