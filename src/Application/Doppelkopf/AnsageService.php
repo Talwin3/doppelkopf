@@ -9,6 +9,7 @@ use App\Entity\Spiel;
 use App\Entity\SpielAnsage;
 use App\Entity\User;
 use App\Enum\AnsageTyp;
+use App\Enum\SpielStatus;
 use App\Enum\Team;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\GespielteKarteRepository;
@@ -49,8 +50,8 @@ final class AnsageService
 
     public function machen(Spiel $spiel, User $user, AnsageTyp $typ): void
     {
-        if ($spiel->istBeendet()) {
-            throw new UngueltigeAnsageException('Das Spiel ist bereits beendet.');
+        if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
+            throw new UngueltigeAnsageException('Ansagen sind nur in einem laufenden Spiel möglich.');
         }
 
         $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
@@ -122,7 +123,7 @@ final class AnsageService
      */
     public function verfuegbareAnsagen(Spiel $spiel, User $user): array
     {
-        if ($spiel->istBeendet()) {
+        if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
             return [];
         }
 

@@ -24,8 +24,9 @@ class Spiel
     #[ORM\JoinColumn(nullable: false)]
     private Tisch $tisch;
 
-    #[ORM\Column(length: 20, enumType: SpielVariante::class)]
-    private SpielVariante $variante;
+    /** Null während der Vorbehaltsrunde (wird durch SpielTypResolver gesetzt). */
+    #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
+    private ?SpielVariante $variante = null;
 
     #[ORM\Column(length: 10, enumType: SpielStatus::class)]
     private SpielStatus $status = SpielStatus::LAUFEND;
@@ -75,8 +76,8 @@ class Spiel
     public function getTisch(): Tisch { return $this->tisch; }
     public function setTisch(Tisch $tisch): static { $this->tisch = $tisch; return $this; }
 
-    public function getVariante(): SpielVariante { return $this->variante; }
-    public function setVariante(SpielVariante $variante): static { $this->variante = $variante; return $this; }
+    public function getVariante(): ?SpielVariante { return $this->variante; }
+    public function setVariante(?SpielVariante $variante): static { $this->variante = $variante; return $this; }
 
     public function getStatus(): SpielStatus { return $this->status; }
     public function setStatus(SpielStatus $status): static { $this->status = $status; return $this; }

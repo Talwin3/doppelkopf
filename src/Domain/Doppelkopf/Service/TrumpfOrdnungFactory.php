@@ -26,7 +26,12 @@ final class TrumpfOrdnungFactory
 {
     public function fuerSpiel(Spiel $spiel): TrumpfOrdnung
     {
-        return $this->fuer($spiel->getVariante());
+        $variante = $spiel->getVariante();
+        if ($variante === null) {
+            return new NormalspielTrumpfOrdnung(); // Fallback während Vorbehaltsrunde
+        }
+
+        return $this->fuer($variante);
     }
 
     public function fuer(SpielVariante $variante): TrumpfOrdnung

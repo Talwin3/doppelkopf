@@ -20,7 +20,13 @@
             <span class="text-tisch-400">|</span>
             <h1 class="text-white font-bold text-lg">{{ tisch.name }}</h1>
             {% if spiel %}
-                <span class="text-tisch-300 text-sm">{{ spiel.variante.value }}</span>
+                <span class="text-tisch-300 text-sm">
+                    {% if spiel.status.value == 'VORBEHALT' %}
+                        Vorbehaltsrunde…
+                    {% elseif spiel.variante %}
+                        {{ spiel.variante.value|replace({'_': ' '}) }}
+                    {% endif %}
+                </span>
             {% endif %}
         </div>
         <div class="text-tisch-300 text-xs">Stich {{ spiel ? spiel.aktuellerStichNr : 0 }}/12</div>

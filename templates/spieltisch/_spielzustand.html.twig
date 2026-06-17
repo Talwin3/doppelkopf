@@ -11,7 +11,7 @@
             {% for t in spiel.teilnehmer %}
                 <div class="bg-white rounded-xl p-4 text-center shadow">
                     <p class="font-bold text-gray-900 text-sm truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
-                    <p class="text-xs mt-1 {{ t.team.value == 'RE' ? 'text-blue-600' : 'text-red-600' }}">{{ t.team.value }}</p>
+                    <p class="text-xs mt-1 {{ t.team and t.team.value == 'RE' ? 'text-blue-600' : 'text-red-600' }}">{{ t.team ? t.team.value : '?' }}</p>
                     <p class="text-2xl font-bold mt-2 {{ t.gewonnen ? 'text-green-600' : 'text-gray-400' }}">
                         {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
                     </p>
