@@ -1,10 +1,21 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-gray-50">
+<html lang="de" class="h-full bg-gray-50 dark:bg-gray-950">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Doppelkopf Online{% endblock %}</title>
-    <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+
+    {# FOUC-Prävention: Theme sofort vor erstem Render setzen #}
+    <script>
+    (function(){
+        var t=localStorage.getItem('dk_theme')||'system';
+        var d=document.documentElement;
+        if(t==='dunkel'||(t==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){
+            d.classList.add('dark');
+        }
+    })();
+    </script>
 
     {% block stylesheets %}
         {{ encore_entry_link_tags('app') }}
@@ -20,15 +31,28 @@
         <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
     {% endif %}
 </head>
-<body class="h-full">
+<body class="h-full text-gray-900 dark:text-gray-100">
 
 {# Navigation #}
-<nav class="bg-tisch-800 shadow-lg">
+<nav class="bg-tisch-800 shadow-lg" data-controller="theme">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex h-16 items-center justify-between">
-            <div class="flex items-center space-x-8">
-                <a href="{{ path('app_start') }}" class="text-white font-bold text-lg tracking-tight">
-                    Doppelkopf Online
+
+            {# ── Logo + Hauptnavigation ── #}
+            <div class="flex items-center gap-6">
+                <a href="{{ path('app_start') }}" class="flex items-center gap-2.5 group">
+                    {# SVG-Logo: zwei überlappende Spielkarten #}
+                    <svg viewBox="0 0 44 30" fill="none" xmlns="http://www.w3.org/2000/svg"
+                         class="w-10 h-[1.6rem] shrink-0 transition-transform group-hover:scale-105"
+                         aria-hidden="true">
+                        <rect x="0.75" y="3" width="24" height="26" rx="4" fill="#14532d" stroke="#4ade80" stroke-width="1.5"/>
+                        <text x="12.75" y="22" font-family="Georgia,serif" font-size="14" fill="#86efac" text-anchor="middle">♣</text>
+                        <rect x="19.25" y="1" width="24" height="26" rx="4" fill="#15803d" stroke="#4ade80" stroke-width="1.5"/>
+                        <text x="31.25" y="20" font-family="Georgia,serif" font-size="15" fill="#fca5a5" text-anchor="middle">♥</text>
+                    </svg>
+                    <span class="text-white font-bold text-lg tracking-tight leading-none">
+                        Doppelkopf<span class="text-tisch-300 font-normal"> Online</span>
+                    </span>
                 </a>
                 {% if app.user %}
                     <a href="{{ path('app_lobby') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
@@ -39,21 +63,33 @@
                     </a>
                 {% endif %}
             </div>
-            <div class="flex items-center space-x-4">
+
+            {# ── Rechte Seite: User-Menü + Theme-Toggle ── #}
+            <div class="flex items-center gap-4">
+                {# Theme-Toggle: System → Hell → Dunkel → System #}
+                <button data-action="click->theme#umschalten"
+                        data-theme-target="icon"
+                        class="text-tisch-200 hover:text-white text-base leading-none transition-colors p-1 rounded"
+                        title="Erscheinungsbild wechseln">🌐</button>
+
                 {% if app.user %}
-                    <a href="{{ path('app_profil', {username: app.user.username}) }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                    <a href="{{ path('app_profil', {username: app.user.username}) }}"
+                       class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
                         {{ app.user.username }}
                     </a>
                     {% if is_granted('ROLE_ADMIN') %}
-                        <a href="{{ path('app_admin') }}" class="text-yellow-300 hover:text-yellow-100 text-sm font-medium transition-colors">
+                        <a href="{{ path('app_admin') }}"
+                           class="text-yellow-300 hover:text-yellow-100 text-sm font-medium transition-colors">
                             Admin
                         </a>
                     {% endif %}
-                    <a href="{{ path('app_logout') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                    <a href="{{ path('app_logout') }}"
+                       class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
                         Abmelden
                     </a>
                 {% else %}
-                    <a href="{{ path('app_login') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                    <a href="{{ path('app_login') }}"
+                       class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
                         Anmelden
                     </a>
                     <a href="{{ path('app_registrieren') }}" class="btn-primary text-xs">
@@ -80,13 +116,13 @@
 </main>
 
 {# Footer #}
-<footer class="mt-auto border-t border-gray-200 bg-white">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between text-sm text-gray-500">
+<footer class="mt-auto border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between text-sm text-gray-500 dark:text-gray-400">
         <p>&copy; {{ "now"|date("Y") }} Doppelkopf Online. Kostenlos und werbefrei.</p>
         <div class="flex space-x-6 mt-2 sm:mt-0">
-            <a href="{{ path('app_regeln') }}" class="hover:text-gray-700">Regeln</a>
-            <a href="{{ path('app_impressum') }}" class="hover:text-gray-700">Impressum</a>
-            <a href="{{ path('app_datenschutz') }}" class="hover:text-gray-700">Datenschutz</a>
+            <a href="{{ path('app_regeln') }}" class="hover:text-gray-700 dark:hover:text-gray-200">Regeln</a>
+            <a href="{{ path('app_impressum') }}" class="hover:text-gray-700 dark:hover:text-gray-200">Impressum</a>
+            <a href="{{ path('app_datenschutz') }}" class="hover:text-gray-700 dark:hover:text-gray-200">Datenschutz</a>
         </div>
     </div>
 </footer>

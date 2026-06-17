@@ -6,6 +6,9 @@
 @source "../../templates/**/*.html.twig";
 @source "../**/*.{js,jsx,ts,tsx}";
 
+/* Dark Mode: klassenbasiert (.dark auf <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Eigene Design-Tokens */
 @theme {
     /* Spieltisch-Grün als Primärfarbe */
@@ -21,39 +24,64 @@
     --color-tisch-900: #14532d;
     --color-tisch-950: #052e16;
 
-    --font-family-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    /* System-Schrift (kein External-Dependency) */
+    --font-family-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 @layer components {
+    /* ── Buttons ──────────────────────────────────────────────────── */
     .btn-primary {
-        @apply inline-flex items-center px-4 py-2 bg-tisch-700 text-white text-sm font-medium rounded-md hover:bg-tisch-800 focus:outline-none focus:ring-2 focus:ring-tisch-500 focus:ring-offset-2 transition-colors;
+        @apply inline-flex items-center px-4 py-2 bg-tisch-700 text-white text-sm font-medium
+               rounded-md hover:bg-tisch-600 focus:outline-none focus:ring-2 focus:ring-tisch-500
+               focus:ring-offset-2 transition-colors;
     }
 
     .btn-secondary {
-        @apply inline-flex items-center px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-tisch-500 focus:ring-offset-2 transition-colors;
+        @apply inline-flex items-center px-4 py-2 bg-white text-gray-700 text-sm font-medium
+               rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none
+               focus:ring-2 focus:ring-tisch-500 focus:ring-offset-2 transition-colors
+               dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600
+               dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900;
     }
 
+    /* ── Formulare ────────────────────────────────────────────────── */
     .form-input {
-        @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-tisch-500 focus:ring-tisch-500 sm:text-sm;
+        @apply block w-full rounded-md border-gray-300 shadow-sm
+               focus:border-tisch-500 focus:ring-tisch-500 sm:text-sm
+               dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100
+               dark:placeholder-gray-500 dark:focus:border-tisch-400 dark:focus:ring-tisch-400;
     }
 
+    .form-label {
+        @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+    }
+
+    /* ── Flash-Nachrichten ────────────────────────────────────────── */
     .flash-success {
-        @apply rounded-md bg-green-50 p-4 text-sm text-green-800 border border-green-200;
+        @apply rounded-md bg-green-50 p-4 text-sm text-green-800 border border-green-200
+               dark:bg-green-950/50 dark:text-green-300 dark:border-green-800;
     }
-
     .flash-error {
-        @apply rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-200;
+        @apply rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-200
+               dark:bg-red-950/50 dark:text-red-300 dark:border-red-800;
+    }
+    .flash-warning {
+        @apply rounded-md bg-yellow-50 p-4 text-sm text-yellow-800 border border-yellow-200
+               dark:bg-yellow-950/50 dark:text-yellow-300 dark:border-yellow-800;
     }
 
-    .flash-warning {
-        @apply rounded-md bg-yellow-50 p-4 text-sm text-yellow-800 border border-yellow-200;
+    /* ── Karten-Panels (Lobby, Auth-Seiten) ──────────────────────── */
+    .panel {
+        @apply bg-white rounded-xl shadow-sm border border-gray-200
+               dark:bg-gray-800 dark:border-gray-700;
     }
 
     /* ── Spielkarten ──────────────────────────────────────────────── */
     .spielkarte {
         @apply relative inline-flex flex-col items-center justify-center
                bg-white rounded-lg border border-gray-200 shadow-sm
-               select-none font-bold leading-none;
+               select-none font-bold leading-none
+               dark:bg-gray-100 dark:border-gray-300;
     }
 
     .spielkarte--klein   { @apply w-7 h-10 text-xs; }
