@@ -7,6 +7,7 @@ namespace App\Application\Doppelkopf;
 use App\Application\SystemEinstellungService;
 use App\Domain\Doppelkopf\Service\PunkteZaehler;
 use App\Domain\Doppelkopf\Service\StichGewinner;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Entity\GespielteKarte;
 use App\Entity\Spiel;
 use App\Entity\Tisch;
@@ -26,6 +27,7 @@ final class SpielAbschlussService
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielAnsageRepository $ansageRepo,
         private readonly StichGewinner $stichGewinner,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly PunkteZaehler $punkteZaehler,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly LobbyMercurePublisher $lobbyPublisher,
@@ -59,7 +61,9 @@ final class SpielAbschlussService
                 $stichAugen += $gk->alsKarte()->augen();
             }
 
-            $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner);
+            $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+            $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+            $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
             $team = $teamProSitzplatz[$gewinnerSitzplatz] ?? null;
             if ($team !== null) {
                 $augenProTeam[$team->value] += $stichAugen;

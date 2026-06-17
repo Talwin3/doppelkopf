@@ -7,7 +7,7 @@ namespace App\Application\Doppelkopf;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
 use App\Domain\Doppelkopf\Service\PunkteZaehler;
 use App\Domain\Doppelkopf\Service\StichGewinner;
-use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\GespielteKarte;
 use App\Entity\Spiel;
@@ -27,7 +27,7 @@ final class KarteAusspielenService
         private readonly EntityManagerInterface $em,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielTeilnehmerRepository $teilnehmerRepo,
-        private readonly TrumpfOrdnung $trumpfOrdnung,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly StichGewinner $stichGewinner,
         private readonly PunkteZaehler $punkteZaehler,
         private readonly SpielMercurePublisher $mercurePublisher,
@@ -36,8 +36,8 @@ final class KarteAusspielenService
 
     public function spielen(Spiel $spiel, User $user, string $karteId): void
     {
-        if ($spiel->istBeendet()) {
-            throw new UngueltigerZugException('Das Spiel ist bereits beendet.');
+        if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
+            throw new UngueltigerZugException('Karten können nur in einem laufenden Spiel gespielt werden.');
         }
 
         $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
@@ -55,7 +55,7 @@ final class KarteAusspielenService
     /** Karte für einen Bot oder Timeout-Stellvertreter ausspielen (ohne User-Prüfung). */
     public function spielenAlsBot(Spiel $spiel, int $sitzplatz, string $karteId): void
     {
-        if ($spiel->istBeendet()) {
+        if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
             return;
         }
 
@@ -79,6 +79,7 @@ final class KarteAusspielenService
      */
     public function erlaubteKarten(Spiel $spiel, SpielTeilnehmer $teilnehmer): array
     {
+        $ordnung      = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
         $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
         $hand         = $teilnehmer->aktuelleHand($gespielteIds);
 
@@ -88,17 +89,17 @@ final class KarteAusspielenService
         }
 
         $erstgespielt        = $stichKarten[0]->alsKarte();
-        $angespieltIstTrumpf = $this->trumpfOrdnung->istTrumpf($erstgespielt);
-        $angespielteFarbe    = $this->trumpfOrdnung->fehlfarbe($erstgespielt);
+        $angespieltIstTrumpf = $ordnung->istTrumpf($erstgespielt);
+        $angespielteFarbe    = $ordnung->fehlfarbe($erstgespielt);
 
         if ($angespieltIstTrumpf) {
-            $trumpfKarten = array_filter($hand, fn(Karte $k) => $this->trumpfOrdnung->istTrumpf($k));
+            $trumpfKarten = array_filter($hand, fn(Karte $k) => $ordnung->istTrumpf($k));
             return !empty($trumpfKarten) ? array_values($trumpfKarten) : $hand;
         }
 
         $anfarbe = array_filter(
             $hand,
-            fn(Karte $k) => $this->trumpfOrdnung->fehlfarbe($k) === $angespielteFarbe,
+            fn(Karte $k) => $ordnung->fehlfarbe($k) === $angespielteFarbe,
         );
         return !empty($anfarbe) ? array_values($anfarbe) : $hand;
     }
@@ -149,7 +150,9 @@ final class KarteAusspielenService
             $kartenFuerGewinner[$gk->getSitzplatz()] = $gk->alsKarte();
         }
 
-        $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner);
+        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
 
         // Hochzeit: erster Stich den ein KONTRA-Spieler gewinnt → wird RE-Partner
         if ($spiel->getVariante() === SpielVariante::HOCHZEIT && !$spiel->isHochzeitAufgeloest()) {
@@ -176,27 +179,28 @@ final class KarteAusspielenService
 
     private function validiereZug(Spiel $spiel, int $sitzplatz, array $hand, Karte $zuSpielen): void
     {
+        $ordnung     = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
         $stichKarten = $this->gespielteKarteRepo->findAktuellerStich($spiel, $spiel->getAktuellerStichNr());
 
         if (empty($stichKarten)) {
             return; // Erste Karte im Stich → immer erlaubt
         }
 
-        $erstgesp       = $stichKarten[0]->alsKarte();
-        $angespieltIstTrumpf = $this->trumpfOrdnung->istTrumpf($erstgesp);
-        $angespielteFarbe    = $this->trumpfOrdnung->fehlfarbe($erstgesp);
+        $erstgesp            = $stichKarten[0]->alsKarte();
+        $angespieltIstTrumpf = $ordnung->istTrumpf($erstgesp);
+        $angespielteFarbe    = $ordnung->fehlfarbe($erstgesp);
 
-        $hatTrumpf   = $this->hatKartenVom($hand, fn(Karte $k) => $this->trumpfOrdnung->istTrumpf($k));
+        $hatTrumpf   = $this->hatKartenVom($hand, fn(Karte $k) => $ordnung->istTrumpf($k));
         $hatAnfarbe  = !$angespieltIstTrumpf && $this->hatKartenVom(
             $hand,
-            fn(Karte $k) => $this->trumpfOrdnung->fehlfarbe($k) === $angespielteFarbe,
+            fn(Karte $k) => $ordnung->fehlfarbe($k) === $angespielteFarbe,
         );
 
-        if ($angespieltIstTrumpf && $hatTrumpf && !$this->trumpfOrdnung->istTrumpf($zuSpielen)) {
+        if ($angespieltIstTrumpf && $hatTrumpf && !$ordnung->istTrumpf($zuSpielen)) {
             throw new UngueltigerZugException('Trumpf wurde angespielt – du musst Trumpf bedienen.');
         }
 
-        if (!$angespieltIstTrumpf && $hatAnfarbe && $this->trumpfOrdnung->fehlfarbe($zuSpielen) !== $angespielteFarbe) {
+        if (!$angespieltIstTrumpf && $hatAnfarbe && $ordnung->fehlfarbe($zuSpielen) !== $angespielteFarbe) {
             throw new UngueltigerZugException(
                 sprintf('Du musst %s bedienen.', $angespielteFarbe?->value ?? 'die Anspielfarbe')
             );

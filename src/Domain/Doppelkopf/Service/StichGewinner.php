@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\Kartenwert;
 
 /**
  * Bestimmt den Gewinner eines Stichs nach DDV-Regeln.
@@ -14,12 +15,11 @@ use App\Domain\Doppelkopf\ValueObject\Karte;
  */
 final class StichGewinner
 {
-    public function __construct(private readonly TrumpfOrdnung $trumpfOrdnung) {}
-
     /**
-     * @param array<int, Karte> $karten Sitzplatz → Karte, in Spielreihenfolge
+     * @param array<int, Karte> $karten          Sitzplatz → Karte, in Spielreihenfolge
+     * @param bool              $zweiteDulleSticht Falls true: die zweite Herz-Zehn schlägt die erste
      */
-    public function bestimme(array $karten): int
+    public function bestimme(array $karten, TrumpfOrdnung $ordnung, bool $zweiteDulleSticht = false): int
     {
         if (count($karten) !== 4) {
             throw new \InvalidArgumentException('Ein Stich besteht aus genau 4 Karten.');
@@ -28,42 +28,51 @@ final class StichGewinner
         $sitzplaetze = array_keys($karten);
         $kartenWerte = array_values($karten);
 
-        $angespielteFarbe = $this->trumpfOrdnung->fehlfarbe($kartenWerte[0]);
-        $angespieltTrumpf = $this->trumpfOrdnung->istTrumpf($kartenWerte[0]);
+        $angespielteFarbe = $ordnung->fehlfarbe($kartenWerte[0]);
+        $angespieltTrumpf = $ordnung->istTrumpf($kartenWerte[0]);
 
         $gewinnerIndex = 0;
 
         for ($i = 1; $i < 4; $i++) {
-            $gewinnerKarte  = $kartenWerte[$gewinnerIndex];
-            $aktuelleKarte  = $kartenWerte[$i];
-            $gewinnerIstTrumpf = $this->trumpfOrdnung->istTrumpf($gewinnerKarte);
-            $aktuellIstTrumpf  = $this->trumpfOrdnung->istTrumpf($aktuelleKarte);
+            $gewinnerKarte    = $kartenWerte[$gewinnerIndex];
+            $aktuelleKarte    = $kartenWerte[$i];
+            $gewinnerIstTrumpf = $ordnung->istTrumpf($gewinnerKarte);
+            $aktuellIstTrumpf  = $ordnung->istTrumpf($aktuelleKarte);
 
             if ($aktuellIstTrumpf && !$gewinnerIstTrumpf) {
-                // Trumpf schlägt Fehlfarbe immer
                 $gewinnerIndex = $i;
                 continue;
             }
 
             if ($aktuellIstTrumpf && $gewinnerIstTrumpf) {
-                // Höherer Trumpfrang gewinnt; bei Gleichheit (zwei Dullen) gewinnt die erste
-                if ($this->trumpfOrdnung->trumpfRang($aktuelleKarte) > $this->trumpfOrdnung->trumpfRang($gewinnerKarte)) {
+                $neuerRang = $ordnung->trumpfRang($aktuelleKarte);
+                $alterRang = $ordnung->trumpfRang($gewinnerKarte);
+
+                // "Zweite Dulle sticht erste": beide Karten sind Herz-Zehn → aktuelle (spätere) gewinnt
+                if ($zweiteDulleSticht
+                    && $aktuelleKarte->wert === Kartenwert::ZEHN
+                    && $gewinnerKarte->wert === Kartenwert::ZEHN
+                    && $neuerRang === $alterRang
+                ) {
+                    $gewinnerIndex = $i;
+                    continue;
+                }
+
+                if ($neuerRang > $alterRang) {
                     $gewinnerIndex = $i;
                 }
                 continue;
             }
 
             if (!$aktuellIstTrumpf && !$gewinnerIstTrumpf) {
-                // Beide Fehlfarbe: aktuelle Karte gewinnt nur wenn gleiche Farbe wie Anspiel und höherer Rang
-                $aktuelleFarbe = $this->trumpfOrdnung->fehlfarbe($aktuelleKarte);
+                $aktuelleFarbe = $ordnung->fehlfarbe($aktuelleKarte);
                 if ($aktuelleFarbe === $angespielteFarbe
-                    && $this->trumpfOrdnung->fehlfarbenRang($aktuelleKarte) > $this->trumpfOrdnung->fehlfarbenRang($gewinnerKarte)
-                    && !$angespieltTrumpf) {
+                    && $ordnung->fehlfarbenRang($aktuelleKarte) > $ordnung->fehlfarbenRang($gewinnerKarte)
+                    && !$angespieltTrumpf
+                ) {
                     $gewinnerIndex = $i;
                 }
-                // Andere Fehlfarbe (Abwurf): gewinnt nie
             }
-            // Fehlfarbe gegen Trumpf-Gewinner: kann nicht gewinnen → nichts tun
         }
 
         return $sitzplaetze[$gewinnerIndex];
