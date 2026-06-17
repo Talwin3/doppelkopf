@@ -37,7 +37,7 @@ final class SpielStartService
             throw new \LogicException('Ein Spiel braucht genau 4 Spieler am Tisch.');
         }
 
-        $haende = $this->kartenGeber->austeilen();
+        $haende = $this->kartenGeber->austeilen($tisch->getRegelEinstellungen());
 
         // Spiel startet in VORBEHALT-Phase; Teams werden durch SpielTypResolver nach Deklaration gesetzt
         $spiel = new Spiel();

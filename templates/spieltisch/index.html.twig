@@ -29,7 +29,8 @@
                 </span>
             {% endif %}
         </div>
-        <div class="text-tisch-300 text-xs">Stich {{ spiel ? spiel.aktuellerStichNr : 0 }}/12</div>
+        {% set maxStiche = tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
+        <div class="text-tisch-300 text-xs">Stich {{ spiel ? spiel.aktuellerStichNr : 0 }}/{{ maxStiche }}</div>
     </div>
 
     {# ── Fehler-Banner (per Stimulus gesetzt) ───────────────────────── #}
