@@ -26,9 +26,27 @@ final class SpielMercurePublisher
         $this->publizieren($spiel, 'SPIEL_GESTARTET');
     }
 
-    public function spielAktualisiert(Spiel $spiel): void
+    public function karteGespielt(Spiel $spiel, int $sitzplatz): void
     {
-        $this->publizieren($spiel, 'SPIEL_AKTUALISIERT');
+        $this->publizieren($spiel, 'KARTE_GESPIELT', ['sitzplatz' => $sitzplatz]);
+    }
+
+    public function stichAbgeschlossen(Spiel $spiel, int $gewinnerSitzplatz, int $gespielterSitzplatz): void
+    {
+        $this->publizieren($spiel, 'STICH_ABGESCHLOSSEN', [
+            'gewinnerSitzplatz'   => $gewinnerSitzplatz,
+            'gespielterSitzplatz' => $gespielterSitzplatz,
+        ]);
+    }
+
+    public function ansageGemacht(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'ANSAGE_GEMACHT');
+    }
+
+    public function vorbehaltDeklariert(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'VORBEHALT_DEKLARIERT');
     }
 
     public function spielBeendet(Spiel $spiel): void
@@ -41,13 +59,15 @@ final class SpielMercurePublisher
         $this->publizieren($spiel, 'TISCH_ZUSTAND');
     }
 
-    private function publizieren(Spiel $spiel, string $typ): void
+    /** @param array<string, mixed> $extra */
+    private function publizieren(Spiel $spiel, string $typ, array $extra = []): void
     {
-        $topic = $this->topic($spiel);
+        $topic   = $this->topic($spiel);
+        $payload = array_merge(['typ' => $typ, 'spielId' => (string) $spiel->getId()], $extra);
         try {
             $this->hub->publish(new Update(
                 $topic,
-                json_encode(['typ' => $typ, 'spielId' => (string) $spiel->getId()], JSON_THROW_ON_ERROR),
+                json_encode($payload, JSON_THROW_ON_ERROR),
             ));
             $this->logger->updateVeroeffentlicht($topic, $typ);
         } catch (\Throwable $e) {

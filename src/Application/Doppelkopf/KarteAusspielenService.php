@@ -128,19 +128,20 @@ final class KarteAusspielenService
 
         $this->em->persist($gespielteKarte);
 
+        $sitzplatz = $teilnehmer->getSitzplatz();
+
         if ($position === 4) {
-            $this->stichAbschliessen($spiel, $stichKartenBisher, $gespielteKarte);
+            $this->stichAbschliessen($spiel, $stichKartenBisher, $gespielteKarte, $sitzplatz);
         } else {
-            $naechster = ($teilnehmer->getSitzplatz() % 4) + 1;
+            $naechster = ($sitzplatz % 4) + 1;
             $spiel->setAktuellerSpielerSitzplatz($naechster);
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
             $this->em->flush();
+            $this->mercurePublisher->karteGespielt($spiel, $sitzplatz);
         }
-
-        $this->mercurePublisher->spielAktualisiert($spiel);
     }
 
-    private function stichAbschliessen(Spiel $spiel, array $bisherige, GespielteKarte $letzteKarte): void
+    private function stichAbschliessen(Spiel $spiel, array $bisherige, GespielteKarte $letzteKarte, int $gespielterSitzplatz): void
     {
         $alleStichKarten = array_merge($bisherige, [$letzteKarte]);
 
@@ -164,9 +165,9 @@ final class KarteAusspielenService
         }
 
         $naechsterStich = $spiel->getAktuellerStichNr() + 1;
+        $maxStiche      = $spiel->getTisch()->getRegelEinstellung('ohne_neuner') ? 10 : 12;
 
-        if ($naechsterStich > 12) {
-            // Alle 12 Stiche gespielt → Spiel beenden
+        if ($naechsterStich > $maxStiche) {
             $this->em->flush();
             $this->abschlussService->abschliessen($spiel);
         } else {
@@ -174,6 +175,7 @@ final class KarteAusspielenService
             $spiel->setAktuellerSpielerSitzplatz($gewinnerSitzplatz);
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
             $this->em->flush();
+            $this->mercurePublisher->stichAbgeschlossen($spiel, $gewinnerSitzplatz, $gespielterSitzplatz);
         }
     }
 

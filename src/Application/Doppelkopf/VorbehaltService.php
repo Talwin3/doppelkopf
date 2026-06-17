@@ -77,7 +77,7 @@ final class VorbehaltService
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
 
             $this->em->flush();
-            $this->mercurePublisher->tischZustandAktualisiert($spiel);
+            $this->mercurePublisher->vorbehaltDeklariert($spiel);
         }
     }
 
@@ -114,7 +114,7 @@ final class VorbehaltService
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
 
             $this->em->flush();
-            $this->mercurePublisher->tischZustandAktualisiert($spiel);
+            $this->mercurePublisher->vorbehaltDeklariert($spiel);
         }
     }
 

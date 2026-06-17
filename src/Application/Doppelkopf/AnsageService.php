@@ -114,7 +114,7 @@ final class AnsageService
         $this->em->persist($ansage);
         $this->em->flush();
 
-        $this->mercurePublisher->spielAktualisiert($spiel);
+        $this->mercurePublisher->ansageGemacht($spiel);
     }
 
     /**

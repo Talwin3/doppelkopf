@@ -5,6 +5,16 @@
     </div>
 
 {% elseif spiel.status.value == 'BEENDET' %}
+    {# Versteckte Targets für Sound-Controller #}
+    {% for t in spiel.teilnehmer %}
+        {% if t.user and t.user.id == app.user.id %}
+            {% if t.gewonnen %}
+                <span class="hidden" data-spieltisch-target="spielGewonnen"></span>
+            {% elseif t.gewonnen is same as(false) %}
+                <span class="hidden" data-spieltisch-target="spielVerloren"></span>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
     <div class="text-center py-12">
         <h2 class="text-2xl font-bold text-white mb-6">Spiel beendet!</h2>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-lg mx-auto">
@@ -251,7 +261,8 @@
                     {% endfor %}
                 </span>
                 {% if ichBinDran %}
-                    <span class="text-yellow-300 text-xs font-bold animate-pulse">► Du bist dran!</span>
+                    <span class="text-yellow-300 text-xs font-bold animate-pulse"
+                          data-spieltisch-target="dranIndikator">► Du bist dran!</span>
                 {% endif %}
             </div>
 

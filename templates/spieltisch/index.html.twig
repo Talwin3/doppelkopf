@@ -3,12 +3,19 @@
 {% block title %}Spieltisch: {{ tisch.name }} – Doppelkopf Online{% endblock %}
 
 {% block body %}
+{% set meinSitzplatz = 0 %}
+{% for ts in tisch.aktiveSpieler %}
+    {% if ts.user and ts.user.id == app.user.id %}
+        {% set meinSitzplatz = ts.sitzplatz %}
+    {% endif %}
+{% endfor %}
 <div class="bg-tisch-900 rounded-2xl shadow-2xl min-h-[calc(100vh-12rem)] p-4 flex flex-col"
      {% if spiel and mercureTopic %}
      data-controller="spieltisch"
      data-spieltisch-mercure-url-value="{{ mercurePublicUrl }}"
      data-spieltisch-topic-value="{{ mercureTopic }}"
      data-spieltisch-zustand-url-value="{{ path('app_spieltisch_zustand', {id: tisch.id}) }}"
+     data-spieltisch-mein-sitzplatz-value="{{ meinSitzplatz }}"
      {% endif %}>
 
     {# ── Kopfzeile ───────────────────────────────────────────────────── #}
@@ -31,6 +38,13 @@
         </div>
         {% set maxStiche = tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
         <div class="text-tisch-300 text-xs">Stich {{ spiel ? spiel.aktuellerStichNr : 0 }}/{{ maxStiche }}</div>
+        {% if spiel and mercureTopic %}
+        <button type="button"
+                data-spieltisch-target="soundToggle"
+                data-action="click->spieltisch#soundUmschalten"
+                class="text-lg leading-none transition-opacity"
+                title="Sound an/aus">🔊</button>
+        {% endif %}
     </div>
 
     {# ── Fehler-Banner (per Stimulus gesetzt) ───────────────────────── #}
