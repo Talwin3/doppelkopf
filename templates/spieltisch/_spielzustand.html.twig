@@ -21,6 +21,113 @@
         <a href="{{ path('app_lobby') }}" class="btn-primary mt-8 inline-block">Zurück zur Lobby</a>
     </div>
 
+{% elseif spiel.status.value == 'VORBEHALT' %}
+    {# ── Vorbehaltsrunde ──────────────────────────────────────────────── #}
+    {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}
+    {% set ichBinDran = spiel.aktuellerSpielerSitzplatz == meinSitzplatz %}
+
+    <div class="flex flex-col items-center justify-center py-8 gap-6">
+        <div class="text-center">
+            <h2 class="text-xl font-bold text-white mb-1">Vorbehaltsrunde</h2>
+            <p class="text-tisch-300 text-sm">Jeder Spieler deklariert reihum seinen Vorbehalt.</p>
+        </div>
+
+        {# Status der Deklarationen #}
+        <div class="flex gap-4">
+            {% for t in spiel.teilnehmer|sort((a, b) => a.sitzplatz <=> b.sitzplatz) %}
+                <div class="text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold
+                        {% if t.vorbehaltDeklariert %}bg-green-600 text-white{% elseif spiel.aktuellerSpielerSitzplatz == t.sitzplatz %}bg-yellow-400 text-black animate-pulse{% else %}bg-tisch-700 text-tisch-400{% endif %}">
+                        {{ t.vorbehaltDeklariert ? '✓' : (spiel.aktuellerSpielerSitzplatz == t.sitzplatz ? '?' : '…') }}
+                    </div>
+                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    {% if t.vorbehaltDeklariert and t.sitzplatz == meinSitzplatz %}
+                        <p class="text-xs text-green-400 mt-0.5">{{ t.vorbehaltTyp ? t.vorbehaltTyp.value : '' }}</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        {# Eigene Deklaration — nur wenn ich an der Reihe #}
+        {% if ichBinDran and teilnehmer and not teilnehmer.vorbehaltDeklariert %}
+            <div class="bg-tisch-800 rounded-xl p-5 border border-tisch-600 w-full max-w-sm">
+                <p class="text-white text-sm font-medium mb-3 text-center">Du bist an der Reihe:</p>
+                <div class="flex flex-col gap-2">
+                    {# GESUND #}
+                    {% if 'GESUND' in vorbehaltOptionen|map(o => o.value) %}
+                        <form method="post" action="{{ path('app_vorbehalt', {id: tisch.id}) }}"
+                              data-action="submit->spieltisch#vorbehalt">
+                            <input type="hidden" name="_token" value="{{ csrf_token('vorbehalt_' ~ tisch.id) }}">
+                            <input type="hidden" name="vorbehalt_typ" value="GESUND">
+                            <button type="submit" class="w-full py-2 rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-sm font-medium">
+                                Gesund (kein Vorbehalt)
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    {# HOCHZEIT #}
+                    {% if 'HOCHZEIT' in vorbehaltOptionen|map(o => o.value) %}
+                        <form method="post" action="{{ path('app_vorbehalt', {id: tisch.id}) }}"
+                              data-action="submit->spieltisch#vorbehalt">
+                            <input type="hidden" name="_token" value="{{ csrf_token('vorbehalt_' ~ tisch.id) }}">
+                            <input type="hidden" name="vorbehalt_typ" value="HOCHZEIT">
+                            <button type="submit" class="w-full py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium">
+                                Hochzeit ♛♛
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    {# SOLO — mit Variantenauswahl #}
+                    {% if 'SOLO' in vorbehaltOptionen|map(o => o.value) %}
+                        <details class="rounded-lg bg-yellow-900 border border-yellow-700">
+                            <summary class="w-full py-2 px-4 text-yellow-300 text-sm font-medium cursor-pointer">
+                                Solo spielen ▼
+                            </summary>
+                            <div class="p-3 grid grid-cols-2 gap-2">
+                                {% set soloVarianten = ['SOLO_BUBEN', 'SOLO_DAMEN', 'SOLO_FLEISCHLOS', 'SOLO_KARO', 'SOLO_HERZ', 'SOLO_PIK', 'SOLO_KREUZ'] %}
+                                {% set regelwerk = tisch.regelEinstellungen %}
+                                {% for variante in soloVarianten %}
+                                    {% if variante in (regelwerk.soli_erlaubt ?? soloVarianten) %}
+                                        <form method="post" action="{{ path('app_vorbehalt', {id: tisch.id}) }}"
+                                              data-action="submit->spieltisch#vorbehalt">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('vorbehalt_' ~ tisch.id) }}">
+                                            <input type="hidden" name="vorbehalt_typ" value="SOLO">
+                                            <input type="hidden" name="solo_variante" value="{{ variante }}">
+                                            <button type="submit" class="w-full py-1.5 rounded bg-yellow-700 hover:bg-yellow-600 text-yellow-100 text-xs font-medium">
+                                                {{ variante|replace({'SOLO_': '', '_': '-'}) }}
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endif %}
+                </div>
+            </div>
+        {% elseif teilnehmer and teilnehmer.vorbehaltDeklariert %}
+            <div class="bg-green-900 border border-green-700 rounded-lg px-6 py-3 text-green-300 text-sm text-center">
+                Du hast <strong>{{ teilnehmer.vorbehaltTyp ? teilnehmer.vorbehaltTyp.value : '' }}</strong> deklariert.
+                Warte auf die anderen Spieler…
+            </div>
+        {% else %}
+            <div class="text-tisch-400 text-sm text-center">
+                Warte auf Sitzplatz {{ spiel.aktuellerSpielerSitzplatz }}…
+            </div>
+        {% endif %}
+
+        {# Karten-Vorschau (nicht spielbar in Vorbehaltsrunde) #}
+        {% if hand is not empty %}
+            <div class="flex flex-wrap gap-2 justify-center opacity-75">
+                {% for karte in hand %}
+                    <div class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
+                        <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
+                        <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
 {% else %}
     {# Teilnehmer nach Sitzplatz indexieren #}
     {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}

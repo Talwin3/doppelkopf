@@ -16,6 +16,11 @@ final class SpielMercurePublisher
         private readonly MercureLogger $logger,
     ) {}
 
+    public function kartenAusgeteilt(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'KARTEN_AUSGETEILT');
+    }
+
     public function spielGestartet(Spiel $spiel): void
     {
         $this->publizieren($spiel, 'SPIEL_GESTARTET');

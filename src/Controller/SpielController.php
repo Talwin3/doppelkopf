@@ -8,10 +8,13 @@ use App\Application\Doppelkopf\AnsageService;
 use App\Application\Doppelkopf\KarteAusspielenService;
 use App\Application\Doppelkopf\SpielStartService;
 use App\Application\Doppelkopf\TischBeitrittsService;
+use App\Application\Doppelkopf\VorbehaltService;
 use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
 use App\Entity\Tisch;
 use App\Enum\AnsageTyp;
+use App\Enum\SpielVariante;
+use App\Enum\VorbehaltTyp;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\GespielteKarteRepository;
 use App\Repository\SpielAnsageRepository;
@@ -39,6 +42,7 @@ class SpielController extends AbstractController
         private readonly AnsageService $ansageService,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly TischBeitrittsService $beitrittsService,
+        private readonly VorbehaltService $vorbehaltService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -66,7 +70,7 @@ class SpielController extends AbstractController
             ? $this->spielStartService->starten($tisch)
             : $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen] = $this->spielDaten($spiel, $user);
 
         return $this->render('spieltisch/index.html.twig', [
             'tisch'              => $tisch,
@@ -75,6 +79,7 @@ class SpielController extends AbstractController
             'hand'               => $hand,
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
+            'vorbehaltOptionen'  => $vorbehaltOptionen,
             'mercurePublicUrl'   => $this->mercurePublicUrl,
             'mercureTopic'       => $spiel ? $this->mercurePublisher->topic($spiel) : null,
         ]);
@@ -87,7 +92,7 @@ class SpielController extends AbstractController
         $user  = $this->getUser();
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen] = $this->spielDaten($spiel, $user);
 
         return $this->render('spieltisch/_spielzustand.html.twig', [
             'tisch'              => $tisch,
@@ -96,6 +101,7 @@ class SpielController extends AbstractController
             'hand'               => $hand,
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
+            'vorbehaltOptionen'  => $vorbehaltOptionen,
         ]);
     }
 
@@ -152,6 +158,44 @@ class SpielController extends AbstractController
         }
     }
 
+    #[Route('/{id}/vorbehalt', name: 'app_vorbehalt', methods: ['POST'])]
+    public function vorbehaltDeklarieren(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('vorbehalt_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        if ($spiel === null) {
+            return new JsonResponse(['fehler' => 'Kein laufendes Spiel.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $typWert = $request->request->get('vorbehalt_typ', '');
+        $typ     = VorbehaltTyp::tryFrom($typWert);
+        if ($typ === null) {
+            return new JsonResponse(['fehler' => 'Unbekannter Vorbehalt-Typ.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $soloVariante = null;
+        if ($typ === VorbehaltTyp::SOLO) {
+            $varianteWert = $request->request->get('solo_variante', '');
+            $soloVariante = SpielVariante::tryFrom($varianteWert);
+            if ($soloVariante === null) {
+                return new JsonResponse(['fehler' => 'Ungültige Solo-Variante.'], Response::HTTP_BAD_REQUEST);
+            }
+        }
+
+        try {
+            $this->vorbehaltService->deklarieren($spiel, $user, $typ, $soloVariante);
+            return new JsonResponse(['ok' => true]);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
     #[Route('/{id}/nach-spiel-verlassen', name: 'app_nach_spiel_verlassen', methods: ['POST'])]
     public function nachSpielVerlassen(Tisch $tisch, Request $request): JsonResponse
     {
@@ -183,10 +227,11 @@ class SpielController extends AbstractController
     /** Hilfsmethode: Spiel-Kontextdaten für ein Template aufbereiten. */
     private function spielDaten(?object $spiel, object $user): array
     {
-        $teilnehmer        = null;
-        $hand              = [];
-        $ansagen           = [];
+        $teilnehmer         = null;
+        $hand               = [];
+        $ansagen            = [];
         $verfuegbareAnsagen = [];
+        $vorbehaltOptionen  = [];
 
         if ($spiel !== null) {
             $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
@@ -194,10 +239,11 @@ class SpielController extends AbstractController
                 $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
                 $hand         = $teilnehmer->aktuelleHand($gespielteIds);
                 $verfuegbareAnsagen = $this->ansageService->verfuegbareAnsagen($spiel, $user);
+                $vorbehaltOptionen  = $this->vorbehaltService->verfuegbareOptionen($spiel, $user);
             }
             $ansagen = $this->ansageRepo->findFuerSpiel($spiel);
         }
 
-        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen];
+        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen];
     }
 }

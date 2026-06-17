@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Entity\Spiel;
+use App\Enum\SpielStatus;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -16,6 +17,7 @@ final class BotZugService
 {
     public function __construct(
         private readonly KarteAusspielenService $karteAusspielenService,
+        private readonly VorbehaltService $vorbehaltService,
         private readonly LoggerInterface $logger,
         #[Autowire('%env(BOT_API_URL)%')]
         private readonly string $botApiUrl,
@@ -25,6 +27,12 @@ final class BotZugService
 
     public function spielenFuerSitzplatz(Spiel $spiel, int $sitzplatz): void
     {
+        // In der Vorbehaltsrunde: Vorbehalt deklarieren statt Karte spielen
+        if ($spiel->getStatus() === SpielStatus::VORBEHALT) {
+            $this->vorbehaltService->deklarierenAlsBot($spiel, $sitzplatz);
+            return;
+        }
+
         $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
         if ($teilnehmer === null) {
             return;

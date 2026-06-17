@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\Kartenfarbe;
+use App\Enum\Kartenwert;
+use App\Enum\SpielVariante;
 use App\Enum\Team;
+use App\Enum\VorbehaltTyp;
 use App\Repository\SpielTeilnehmerRepository;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
@@ -45,6 +49,17 @@ class SpielTeilnehmer
     #[ORM\Column(options: ['default' => false])]
     private bool $istBot = false;
 
+    /** Hat dieser Spieler seinen Vorbehalt bereits deklariert? */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $vorbehaltDeklariert = false;
+
+    #[ORM\Column(length: 10, enumType: VorbehaltTyp::class, nullable: true)]
+    private ?VorbehaltTyp $vorbehaltTyp = null;
+
+    /** Nur relevant wenn vorbehaltTyp = SOLO. */
+    #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
+    private ?SpielVariante $vorbehaltSoloVariante = null;
+
     #[ORM\Column(nullable: true)]
     private ?bool $gewonnen = null;
 
@@ -79,6 +94,15 @@ class SpielTeilnehmer
     public function isIstBot(): bool { return $this->istBot; }
     public function setIstBot(bool $istBot): static { $this->istBot = $istBot; return $this; }
 
+    public function isVorbehaltDeklariert(): bool { return $this->vorbehaltDeklariert; }
+    public function setVorbehaltDeklariert(bool $deklariert): static { $this->vorbehaltDeklariert = $deklariert; return $this; }
+
+    public function getVorbehaltTyp(): ?VorbehaltTyp { return $this->vorbehaltTyp; }
+    public function setVorbehaltTyp(?VorbehaltTyp $typ): static { $this->vorbehaltTyp = $typ; return $this; }
+
+    public function getVorbehaltSoloVariante(): ?SpielVariante { return $this->vorbehaltSoloVariante; }
+    public function setVorbehaltSoloVariante(?SpielVariante $variante): static { $this->vorbehaltSoloVariante = $variante; return $this; }
+
     public function isGewonnen(): ?bool { return $this->gewonnen; }
     public function setGewonnen(?bool $gewonnen): static { $this->gewonnen = $gewonnen; return $this; }
 
@@ -96,5 +120,18 @@ class SpielTeilnehmer
             }
         }
         return $hand;
+    }
+
+    /** Zählt Kreuz-Damen in der Starthand (für Hochzeit-Validierung). */
+    public function anzahlKreuzDamen(): int
+    {
+        $anzahl = 0;
+        foreach ($this->startkartenIds as $id) {
+            $karte = Karte::vonId($id);
+            if ($karte->farbe === Kartenfarbe::KREUZ && $karte->wert === Kartenwert::DAME) {
+                $anzahl++;
+            }
+        }
+        return $anzahl;
     }
 }

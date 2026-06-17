@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum SpielStatus: string
 {
-    case LAUFEND = 'LAUFEND';
-    case BEENDET = 'BEENDET';
+    /** Karten wurden ausgeteilt, Spieler deklarieren ihre Vorbehalte. */
+    case VORBEHALT = 'VORBEHALT';
+    case LAUFEND   = 'LAUFEND';
+    case BEENDET   = 'BEENDET';
 }

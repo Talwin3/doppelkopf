@@ -24,9 +24,9 @@ class SpielRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('s')
             ->where('s.tisch = :tisch')
-            ->andWhere('s.status = :status')
+            ->andWhere('s.status IN (:status)')
             ->setParameter('tisch', $tisch)
-            ->setParameter('status', SpielStatus::LAUFEND)
+            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND])
             ->getQuery()
             ->getOneOrNullResult();
     }
@@ -42,10 +42,10 @@ class SpielRepository extends ServiceEntityRepository
         $schwelle = new \DateTimeImmutable("-{$sekunden} seconds");
 
         return $this->createQueryBuilder('s')
-            ->where('s.status = :status')
+            ->where('s.status IN (:status)')
             ->andWhere('s.aktuellerZugBegannAm IS NOT NULL')
             ->andWhere('s.aktuellerZugBegannAm < :schwelle')
-            ->setParameter('status', SpielStatus::LAUFEND)
+            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND])
             ->setParameter('schwelle', $schwelle)
             ->getQuery()
             ->getResult();

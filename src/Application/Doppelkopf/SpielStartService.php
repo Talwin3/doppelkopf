@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
-use App\Domain\Doppelkopf\Exception\TischZugangVerweigertException;
 use App\Domain\Doppelkopf\Service\KartenGeber;
-use App\Domain\Doppelkopf\Service\TeamBestimmer;
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
 use App\Entity\Tisch;
+use App\Enum\SpielStatus;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\SpielRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -20,7 +19,6 @@ final class SpielStartService
         private readonly EntityManagerInterface $em,
         private readonly SpielRepository $spielRepo,
         private readonly KartenGeber $kartenGeber,
-        private readonly TeamBestimmer $teamBestimmer,
         private readonly SpielMercurePublisher $mercurePublisher,
     ) {}
 
@@ -41,18 +39,11 @@ final class SpielStartService
 
         $haende = $this->kartenGeber->austeilen();
 
-        // haende[0] → Sitzplatz 1, haende[1] → Sitzplatz 2, etc.
-        $teamInfo = $this->teamBestimmer->bestimme([
-            1 => $haende[0],
-            2 => $haende[1],
-            3 => $haende[2],
-            4 => $haende[3],
-        ]);
-
+        // Spiel startet in VORBEHALT-Phase; Teams werden durch SpielTypResolver nach Deklaration gesetzt
         $spiel = new Spiel();
         $spiel->setTisch($tisch);
-        $spiel->setVariante($teamInfo['variante']);
-        $spiel->setAktuellerSpielerSitzplatz(1);
+        $spiel->setStatus(SpielStatus::VORBEHALT);
+        $spiel->setAktuellerSpielerSitzplatz(1); // Sitzplatz 1 = Vorhand, deklariert zuerst
         $spiel->setAktuellerStichNr(1);
         $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
 
@@ -70,15 +61,15 @@ final class SpielStartService
             $teilnehmer->setUser($tischSpieler->getUser());
             $teilnehmer->setSitzplatz($platz);
             $teilnehmer->setStartkartenIds(array_map(fn($k) => $k->id(), $hand));
-            $teilnehmer->setTeam($teamInfo['teams'][$platz]);
             $teilnehmer->setIstBot($tischSpieler->isIstBot());
+            // team bleibt null bis SpielTypResolver läuft
 
             $this->em->persist($teilnehmer);
         }
 
         $this->em->flush();
 
-        $this->mercurePublisher->spielGestartet($spiel);
+        $this->mercurePublisher->kartenAusgeteilt($spiel);
 
         return $spiel;
     }
