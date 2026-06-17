@@ -209,7 +209,13 @@
                     <p class="text-tisch-300 text-sm">Warte auf ersten Zug…</p>
                 {% endif %}
 
-                <p class="text-tisch-200 text-xs">Stich {{ spiel.aktuellerStichNr }}/12</p>
+                {% set maxStiche = tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
+                <p class="text-tisch-200 text-xs">Stich {{ spiel.aktuellerStichNr }}/{{ maxStiche }}</p>
+                {% if tisch.regelEinstellung('schweinchen') %}
+                    <p class="text-yellow-400 text-xs font-medium">
+                        {{ tisch.regelEinstellung('superschweinchen') ? 'Super-Schweinchen aktiv' : 'Schweinchen aktiv' }}
+                    </p>
+                {% endif %}
             </div>
 
             <div class="flex-none w-28">

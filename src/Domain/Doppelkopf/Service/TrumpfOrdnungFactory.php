@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
+use App\Domain\Doppelkopf\Regel\Normalspiel\SchweinchentTrumpfOrdnung;
 use App\Domain\Doppelkopf\Regel\Solo\BubenSoloTrumpfOrdnung;
 use App\Domain\Doppelkopf\Regel\Solo\DamenSoloTrumpfOrdnung;
 use App\Domain\Doppelkopf\Regel\Solo\FarbSoloTrumpfOrdnung;
@@ -13,15 +14,6 @@ use App\Entity\Spiel;
 use App\Enum\Kartenfarbe;
 use App\Enum\SpielVariante;
 
-/**
- * Erzeugt die passende TrumpfOrdnung für ein laufendes Spiel.
- *
- * Schweinchen-Support (Phase 2, Regelwerk-Feld): Da Schweinchen die TrumpfOrdnung
- * von den Startkarten abhängig macht (stateful), wird hier die Spiel-Instanz
- * übergeben, damit die Factory Zugriff auf Teilnehmer-Karten hat.
- *
- * Aktuell: Schweinchen-Logik wird bei schweinchen=false übersprungen.
- */
 final class TrumpfOrdnungFactory
 {
     public function fuerSpiel(Spiel $spiel): TrumpfOrdnung
@@ -31,7 +23,38 @@ final class TrumpfOrdnungFactory
             return new NormalspielTrumpfOrdnung(); // Fallback während Vorbehaltsrunde
         }
 
-        return $this->fuer($variante);
+        $basis = $this->fuer($variante);
+
+        // Schweinchen gilt nur bei Normalspiel und Hochzeit (nicht in Soli)
+        if ($variante !== SpielVariante::NORMALSPIEL && $variante !== SpielVariante::HOCHZEIT) {
+            return $basis;
+        }
+
+        $regel = $spiel->getTisch()->getRegelEinstellungen();
+        if (empty($regel['schweinchen'])) {
+            return $basis;
+        }
+
+        $karoAssRang = $this->ermittleKaroAssRang($spiel, $regel);
+
+        return new SchweinchentTrumpfOrdnung($basis, $karoAssRang);
+    }
+
+    /** Superschweinchen (Rang 15) wenn ein Spieler beide Karo-Asse in der Starthand hält. */
+    private function ermittleKaroAssRang(Spiel $spiel, array $regel): int
+    {
+        if (empty($regel['superschweinchen'])) {
+            return 14;
+        }
+
+        foreach ($spiel->getTeilnehmer() as $teilnehmer) {
+            $ids = $teilnehmer->getStartkartenIds();
+            if (in_array('KARO_ASS_1', $ids, true) && in_array('KARO_ASS_2', $ids, true)) {
+                return 15;
+            }
+        }
+
+        return 14; // Asse auf zwei Spieler verteilt → normales Schweinchen
     }
 
     public function fuer(SpielVariante $variante): TrumpfOrdnung

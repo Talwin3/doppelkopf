@@ -67,14 +67,12 @@
 
                     {# Sonderregeln als Checkboxen #}
                     <div class="space-y-1.5 mb-3">
-                        {% set boolFelder = [
+                        {% set einfacheFelder = [
                             {key: 'solist_kommt_raus', label: 'Solist kommt raus'},
-                            {key: 'schweinchen', label: 'Schweinchen'},
-                            {key: 'superschweinchen', label: 'Superschweinchen'},
                             {key: 'ohne_neuner', label: 'Ohne Neuner'},
                             {key: 'zweite_dulle_sticht', label: 'Zweite Dulle sticht'},
                         ] %}
-                        {% for feld in boolFelder %}
+                        {% for feld in einfacheFelder %}
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox"
                                    name="{{ feld.key }}"
@@ -84,6 +82,34 @@
                             <span class="text-white text-xs">{{ feld.label }}</span>
                         </label>
                         {% endfor %}
+
+                        {# Schweinchen + Superschweinchen mit Abhängigkeit #}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   id="rw_schweinchen_{{ tisch.id }}"
+                                   name="schweinchen"
+                                   value="1"
+                                   {{ rw.schweinchen ?? false ? 'checked' : '' }}
+                                   onchange="
+                                       var sup = document.getElementById('rw_superschweinchen_{{ tisch.id }}');
+                                       sup.disabled = !this.checked;
+                                       if (!this.checked) sup.checked = false;
+                                   "
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500">
+                            <span class="text-white text-xs">Schweinchen (Karo-Asse höchste Trumpf)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer pl-4">
+                            <input type="checkbox"
+                                   id="rw_superschweinchen_{{ tisch.id }}"
+                                   name="superschweinchen"
+                                   value="1"
+                                   {{ rw.superschweinchen ?? false ? 'checked' : '' }}
+                                   {{ not (rw.schweinchen ?? false) ? 'disabled' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500 disabled:opacity-40">
+                            <span class="text-white text-xs {{ not (rw.schweinchen ?? false) ? 'opacity-40' : '' }}">
+                                Superschweinchen (beide Asse beim selben Spieler)
+                            </span>
+                        </label>
                     </div>
 
                     {# Erlaubte Soli #}
