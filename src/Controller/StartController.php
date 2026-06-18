@@ -38,9 +38,4 @@ class StartController extends AbstractController
         return $this->render('start/datenschutz.html.twig');
     }
 
-    #[Route('/bestenlisten', name: 'app_bestenlisten')]
-    public function bestenlisten(): Response
-    {
-        return $this->render('start/bestenlisten.html.twig');
-    }
 }

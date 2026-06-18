@@ -64,6 +64,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 20, options: ['default' => 'FRANZOESISCH'])]
     private string $kartenbildPraeferenz = 'FRANZOESISCH';
 
+    /** Letzter Zeitpunkt der Benutzernamen-Änderung (für 7-Tage-Cooldown). */
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $nutzernameGeaendertAm = null;
+
+    /** Ob das Profil öffentlich sichtbar ist. */
+    #[ORM\Column(options: ['default' => true])]
+    private bool $profilOeffentlich = true;
+
     #[ORM\Column]
     private \DateTimeImmutable $erstelltAm;
 
@@ -181,6 +189,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
         return $this;
     }
+
+    public function getNutzernameGeaendertAm(): ?\DateTimeImmutable { return $this->nutzernameGeaendertAm; }
+    public function setNutzernameGeaendertAm(?\DateTimeImmutable $am): static { $this->nutzernameGeaendertAm = $am; return $this; }
+
+    public function isProfilOeffentlich(): bool { return $this->profilOeffentlich; }
+    public function setProfilOeffentlich(bool $oeffentlich): static { $this->profilOeffentlich = $oeffentlich; return $this; }
 
     public function getErstelltAm(): \DateTimeImmutable
     {

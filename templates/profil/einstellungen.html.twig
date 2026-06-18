@@ -1,7 +1,153 @@
 {% extends 'base.html.twig' %}
+
 {% block title %}Einstellungen – Doppelkopf Online{% endblock %}
+
 {% block body %}
-<h1 class="text-2xl font-bold text-gray-900 mb-6">Einstellungen</h1>
-{# TODO Phase 3: Kartenbild, Passwort ändern, Konto löschen #}
-<p class="text-gray-500">Einstellungen – werden in Phase 3 implementiert.</p>
+<div class="max-w-2xl mx-auto space-y-6">
+
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Einstellungen</h1>
+
+    {# ── Benutzername ──────────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Benutzername</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Aktuell: <strong class="text-gray-700 dark:text-gray-300">{{ user.username }}</strong>
+            {% if cooldownBis %}
+                &middot; <span class="text-orange-600 dark:text-orange-400 text-xs">
+                    Nächste Änderung möglich ab {{ cooldownBis|date('d.m.Y') }}
+                </span>
+            {% else %}
+                &middot; <span class="text-gray-400 dark:text-gray-500 text-xs">max. 1× alle 7 Tage</span>
+            {% endif %}
+        </p>
+
+        {{ form_start(benutzernameForm, {action: path('app_profil_benutzername'), attr: {class: 'flex gap-3'}}) }}
+            <div class="flex-1">
+                {{ form_widget(benutzernameForm.username, {attr: {
+                    class: 'form-input',
+                    placeholder: 'Neuer Benutzername',
+                    disabled: cooldownBis is not null
+                }}) }}
+                {{ form_errors(benutzernameForm.username) }}
+            </div>
+            <button type="submit" class="btn-primary shrink-0" {{ cooldownBis ? 'disabled' : '' }}>
+                Ändern
+            </button>
+        {{ form_end(benutzernameForm) }}
+    </section>
+
+    {# ── Passwort ──────────────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Passwort ändern</h2>
+
+        {{ form_start(passwortForm, {action: path('app_profil_passwort'), attr: {class: 'space-y-4'}}) }}
+            <div>
+                {{ form_label(passwortForm.aktuellesPasswort, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(passwortForm.aktuellesPasswort, {attr: {class: 'form-input', autocomplete: 'current-password'}}) }}
+                {{ form_errors(passwortForm.aktuellesPasswort) }}
+            </div>
+            <div>
+                {{ form_label(passwortForm.neuesPasswort.first, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(passwortForm.neuesPasswort.first, {attr: {class: 'form-input', autocomplete: 'new-password'}}) }}
+                {{ form_errors(passwortForm.neuesPasswort.first) }}
+            </div>
+            <div>
+                {{ form_label(passwortForm.neuesPasswort.second, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(passwortForm.neuesPasswort.second, {attr: {class: 'form-input', autocomplete: 'new-password'}}) }}
+                {{ form_errors(passwortForm.neuesPasswort.second) }}
+            </div>
+            <button type="submit" class="btn-primary">Passwort ändern</button>
+        {{ form_end(passwortForm) }}
+    </section>
+
+    {# ── E-Mail-Adresse ────────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">E-Mail-Adresse</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Aktuell: <strong class="text-gray-700 dark:text-gray-300">{{ user.email }}</strong>
+            &middot; <span class="text-gray-400 dark:text-gray-500 text-xs">Niemals öffentlich sichtbar</span>
+        </p>
+
+        {{ form_start(emailForm, {action: path('app_profil_email'), attr: {class: 'space-y-4'}}) }}
+            <div>
+                {{ form_label(emailForm.email, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(emailForm.email, {attr: {class: 'form-input', autocomplete: 'email'}}) }}
+                {{ form_errors(emailForm.email) }}
+            </div>
+            <div>
+                {{ form_label(emailForm.passwort, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(emailForm.passwort, {attr: {class: 'form-input', autocomplete: 'current-password'}}) }}
+                {{ form_errors(emailForm.passwort) }}
+            </div>
+            <button type="submit" class="btn-primary">E-Mail ändern</button>
+        {{ form_end(emailForm) }}
+    </section>
+
+    {# ── Datenschutz ───────────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Datenschutz</h2>
+
+        <form method="post" action="{{ path('app_profil_datenschutz') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('datenschutz') }}">
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="profil_oeffentlich" value="1"
+                       {{ user.profilOeffentlich ? 'checked' : '' }}
+                       class="mt-0.5 rounded border-gray-300 dark:border-gray-600 text-tisch-600 dark:bg-gray-700">
+                <div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">Profil öffentlich sichtbar</span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Andere Spieler können dein Profil und deine Statistiken sehen.
+                        Bei Deaktivierung ist dein Profil nur für dich selbst sichtbar.
+                    </p>
+                </div>
+            </label>
+            <button type="submit" class="btn-primary mt-4">Speichern</button>
+        </form>
+    </section>
+
+    {# ── Meine Daten (DSGVO Art. 20) ──────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Meine Daten exportieren</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Lade eine Kopie deiner gespeicherten Daten herunter (DSGVO Art. 20).
+        </p>
+        <a href="{{ path('app_profil_daten_export') }}" class="btn-secondary text-sm">
+            Daten als JSON herunterladen
+        </a>
+    </section>
+
+    {# ── Konto löschen (DSGVO Art. 17) ────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-900 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-red-700 dark:text-red-400 mb-1">Konto löschen</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Deine personenbezogenen Daten werden unwiderruflich gelöscht (DSGVO Art. 17).
+            Deine Spiel-Historie bleibt anonymisiert erhalten.
+        </p>
+
+        <details class="group">
+            <summary class="cursor-pointer text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium select-none">
+                Konto löschen ▼
+            </summary>
+            <form method="post" action="{{ path('app_profil_konto_loeschen') }}" class="mt-4 space-y-4"
+                  onsubmit="return confirm('Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden.')">
+                <input type="hidden" name="_token" value="{{ csrf_token('konto_loeschen') }}">
+                <div>
+                    <label class="form-label">
+                        Zur Bestätigung deinen Benutzernamen eingeben:
+                        <strong class="text-gray-900 dark:text-gray-100">{{ user.username }}</strong>
+                    </label>
+                    <input type="text" name="bestaetigung"
+                           class="form-input mt-1"
+                           placeholder="{{ user.username }}"
+                           autocomplete="off" required>
+                </div>
+                <button type="submit"
+                        class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors dark:focus:ring-offset-gray-800">
+                    Konto unwiderruflich löschen
+                </button>
+            </form>
+        </details>
+    </section>
+
+</div>
 {% endblock %}

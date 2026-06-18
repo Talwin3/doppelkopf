@@ -1,0 +1,116 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Bestenliste – Doppelkopf Online{% endblock %}
+
+{% block body %}
+<div class="max-w-3xl mx-auto space-y-8">
+
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Bestenliste</h1>
+
+    {# ── Monatsrangliste ───────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+                Monat — {{ monatLabel }}
+            </h2>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Punkte-Summe im laufenden Kalendermonat</p>
+        </div>
+
+        {% if monat is empty %}
+            <p class="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                Noch keine abgeschlossenen Spiele in diesem Monat.
+            </p>
+        {% else %}
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                        <th class="py-2 pl-6 text-left font-medium w-10">#</th>
+                        <th class="py-2 text-left font-medium">Spieler</th>
+                        <th class="py-2 pr-4 text-right font-medium">Punkte</th>
+                        <th class="py-2 pr-4 text-right font-medium hidden sm:table-cell">Spiele</th>
+                        <th class="py-2 pr-6 text-right font-medium hidden sm:table-cell">Siege</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {% for zeile in monat %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                            <td class="py-3 pl-6 text-gray-400 dark:text-gray-500 font-mono text-xs">
+                                {% if zeile.rang == 1 %}🥇
+                                {% elseif zeile.rang == 2 %}🥈
+                                {% elseif zeile.rang == 3 %}🥉
+                                {% else %}{{ zeile.rang }}
+                                {% endif %}
+                            </td>
+                            <td class="py-3">
+                                <a href="{{ path('app_profil', {username: zeile.username}) }}"
+                                   class="font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                    {{ zeile.username }}
+                                </a>
+                            </td>
+                            <td class="py-3 pr-4 text-right font-semibold
+                                {{ zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400' }}">
+                                {{ zeile.punkte >= 0 ? '+' : '' }}{{ zeile.punkte }}
+                            </td>
+                            <td class="py-3 pr-4 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.spiele }}</td>
+                            <td class="py-3 pr-6 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.siege }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </section>
+
+    {# ── Gesamtrangliste ───────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Gesamtrangliste</h2>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Punkte-Summe aller Zeiten</p>
+        </div>
+
+        {% if gesamt is empty %}
+            <p class="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                Noch keine abgeschlossenen Spiele vorhanden.
+            </p>
+        {% else %}
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                        <th class="py-2 pl-6 text-left font-medium w-10">#</th>
+                        <th class="py-2 text-left font-medium">Spieler</th>
+                        <th class="py-2 pr-4 text-right font-medium">Punkte</th>
+                        <th class="py-2 pr-4 text-right font-medium hidden sm:table-cell">Spiele</th>
+                        <th class="py-2 pr-6 text-right font-medium hidden sm:table-cell">Siegquote</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {% for zeile in gesamt %}
+                        {% set siegquote = zeile.spiele > 0 ? (zeile.siege / zeile.spiele * 100)|round(1) : 0 %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                            <td class="py-3 pl-6 text-gray-400 dark:text-gray-500 font-mono text-xs">
+                                {% if zeile.rang == 1 %}🥇
+                                {% elseif zeile.rang == 2 %}🥈
+                                {% elseif zeile.rang == 3 %}🥉
+                                {% else %}{{ zeile.rang }}
+                                {% endif %}
+                            </td>
+                            <td class="py-3">
+                                <a href="{{ path('app_profil', {username: zeile.username}) }}"
+                                   class="font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                    {{ zeile.username }}
+                                </a>
+                            </td>
+                            <td class="py-3 pr-4 text-right font-semibold
+                                {{ zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400' }}">
+                                {{ zeile.punkte >= 0 ? '+' : '' }}{{ zeile.punkte }}
+                            </td>
+                            <td class="py-3 pr-4 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.spiele }}</td>
+                            <td class="py-3 pr-6 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ siegquote }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}

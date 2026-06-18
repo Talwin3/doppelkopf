@@ -1,7 +1,125 @@
 {% extends 'base.html.twig' %}
-{% block title %}{{ username }} – Doppelkopf Online{% endblock %}
+
+{% block title %}{{ profilUser.username }} – Doppelkopf Online{% endblock %}
+
 {% block body %}
-<h1 class="text-2xl font-bold text-gray-900 mb-6">{{ username }}</h1>
-{# TODO Phase 3: Spielstatistiken anzeigen #}
-<p class="text-gray-500">Spielerstatistiken – werden in Phase 3 implementiert.</p>
+<div class="max-w-2xl mx-auto space-y-6">
+
+    {# ── Profil-Header ─────────────────────────────────────────────────── #}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <div class="w-16 h-16 rounded-full bg-tisch-700 flex items-center justify-center text-white text-2xl font-bold mb-4">
+                    {{ profilUser.username|first|upper }}
+                </div>
+
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {{ profilUser.username }}
+                </h1>
+
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Mitglied seit {{ profilUser.erstelltAm|date('d.m.Y') }}
+                    {% if profilUser.letzterLoginAm %}
+                        &middot; Zuletzt aktiv {{ profilUser.letzterLoginAm|date('d.m.Y') }}
+                    {% endif %}
+                </p>
+
+                {% if not profilUser.profilOeffentlich %}
+                    <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 mt-2">
+                        Privates Profil
+                    </span>
+                {% endif %}
+            </div>
+
+            {% if istEigenProfil %}
+                <a href="{{ path('app_profil_einstellungen') }}" class="btn-secondary text-sm shrink-0">
+                    Einstellungen
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Kernstatistiken ───────────────────────────────────────────────── #}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Statistiken</h2>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ statistik.spiele }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Spiele</div>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-tisch-700 dark:text-tisch-400">{{ statistik.siegquote }}%</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Siegquote
+                    {% if statistik.spiele > 0 %}
+                        <span class="block text-gray-400 dark:text-gray-500">{{ statistik.siege }}/{{ statistik.spiele }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {{ statistik.punkte > 0 ? '+' : '' }}{{ statistik.punkte }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Punkte gesamt</div>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {{ statistik.punkteSchnitt > 0 ? '+' : '' }}{{ statistik.punkteSchnitt }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Ø Punkte/Spiel</div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Punkte der letzten 6 Monate ───────────────────────────────────── #}
+    {% if statistik.spiele > 0 %}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Letzte 6 Monate</h2>
+
+        {% set maxPunkte = 1 %}
+        {% for m in statistik.punkteProMonat %}
+            {% if m.punkte|abs > maxPunkte %}{% set maxPunkte = m.punkte|abs %}{% endif %}
+        {% endfor %}
+
+        <div class="flex items-end gap-2 h-24">
+            {% for m in statistik.punkteProMonat %}
+                {% set hoehe = maxPunkte > 0 ? (m.punkte|abs / maxPunkte * 100)|round : 0 %}
+                <div class="flex-1 flex flex-col items-center gap-1">
+                    <div class="w-full relative flex items-end justify-center" style="height: 72px">
+                        {% set barH = hoehe > 4 ? hoehe : 4 %}
+                        {% if m.punkte >= 0 %}
+                            <div class="w-full rounded-t-sm bg-tisch-500 dark:bg-tisch-600 transition-all"
+                                 style="height: {{ barH }}%"
+                                 title="{{ m.label }}: +{{ m.punkte }} Pkt. ({{ m.spiele }} Spiele)"></div>
+                        {% else %}
+                            <div class="w-full rounded-t-sm bg-red-400 dark:bg-red-600 transition-all"
+                                 style="height: {{ barH }}%"
+                                 title="{{ m.label }}: {{ m.punkte }} Pkt. ({{ m.spiele }} Spiele)"></div>
+                        {% endif %}
+                    </div>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 truncate w-full text-center leading-tight">
+                        {{ m.label|split(' ')[0] }}
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-2 flex justify-between text-xs text-gray-400 dark:text-gray-500">
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-tisch-500"></span> Gewinn</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-red-400"></span> Verlust</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Leere Statistik-Hinweis ───────────────────────────────────────── #}
+    {% if statistik.spiele == 0 %}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
+        <p class="text-gray-400 dark:text-gray-500 text-sm">
+            Noch keine abgeschlossenen Spiele.
+        </p>
+    </div>
+    {% endif %}
+
+</div>
 {% endblock %}
