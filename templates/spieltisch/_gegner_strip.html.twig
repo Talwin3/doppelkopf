@@ -30,9 +30,11 @@
     </div>
 
     <div class="flex gap-0.5 flex-wrap justify-center max-w-xs">
-        {% if anzahlKarten is defined %}
+        {% if anzahlKarten is defined and anzahlKarten > 0 %}
             {% for i in 1..anzahlKarten %}
-                <div class="spielkarte spielkarte--klein spielkarte--ruecken"></div>
+                <div class="spielkarte spielkarte--klein spielkarte--ruecken">
+                    {{ karten_ruecken_svg() }}
+                </div>
             {% endfor %}
         {% endif %}
     </div>

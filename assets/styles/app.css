@@ -76,31 +76,31 @@
                dark:bg-gray-800 dark:border-gray-700;
     }
 
-    /* ── Spielkarten ──────────────────────────────────────────────── */
+    /* ── Spielkarten (SVG) ────────────────────────────────────────── */
     .spielkarte {
-        @apply relative inline-flex flex-col items-center justify-center
-               bg-white rounded-lg border border-gray-200 shadow-sm
-               select-none font-bold leading-none
-               dark:bg-gray-100 dark:border-gray-300;
+        @apply relative inline-block select-none;
     }
 
-    .spielkarte--klein   { @apply w-7 h-10 text-xs; }
-    .spielkarte--mittel  { @apply w-12 h-16 text-sm; }
-    .spielkarte--gross   { @apply w-14 h-20 text-base; }
+    .spielkarte .karte-svg {
+        @apply w-full h-full;
+    }
 
-    .spielkarte--rot     { @apply text-red-600; }
-    .spielkarte--schwarz { @apply text-gray-900; }
+    .spielkarte--klein   { @apply w-7 h-10; }
+    .spielkarte--mittel  { @apply w-14 h-20; }
+    .spielkarte--gross   { @apply w-16 h-[5.6rem]; }
 
-    .spielkarte--ruecken {
-        @apply bg-tisch-700 border-tisch-500;
+    .spielkarte--ruecken .karte-svg {
+        @apply w-full h-full;
     }
 
     .spielkarte--spielbar {
         @apply cursor-pointer hover:scale-110 hover:-translate-y-2 hover:shadow-lg
-               hover:border-yellow-400 transition-all duration-150
-               focus:outline-none focus:ring-2 focus:ring-yellow-400;
+               transition-all duration-150
+               focus:outline-none;
     }
 
-    .spielkarte__symbol { @apply text-[0.6em] leading-none; }
-    .spielkarte__wert   { @apply leading-none mt-0.5; }
+    .spielkarte--spielbar:hover .karte-svg rect:first-of-type {
+        stroke: #FACC15;
+        stroke-width: 3;
+    }
 }

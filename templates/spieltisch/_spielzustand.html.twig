@@ -129,9 +129,8 @@
         {% if hand is not empty %}
             <div class="flex flex-wrap gap-2 justify-center opacity-75">
                 {% for karte in hand %}
-                    <div class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
-                        <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
-                        <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                    <div class="spielkarte spielkarte--gross">
+                        {{ karten_svg(karte) }}
                     </div>
                 {% endfor %}
             </div>
@@ -209,9 +208,8 @@
                     <div class="flex gap-3">
                         {% for gk in stichKarten %}
                             {% set karte = gk.alsKarte() %}
-                            <div class="spielkarte spielkarte--mittel {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
-                                <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
-                                <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                            <div class="spielkarte spielkarte--mittel">
+                                {{ karten_svg(karte) }}
                             </div>
                         {% endfor %}
                     </div>
@@ -298,16 +296,14 @@
                             <input type="hidden" name="_token" value="{{ csrf_token('karte_spielen_' ~ tisch.id) }}">
                             <input type="hidden" name="karte_id" value="{{ karte.id() }}">
                             <button type="submit"
-                                    class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }} spielkarte--spielbar"
+                                    class="spielkarte spielkarte--gross spielkarte--spielbar"
                                     title="{{ karte.farbe.value }} {{ karte.wert.value }}">
-                                <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
-                                <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                                {{ karten_svg(karte) }}
                             </button>
                         </form>
                     {% else %}
-                        <div class="spielkarte spielkarte--gross {{ karte.farbe.istRot() ? 'spielkarte--rot' : 'spielkarte--schwarz' }}">
-                            <span class="spielkarte__symbol">{{ karte.farbe.symbol() }}</span>
-                            <span class="spielkarte__wert">{{ karte.wert.anzeige() }}</span>
+                        <div class="spielkarte spielkarte--gross">
+                            {{ karten_svg(karte) }}
                         </div>
                     {% endif %}
                 {% endfor %}
