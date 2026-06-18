@@ -26,7 +26,7 @@ class SpielRepository extends ServiceEntityRepository
             ->where('s.tisch = :tisch')
             ->andWhere('s.status IN (:status)')
             ->setParameter('tisch', $tisch)
-            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND])
+            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND, SpielStatus::ARMUT_ANFRAGE, SpielStatus::ARMUT_TAUSCH])
             ->getQuery()
             ->getOneOrNullResult();
     }
@@ -45,7 +45,7 @@ class SpielRepository extends ServiceEntityRepository
             ->where('s.status IN (:status)')
             ->andWhere('s.aktuellerZugBegannAm IS NOT NULL')
             ->andWhere('s.aktuellerZugBegannAm < :schwelle')
-            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND])
+            ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND, SpielStatus::ARMUT_ANFRAGE, SpielStatus::ARMUT_TAUSCH])
             ->setParameter('schwelle', $schwelle)
             ->getQuery()
             ->getResult();

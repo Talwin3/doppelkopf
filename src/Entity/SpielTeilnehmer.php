@@ -60,6 +60,10 @@ class SpielTeilnehmer
     #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
     private ?SpielVariante $vorbehaltSoloVariante = null;
 
+    /** Armut-Antwort: null = noch nicht gefragt, false = abgelehnt, true = angenommen. */
+    #[ORM\Column(nullable: true)]
+    private ?bool $armutAntwort = null;
+
     #[ORM\Column(nullable: true)]
     private ?bool $gewonnen = null;
 
@@ -121,6 +125,9 @@ class SpielTeilnehmer
         }
         return $hand;
     }
+
+    public function getArmutAntwort(): ?bool { return $this->armutAntwort; }
+    public function setArmutAntwort(?bool $antwort): static { $this->armutAntwort = $antwort; return $this; }
 
     /** Zählt Kreuz-Damen in der Starthand (für Hochzeit-Validierung). */
     public function anzahlKreuzDamen(): int

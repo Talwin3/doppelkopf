@@ -13,6 +13,7 @@ use App\Infrastructure\Logger\BotApiLogger;
 use App\Repository\SpielRepository;
 use App\Repository\TischRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -44,6 +45,7 @@ class BotZugBerechnenCommand extends Command
         private readonly SpielStartService $spielStartService,
         private readonly SystemEinstellungService $einstellungService,
         private readonly EntityManagerInterface $em,
+        private readonly ManagerRegistry $doctrine,
         private readonly BotApiLogger $logger,
     ) {
         parent::__construct();
@@ -63,6 +65,7 @@ class BotZugBerechnenCommand extends Command
         ));
 
         do {
+            $this->em->clear();
             $this->pruefeZugTimeouts($output);
             $this->pruefeAutoStart($output);
             $this->pruefeMenschenloseTische($output);
@@ -113,6 +116,9 @@ class BotZugBerechnenCommand extends Command
                 $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz);
             } catch (\Throwable $e) {
                 $output->writeln(sprintf('  <error>Bot-Zug Fehler: %s</error>', $e->getMessage()));
+                if (!$this->em->isOpen()) {
+                    $this->doctrine->resetManager();
+                }
             }
         }
     }

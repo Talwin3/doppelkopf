@@ -49,6 +49,21 @@ final class SpielMercurePublisher
         $this->publizieren($spiel, 'VORBEHALT_DEKLARIERT');
     }
 
+    public function armutAnfrage(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'ARMUT_ANFRAGE');
+    }
+
+    public function armutAngenommen(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'ARMUT_ANGENOMMEN');
+    }
+
+    public function armutAbgelehnt(Spiel $spiel): void
+    {
+        $this->publizieren($spiel, 'ARMUT_ABGELEHNT');
+    }
+
     public function spielBeendet(Spiel $spiel): void
     {
         $this->publizieren($spiel, 'SPIEL_BEENDET');

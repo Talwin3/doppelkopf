@@ -101,14 +101,28 @@
     </div>
 </nav>
 
-{# Flash-Nachrichten #}
+{# Flash-Nachrichten als Toasts #}
+{% set flashNachrichten = [] %}
 {% for typ, nachrichten in app.flashes %}
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-4">
-        {% for nachricht in nachrichten %}
-            <div class="flash-{{ typ }} mb-2">{{ nachricht }}</div>
-        {% endfor %}
-    </div>
+    {% for nachricht in nachrichten %}
+        {% set flashNachrichten = flashNachrichten|merge([{typ: typ, text: nachricht}]) %}
+    {% endfor %}
 {% endfor %}
+{% if flashNachrichten is not empty %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var flashes = {{ flashNachrichten|json_encode|raw }};
+    var toast = window.__toast;
+    if (!toast) return;
+    flashes.forEach(function(f) {
+        toast(f.text, f.typ === 'success' ? 'success' : 'error');
+    });
+});
+</script>
+{% endif %}
+
+{# Toast-Container für globale Benachrichtigungen #}
+<div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
 {# Seiteninhalt #}
 <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">

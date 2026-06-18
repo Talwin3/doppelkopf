@@ -184,6 +184,55 @@ final class TischBeitrittsService
         return $neuerWert;
     }
 
+    /**
+     * Füllt freie Sitzplätze mit Bots auf. Nur wenn keine Warteschlange und kein laufendes Spiel.
+     *
+     * @return int Anzahl hinzugefügter Bots
+     */
+    public function botsAuffuellen(Tisch $tisch, User $user): int
+    {
+        $tischSpieler = $this->tischSpielerRepo->findByTischAndUser($tisch, $user);
+        if ($tischSpieler === null || !$tischSpieler->istAktiv()) {
+            throw new \DomainException('Nur aktive Spieler können Bots hinzufügen.');
+        }
+
+        if ($tisch->getWarteschlange()->count() > 0) {
+            throw new \DomainException('Bots können nicht hinzugefügt werden solange Spieler in der Warteschlange sind.');
+        }
+
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+        if ($spiel !== null) {
+            throw new \DomainException('Bots können nur zwischen Spielen hinzugefügt werden.');
+        }
+
+        $belegtePlätze = array_map(
+            fn($ts) => $ts->getSitzplatz(),
+            $tisch->getAktiveSpieler()->toArray()
+        );
+
+        $anzahl = 0;
+        foreach (range(1, 4) as $platz) {
+            if (in_array($platz, $belegtePlätze, true)) {
+                continue;
+            }
+
+            $bot = new TischSpieler();
+            $bot->setTisch($tisch);
+            $bot->setUser(null);
+            $bot->setSitzplatz($platz);
+            $bot->setIstBot(true);
+            $this->em->persist($bot);
+            $anzahl++;
+        }
+
+        if ($anzahl > 0) {
+            $this->em->flush();
+            $this->mercurePublisher->lobbyAktualisiert();
+        }
+
+        return $anzahl;
+    }
+
     private function warteschlangeNachruecken(Tisch $tisch, int $freierPlatz): void
     {
         $warteschlange = $tisch->getWarteschlange()->toArray();

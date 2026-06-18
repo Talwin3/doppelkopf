@@ -34,7 +34,7 @@
         </div>
 
         {# Nach Spiel verlassen #}
-        {% if spiel and spiel.status.value in ['VORBEHALT', 'LAUFEND'] %}
+        {% if spiel and spiel.status.value in ['VORBEHALT', 'LAUFEND', 'ARMUT_ANFRAGE', 'ARMUT_TAUSCH'] %}
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-white text-sm font-medium">Nach Spiel verlassen</p>
@@ -55,6 +55,27 @@
         </div>
         {% endif %}
 
+        {# Bots auffüllen — nur zwischen Spielen + leere Warteschlange + freie Plätze #}
+        {% if (not spiel or spiel.status.value == 'BEENDET')
+            and tisch.warteschlange.count == 0
+            and tisch.aktiveSpieler.count < 4 %}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white text-sm font-medium">Mit Bots auffüllen</p>
+                <p class="text-tisch-400 text-xs">{{ 4 - tisch.aktiveSpieler.count }} freie Plätze mit Bots besetzen</p>
+            </div>
+            <form method="post"
+                  action="{{ path('app_bots_auffuellen', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#botsAuffuellen">
+                <input type="hidden" name="_token" value="{{ csrf_token('bots_' ~ tisch.id) }}">
+                <button type="submit"
+                        class="px-3 py-1 rounded-lg text-xs font-medium bg-tisch-600 text-tisch-200 hover:bg-tisch-500 transition-colors">
+                    Bots hinzufügen
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
         {# Regelwerk — nur zwischen Spielen änderbar #}
         {% if not spiel or spiel.status.value == 'BEENDET' %}
             {% set rw = tisch.regelEinstellungen %}
@@ -69,6 +90,7 @@
                     <div class="space-y-1.5 mb-3">
                         {% set einfacheFelder = [
                             {key: 'solist_kommt_raus', label: 'Solist kommt raus'},
+                            {key: 'armut', label: 'Armut (≤ 3 Trümpfe)'},
                             {key: 'ohne_neuner', label: 'Ohne Neuner'},
                             {key: 'zweite_dulle_sticht', label: 'Zweite Dulle sticht'},
                         ] %}

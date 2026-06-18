@@ -1,6 +1,6 @@
 {
-    # Worker-Mode nur in Produktion aktivieren.
-    # In Entwicklung läuft PHP ohne Worker (einfacher zu debuggen).
+    skip_install_trust
+
     frankenphp
 }
 
@@ -14,14 +14,21 @@
 
     encode zstd gzip
 
-    route {
-        mercure {
-            publisher_jwt {$MERCURE_PUBLISHER_JWT_KEY} HS256
-            subscriber_jwt {$MERCURE_SUBSCRIBER_JWT_KEY} HS256
-            anonymous
-            cors_origins {$MERCURE_CORS_ORIGINS:*}
-        }
+    mercure {
+        publisher_jwt {$MERCURE_PUBLISHER_JWT_KEY} HS256
+        subscriber_jwt {$MERCURE_SUBSCRIBER_JWT_KEY} HS256
+        anonymous
+        cors_origins {$MERCURE_CORS_ORIGINS:*}
+    }
 
-        php_server
+    php_server
+}
+
+# Interner HTTP-Endpunkt für Docker-Netzwerk (Worker → Mercure)
+http://:8080 {
+    mercure {
+        publisher_jwt {$MERCURE_PUBLISHER_JWT_KEY} HS256
+        subscriber_jwt {$MERCURE_SUBSCRIBER_JWT_KEY} HS256
+        anonymous
     }
 }

@@ -21,7 +21,7 @@ RUN install-php-extensions xdebug
 ENV APP_ENV=dev
 ENV APP_DEBUG=1
 
-COPY Caddyfile /etc/caddy/Caddyfile
+COPY Caddyfile /etc/frankenphp/Caddyfile
 
 # ── Produktion ────────────────────────────────────────────────────────────────
 FROM base AS prod
@@ -29,7 +29,7 @@ FROM base AS prod
 ENV APP_ENV=prod
 ENV APP_DEBUG=0
 
-COPY Caddyfile /etc/caddy/Caddyfile
+COPY Caddyfile /etc/frankenphp/Caddyfile
 
 COPY composer.json composer.lock symfony.lock ./
 RUN composer install --no-dev --no-scripts --no-interaction --optimize-autoloader

@@ -21,16 +21,16 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Priorität (DDV-Standard):
  * 1. Solo — bei mehreren: Vorhand (Sitzplatz 1) zuerst, dann im Uhrzeigersinn
- * 2. Hochzeit — nur wenn kein Solo angemeldet
- * 3. Normalspiel (Kreuz-Dame-Regel)
- *
- * (Armut = Phase 3, kommt zwischen Solo und Hochzeit)
+ * 2. Armut — bei mehreren: näher an Vorhand hat Vorrang
+ * 3. Hochzeit — nur wenn kein Solo/Armut angemeldet
+ * 4. Normalspiel (Kreuz-Dame-Regel)
  */
 final class SpielTypResolver
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly ArmutService $armutService,
     ) {}
 
     /**
@@ -54,7 +54,20 @@ final class SpielTypResolver
             return;
         }
 
-        // 2. Hochzeit-Deklarationen prüfen
+        // 2. Armut-Deklarationen prüfen
+        $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+        if (!empty($regelwerk['armut'])) {
+            $arme = array_filter($teilnehmer, fn(SpielTeilnehmer $t)
+                => $t->getVorbehaltTyp() === VorbehaltTyp::ARMUT);
+
+            if (!empty($arme)) {
+                $armutSpieler = array_values($arme)[0]; // Niedrigster Sitzplatz = Vorhand-Priorität
+                $this->armutService->anfrageStarten($spiel, $armutSpieler);
+                return;
+            }
+        }
+
+        // 3. Hochzeit-Deklarationen prüfen
         $hochzeiter = array_filter($teilnehmer, fn(SpielTeilnehmer $t)
             => $t->getVorbehaltTyp() === VorbehaltTyp::HOCHZEIT);
 

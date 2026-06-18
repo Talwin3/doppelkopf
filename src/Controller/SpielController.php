@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Application\Doppelkopf\AnsageService;
+use App\Application\Doppelkopf\ArmutService;
 use App\Application\Doppelkopf\KarteAusspielenService;
 use App\Application\Doppelkopf\SpielStartService;
 use App\Application\Doppelkopf\TischBeitrittsService;
@@ -43,6 +44,7 @@ class SpielController extends AbstractController
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly TischBeitrittsService $beitrittsService,
         private readonly VorbehaltService $vorbehaltService,
+        private readonly ArmutService $armutService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -70,7 +72,7 @@ class SpielController extends AbstractController
             ? $this->spielStartService->starten($tisch)
             : $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
 
         return $this->render('spieltisch/index.html.twig', [
             'tisch'              => $tisch,
@@ -80,6 +82,7 @@ class SpielController extends AbstractController
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
             'vorbehaltOptionen'  => $vorbehaltOptionen,
+            'armutTauschKarten'  => $armutTauschKarten,
             'mercurePublicUrl'   => $this->mercurePublicUrl,
             'mercureTopic'       => $spiel ? $this->mercurePublisher->topic($spiel) : null,
         ]);
@@ -92,7 +95,7 @@ class SpielController extends AbstractController
         $user  = $this->getUser();
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
 
         return $this->render('spieltisch/_spielzustand.html.twig', [
             'tisch'              => $tisch,
@@ -102,6 +105,7 @@ class SpielController extends AbstractController
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
             'vorbehaltOptionen'  => $vorbehaltOptionen,
+            'armutTauschKarten'  => $armutTauschKarten,
         ]);
     }
 
@@ -196,6 +200,77 @@ class SpielController extends AbstractController
         }
     }
 
+    #[Route('/{id}/armut-antwort', name: 'app_armut_antwort', methods: ['POST'])]
+    public function armutAntwort(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('armut_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        if ($spiel === null) {
+            return new JsonResponse(['fehler' => 'Kein laufendes Spiel.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $annehmen = $request->request->get('annehmen') === '1';
+
+        try {
+            $this->armutService->annehmenOderAblehnen($spiel, $user, $annehmen);
+            return new JsonResponse(['ok' => true]);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    #[Route('/{id}/armut-karten-zurueck', name: 'app_armut_karten_zurueck', methods: ['POST'])]
+    public function armutKartenZurueck(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('armut_tausch_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user  = $this->getUser();
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        if ($spiel === null) {
+            return new JsonResponse(['fehler' => 'Kein laufendes Spiel.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $kartenIds = $request->request->all()['karten_ids'] ?? [];
+        if (!is_array($kartenIds)) {
+            return new JsonResponse(['fehler' => 'Ungültige Kartendaten.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->armutService->kartenZurueckgeben($spiel, $user, $kartenIds);
+            return new JsonResponse(['ok' => true]);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    #[Route('/{id}/bots-auffuellen', name: 'app_bots_auffuellen', methods: ['POST'])]
+    public function botsAuffuellen(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('bots_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+
+        try {
+            $anzahl = $this->beitrittsService->botsAuffuellen($tisch, $user);
+            return new JsonResponse(['ok' => true, 'anzahl' => $anzahl]);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
     #[Route('/{id}/regelwerk-speichern', name: 'app_regelwerk_speichern', methods: ['POST'])]
     public function regelwerkSpeichern(Tisch $tisch, Request $request): JsonResponse
     {
@@ -230,6 +305,7 @@ class SpielController extends AbstractController
         $regelwerk = $tisch->getRegelEinstellungen();
         $regelwerk['soli_erlaubt']       = $soliErlaubt;
         $regelwerk['solist_kommt_raus']  = (bool) $request->request->get('solist_kommt_raus');
+        $regelwerk['armut']             = (bool) $request->request->get('armut');
         $regelwerk['schweinchen']        = (bool) $request->request->get('schweinchen');
         $regelwerk['superschweinchen']   = (bool) $request->request->get('superschweinchen') && $regelwerk['schweinchen'];
         $regelwerk['ohne_neuner']        = (bool) $request->request->get('ohne_neuner');
@@ -281,6 +357,7 @@ class SpielController extends AbstractController
         $ansagen            = [];
         $verfuegbareAnsagen = [];
         $vorbehaltOptionen  = [];
+        $armutTauschKarten  = [];
 
         if ($spiel !== null) {
             $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
@@ -289,10 +366,19 @@ class SpielController extends AbstractController
                 $hand         = $teilnehmer->aktuelleHand($gespielteIds);
                 $verfuegbareAnsagen = $this->ansageService->verfuegbareAnsagen($spiel, $user);
                 $vorbehaltOptionen  = $this->vorbehaltService->verfuegbareOptionen($spiel, $user);
+
+                // Armut-Tauschkarten für den Annehmer sichtbar machen
+                if ($spiel->getStatus() === \App\Enum\SpielStatus::ARMUT_TAUSCH
+                    && $teilnehmer->getSitzplatz() === $spiel->getArmutAnnehmerSitzplatz()) {
+                    $armutTauschKarten = array_map(
+                        fn(string $id) => \App\Domain\Doppelkopf\ValueObject\Karte::vonId($id),
+                        $spiel->getArmutTauschKartenIds() ?? []
+                    );
+                }
             }
             $ansagen = $this->ansageRepo->findFuerSpiel($spiel);
         }
 
-        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen];
+        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten];
     }
 }

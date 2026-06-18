@@ -6,8 +6,8 @@ namespace App\Enum;
 
 enum VorbehaltTyp: string
 {
-    case SOLO    = 'SOLO';
+    case SOLO     = 'SOLO';
+    case ARMUT    = 'ARMUT';
     case HOCHZEIT = 'HOCHZEIT';
-    case GESUND  = 'GESUND';
-    // ARMUT wird in Phase 3 ergänzt
+    case GESUND   = 'GESUND';
 }

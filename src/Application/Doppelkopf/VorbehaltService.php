@@ -56,12 +56,11 @@ final class VorbehaltService
         $teilnehmer->setVorbehaltTyp($typ);
         $teilnehmer->setVorbehaltSoloVariante($soloVariante);
 
-        $this->logger->info('Vorbehalt deklariert.', [
-            'spiel_id'  => (string) $spiel->getId(),
-            'sitzplatz' => $teilnehmer->getSitzplatz(),
-            'typ'       => $typ->value,
-            'variante'  => $soloVariante?->value,
-        ]);
+        $this->logger->spielzugAusgefuehrt(
+            (string) $spiel->getId(),
+            $teilnehmer->getUser()?->getUsername() ?? 'Bot',
+            'VORBEHALT:' . $typ->value . ($soloVariante ? ':' . $soloVariante->value : ''),
+        );
 
         // Prüfe ob alle deklariert haben
         $alleTeilnehmer = $spiel->getTeilnehmer()->toArray();
@@ -89,13 +88,17 @@ final class VorbehaltService
             return;
         }
 
-        // Bot-Logik: Hochzeit wenn beide Kreuz-Damen, sonst Gesund
+        // Bot-Logik: Hochzeit > Armut > Gesund
+        $typ = VorbehaltTyp::GESUND;
+        $variante = null;
+
         if ($teilnehmer->anzahlKreuzDamen() === 2) {
             $typ = VorbehaltTyp::HOCHZEIT;
-            $variante = null;
         } else {
-            $typ = VorbehaltTyp::GESUND;
-            $variante = null;
+            $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+            if (!empty($regelwerk['armut']) && ArmutService::trumpfAnzahl($teilnehmer) <= 3) {
+                $typ = VorbehaltTyp::ARMUT;
+            }
         }
 
         $teilnehmer->setVorbehaltDeklariert(true);
@@ -136,9 +139,14 @@ final class VorbehaltService
             $optionen[] = VorbehaltTyp::HOCHZEIT;
         }
 
+        // Armut: ≤3 Trümpfe + Regel aktiv
+        $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+        if (!empty($regelwerk['armut']) && ArmutService::trumpfAnzahl($teilnehmer) <= 3) {
+            $optionen[] = VorbehaltTyp::ARMUT;
+        }
+
         // Regelwerk: welche Soli sind erlaubt?
-        $regelwerk    = $spiel->getTisch()->getRegelEinstellungen();
-        $soliErlaubt  = $regelwerk['soli_erlaubt'] ?? [];
+        $soliErlaubt = $regelwerk['soli_erlaubt'] ?? [];
         if (!empty($soliErlaubt)) {
             $optionen[] = VorbehaltTyp::SOLO;
         }
@@ -163,6 +171,17 @@ final class VorbehaltService
             $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
             if ($teilnehmer !== null && $teilnehmer->anzahlKreuzDamen() < 2) {
                 throw new \DomainException('Hochzeit kann nur angemeldet werden wenn beide Kreuz-Damen auf der Hand sind.');
+            }
+        }
+
+        if ($typ === VorbehaltTyp::ARMUT) {
+            $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+            if (empty($regelwerk['armut'])) {
+                throw new \DomainException('Armut ist an diesem Tisch nicht aktiviert.');
+            }
+            $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
+            if ($teilnehmer !== null && ArmutService::trumpfAnzahl($teilnehmer) > 3) {
+                throw new \DomainException('Armut kann nur mit maximal 3 Trümpfen angemeldet werden.');
             }
         }
     }

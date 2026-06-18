@@ -87,6 +87,18 @@
                         </form>
                     {% endif %}
 
+                    {# ARMUT #}
+                    {% if 'ARMUT' in vorbehaltOptionen|map(o => o.value) %}
+                        <form method="post" action="{{ path('app_vorbehalt', {id: tisch.id}) }}"
+                              data-action="submit->spieltisch#vorbehalt">
+                            <input type="hidden" name="_token" value="{{ csrf_token('vorbehalt_' ~ tisch.id) }}">
+                            <input type="hidden" name="vorbehalt_typ" value="ARMUT">
+                            <button type="submit" class="w-full py-2 rounded-lg bg-orange-700 hover:bg-orange-600 text-white text-sm font-medium">
+                                Armut (≤ 3 Trümpfe)
+                            </button>
+                        </form>
+                    {% endif %}
+
                     {# SOLO — mit Variantenauswahl #}
                     {% if 'SOLO' in vorbehaltOptionen|map(o => o.value) %}
                         <details class="rounded-lg bg-yellow-900 border border-yellow-700">
@@ -134,6 +146,161 @@
                     </div>
                 {% endfor %}
             </div>
+        {% endif %}
+    </div>
+
+{% elseif spiel.status.value == 'ARMUT_ANFRAGE' %}
+    {# ── Armut-Anfragephase ──────────────────────────────────────────── #}
+    {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}
+    {% set ichBinDran = spiel.aktuellerSpielerSitzplatz == meinSitzplatz %}
+    {% set armutTrumpfAnzahl = spiel.armutTauschKartenIds|length %}
+
+    <div class="flex flex-col items-center justify-center py-8 gap-6">
+        <div class="text-center">
+            <h2 class="text-xl font-bold text-white mb-1">Armut angemeldet</h2>
+            <p class="text-tisch-300 text-sm">
+                Sitzplatz {{ spiel.armutSpielerSitzplatz }} hat nur {{ armutTrumpfAnzahl }} Trumpf{{ armutTrumpfAnzahl != 1 ? 'karten' : 'karte' }}.
+                Wer nimmt die Armut an?
+            </p>
+        </div>
+
+        {# Status der Antworten #}
+        <div class="flex gap-4">
+            {% for t in spiel.teilnehmer|sort((a, b) => a.sitzplatz <=> b.sitzplatz) %}
+                <div class="text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold
+                        {% if t.sitzplatz == spiel.armutSpielerSitzplatz %}bg-orange-600 text-white
+                        {% elseif t.armutAntwort is same as(true) %}bg-green-600 text-white
+                        {% elseif t.armutAntwort is same as(false) %}bg-red-700 text-white
+                        {% elseif spiel.aktuellerSpielerSitzplatz == t.sitzplatz %}bg-yellow-400 text-black animate-pulse
+                        {% else %}bg-tisch-700 text-tisch-400{% endif %}">
+                        {% if t.sitzplatz == spiel.armutSpielerSitzplatz %}!
+                        {% elseif t.armutAntwort is same as(true) %}✓
+                        {% elseif t.armutAntwort is same as(false) %}✗
+                        {% elseif spiel.aktuellerSpielerSitzplatz == t.sitzplatz %}?
+                        {% else %}…{% endif %}
+                    </div>
+                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.user ? t.user.username : 'Bot' }}</p>
+                </div>
+            {% endfor %}
+        </div>
+
+        {# Eigene Antwort — nur wenn ich dran bin #}
+        {% if ichBinDran and meinSitzplatz != spiel.armutSpielerSitzplatz %}
+            <div class="bg-tisch-800 rounded-xl p-5 border border-tisch-600 w-full max-w-sm">
+                <p class="text-white text-sm font-medium mb-3 text-center">Armut annehmen?</p>
+                <p class="text-tisch-400 text-xs mb-3 text-center">
+                    Du bekommst {{ armutTrumpfAnzahl }} Trumpfkarte{{ armutTrumpfAnzahl != 1 ? 'n' : '' }} und gibst {{ armutTrumpfAnzahl }} Karte{{ armutTrumpfAnzahl != 1 ? 'n' : '' }} zurück.
+                </p>
+                <div class="flex gap-2">
+                    <form method="post" action="{{ path('app_armut_antwort', {id: tisch.id}) }}"
+                          data-action="submit->spieltisch#armutAntwort" class="flex-1">
+                        <input type="hidden" name="_token" value="{{ csrf_token('armut_' ~ tisch.id) }}">
+                        <input type="hidden" name="annehmen" value="1">
+                        <button type="submit" class="w-full py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-medium">
+                            Annehmen
+                        </button>
+                    </form>
+                    <form method="post" action="{{ path('app_armut_antwort', {id: tisch.id}) }}"
+                          data-action="submit->spieltisch#armutAntwort" class="flex-1">
+                        <input type="hidden" name="_token" value="{{ csrf_token('armut_' ~ tisch.id) }}">
+                        <input type="hidden" name="annehmen" value="0">
+                        <button type="submit" class="w-full py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm font-medium">
+                            Ablehnen
+                        </button>
+                    </form>
+                </div>
+            </div>
+        {% elseif meinSitzplatz == spiel.armutSpielerSitzplatz %}
+            <div class="bg-orange-900 border border-orange-700 rounded-lg px-6 py-3 text-orange-300 text-sm text-center">
+                Du hast <strong>Armut</strong> angemeldet. Warte auf Antwort…
+            </div>
+        {% else %}
+            <div class="text-tisch-400 text-sm text-center">
+                Warte auf Sitzplatz {{ spiel.aktuellerSpielerSitzplatz }}…
+            </div>
+        {% endif %}
+
+        {# Karten-Vorschau #}
+        {% if hand is not empty %}
+            <div class="flex flex-wrap gap-2 justify-center opacity-75">
+                {% for karte in hand %}
+                    <div class="spielkarte spielkarte--gross">
+                        {{ karten_svg(karte) }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+{% elseif spiel.status.value == 'ARMUT_TAUSCH' %}
+    {# ── Armut-Kartentausch ──────────────────────────────────────────── #}
+    {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}
+    {% set ichBinAnnehmer = meinSitzplatz == spiel.armutAnnehmerSitzplatz %}
+
+    <div class="flex flex-col items-center justify-center py-8 gap-6">
+        <div class="text-center">
+            <h2 class="text-xl font-bold text-white mb-1">Kartentausch</h2>
+            {% if ichBinAnnehmer %}
+                <p class="text-tisch-300 text-sm">
+                    Du hast die Armut angenommen. Wähle {{ spiel.armutTauschKartenIds|length }} Karte{{ spiel.armutTauschKartenIds|length != 1 ? 'n' : '' }} zum Zurückgeben.
+                </p>
+            {% elseif meinSitzplatz == spiel.armutSpielerSitzplatz %}
+                <p class="text-tisch-300 text-sm">
+                    Deine Trümpfe werden getauscht. Warte auf den Annehmer…
+                </p>
+            {% else %}
+                <p class="text-tisch-300 text-sm">Kartentausch läuft. Bitte warten…</p>
+            {% endif %}
+        </div>
+
+        {% if ichBinAnnehmer %}
+            {# Erhaltene Trumpfkarten anzeigen #}
+            <div class="bg-tisch-800 rounded-xl p-4 border border-tisch-600 w-full max-w-md">
+                <p class="text-orange-300 text-xs font-medium mb-2 uppercase tracking-wider text-center">Erhaltene Trümpfe</p>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    {% for karte in armutTauschKarten %}
+                        <div class="spielkarte spielkarte--mittel">
+                            {{ karten_svg(karte) }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# Eigene Hand mit Auswahl zum Zurückgeben #}
+            <form method="post" action="{{ path('app_armut_karten_zurueck', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#armutKartenZurueck"
+                  id="armut-tausch-form">
+                <input type="hidden" name="_token" value="{{ csrf_token('armut_tausch_' ~ tisch.id) }}">
+                <p class="text-white text-sm font-medium mb-2 text-center">
+                    Wähle {{ spiel.armutTauschKartenIds|length }} Karte{{ spiel.armutTauschKartenIds|length != 1 ? 'n' : '' }} zum Zurückgeben:
+                </p>
+                <div class="flex flex-wrap gap-2 justify-center mb-4">
+                    {% for karte in hand %}
+                        <label class="spielkarte spielkarte--gross cursor-pointer relative">
+                            <input type="checkbox" name="karten_ids[]" value="{{ karte.id() }}"
+                                   class="absolute top-1 right-1 rounded border-yellow-400 text-yellow-500 z-10">
+                            {{ karten_svg(karte) }}
+                        </label>
+                    {% endfor %}
+                </div>
+                <div class="text-center">
+                    <button type="submit" class="btn-primary">
+                        Karten zurückgeben
+                    </button>
+                </div>
+            </form>
+        {% else %}
+            {# Eigene Hand nur zur Ansicht #}
+            {% if hand is not empty %}
+                <div class="flex flex-wrap gap-2 justify-center opacity-75">
+                    {% for karte in hand %}
+                        <div class="spielkarte spielkarte--gross">
+                            {{ karten_svg(karte) }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
         {% endif %}
     </div>
 

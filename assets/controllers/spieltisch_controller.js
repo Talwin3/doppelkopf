@@ -1,8 +1,9 @@
 import { Controller } from '@hotwired/stimulus'
 import { SoundEngine } from '../sound_engine.js'
+import { toast } from '../toast.js'
 
 export default class extends Controller {
-  static targets = ['zustand', 'fehler', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle']
+  static targets = ['zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle']
   static values = {
     mercureUrl: String,
     topic: String,
@@ -17,15 +18,17 @@ export default class extends Controller {
 
     this._soundToggleAktualisieren()
 
-    const url = new URL(this.mercureUrlValue)
-    url.searchParams.append('topic', this.topicValue)
+    if (this.mercureUrlValue && this.topicValue) {
+      const url = new URL(this.mercureUrlValue)
+      url.searchParams.append('topic', this.topicValue)
 
-    this.eventSource = new EventSource(url.toString())
-    this.eventSource.onmessage = (event) => {
-      const daten = JSON.parse(event.data)
-      this.aktualisieren(daten)
+      this.eventSource = new EventSource(url.toString())
+      this.eventSource.onmessage = (event) => {
+        const daten = JSON.parse(event.data)
+        this.aktualisieren(daten)
+      }
+      this.eventSource.onerror = () => {}
     }
-    this.eventSource.onerror = () => {}
   }
 
   disconnect() {
@@ -79,19 +82,45 @@ export default class extends Controller {
     }
   }
 
+  async armutAntwort(event) {
+    event.preventDefault()
+    await this.#postForm(event.currentTarget, 'Armut-Antwort nicht möglich.')
+  }
+
+  async armutKartenZurueck(event) {
+    event.preventDefault()
+    await this.#postForm(event.currentTarget, 'Kartentausch nicht möglich.')
+  }
+
   async nachSpielVerlassen(event) {
     event.preventDefault()
-    await this.#postForm(event.currentTarget, 'Aktion nicht möglich.')
+    const form = event.currentTarget
+    const ok = await this.#postForm(form, 'Aktion nicht möglich.')
+    if (ok) this.#einstellungenGespeichert(form, 'Einstellung gespeichert.')
   }
 
   async regelwerkSpeichern(event) {
     event.preventDefault()
-    await this.#postForm(event.currentTarget, 'Regelwerk konnte nicht gespeichert werden.')
+    const form = event.currentTarget
+    const ok = await this.#postForm(form, 'Regelwerk konnte nicht gespeichert werden.')
+    if (ok) this.#einstellungenGespeichert(form, 'Regelwerk gespeichert.')
+  }
+
+  async botsAuffuellen(event) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const ok = await this.#postForm(form, 'Bots konnten nicht hinzugefügt werden.')
+    if (ok) {
+      this.#einstellungenGespeichert(form, 'Bots hinzugefügt.')
+      window.location.reload()
+    }
   }
 
   async autoStartToggle(event) {
     event.preventDefault()
-    await this.#postForm(event.currentTarget, 'Auto-Start konnte nicht geändert werden.')
+    const form = event.currentTarget
+    const ok = await this.#postForm(form, 'Auto-Start konnte nicht geändert werden.')
+    if (ok) this.#einstellungenGespeichert(form, 'Auto-Start geändert.')
   }
 
   soundUmschalten() {
@@ -104,20 +133,20 @@ export default class extends Controller {
   // ── Fehleranzeige ──────────────────────────────────────────────────────
 
   fehlerZeigen(text) {
-    if (this.hasFehlerTarget) {
-      this.fehlerTarget.textContent = text
-      this.fehlerTarget.classList.remove('hidden')
-      setTimeout(() => this.fehlerHide(), 3000)
-    }
+    toast(text, 'error', 4000)
   }
 
   fehlerHide() {
-    if (this.hasFehlerTarget) {
-      this.fehlerTarget.classList.add('hidden')
-    }
+    // Toast-System übernimmt auto-hide
   }
 
   // ── Private Helfer ─────────────────────────────────────────────────────
+
+  #einstellungenGespeichert(form, text) {
+    toast(text)
+    const details = form.closest('details')
+    if (details) details.removeAttribute('open')
+  }
 
   async #postForm(form, standardFehler) {
     this.fehlerHide()
@@ -168,6 +197,13 @@ export default class extends Controller {
         this.sound.play('karten_ausgeteilt')
         break
       case 'SPIEL_GESTARTET':
+        this.sound.play('karten_ausgeteilt')
+        break
+      case 'ARMUT_ANFRAGE':
+      case 'ARMUT_ANGENOMMEN':
+        this.sound.play('vorbehalt')
+        break
+      case 'ARMUT_ABGELEHNT':
         this.sound.play('karten_ausgeteilt')
         break
     }

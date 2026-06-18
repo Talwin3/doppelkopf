@@ -66,10 +66,11 @@ class LobbyController extends AbstractController
             return $this->redirectToRoute('app_lobby');
         }
 
-        // Bei Formularfehler: zurück zur Lobby mit dem fehlerhaften Formular
         return $this->render('lobby/index.html.twig', [
-            'tische'        => $this->tischRepo->findAktiveFuerLobby(),
-            'erstellenForm' => $form,
+            'tische'           => $this->tischRepo->findAktiveFuerLobby(),
+            'erstellenForm'    => $form,
+            'mercurePublicUrl' => $this->mercurePublicUrl,
+            'mercureTopic'     => LobbyMercurePublisher::TOPIC,
         ]);
     }
 

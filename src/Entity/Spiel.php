@@ -43,6 +43,18 @@ class Spiel
     #[ORM\Column(options: ['default' => false])]
     private bool $hochzeitAufgeloest = false;
 
+    /** Sitzplatz des Armut-Spielers (null = keine Armut). */
+    #[ORM\Column(nullable: true)]
+    private ?int $armutSpielerSitzplatz = null;
+
+    /** Sitzplatz des Spielers, der die Armut angenommen hat (null = noch offen). */
+    #[ORM\Column(nullable: true)]
+    private ?int $armutAnnehmerSitzplatz = null;
+
+    /** Karten-IDs die der Armut-Spieler abgibt (seine Trümpfe). */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $armutTauschKartenIds = null;
+
     #[ORM\Column]
     private \DateTimeImmutable $gestartetAm;
 
@@ -90,6 +102,17 @@ class Spiel
 
     public function isHochzeitAufgeloest(): bool { return $this->hochzeitAufgeloest; }
     public function setHochzeitAufgeloest(bool $aufgeloest): static { $this->hochzeitAufgeloest = $aufgeloest; return $this; }
+
+    public function getArmutSpielerSitzplatz(): ?int { return $this->armutSpielerSitzplatz; }
+    public function setArmutSpielerSitzplatz(?int $sitzplatz): static { $this->armutSpielerSitzplatz = $sitzplatz; return $this; }
+
+    public function getArmutAnnehmerSitzplatz(): ?int { return $this->armutAnnehmerSitzplatz; }
+    public function setArmutAnnehmerSitzplatz(?int $sitzplatz): static { $this->armutAnnehmerSitzplatz = $sitzplatz; return $this; }
+
+    /** @return string[]|null */
+    public function getArmutTauschKartenIds(): ?array { return $this->armutTauschKartenIds; }
+    /** @param string[]|null $ids */
+    public function setArmutTauschKartenIds(?array $ids): static { $this->armutTauschKartenIds = $ids; return $this; }
 
     public function getGestartetAm(): \DateTimeImmutable { return $this->gestartetAm; }
 
