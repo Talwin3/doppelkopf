@@ -213,6 +213,10 @@ final class SpielAbschlussService
             return;
         }
 
+        if (!$tisch->hatMenschAmTisch()) {
+            return;
+        }
+
         if ($tisch->getNaechsterSpielstartAm() !== null) {
             return;
         }

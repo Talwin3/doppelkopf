@@ -46,18 +46,14 @@ class TischRepository extends ServiceEntityRepository
     }
 
     /**
-     * Tische, die seit mindestens $minuten ohne Menschen sind.
+     * Tische ohne menschliche Spieler (nur Bots).
      *
      * @return Tisch[]
      */
-    public function findMenschenloseFuerLoeschung(int $minuten): array
+    public function findMenschenlose(): array
     {
-        $schwelle = new \DateTimeImmutable("-{$minuten} minutes");
-
         return $this->createQueryBuilder('t')
             ->where('t.menschenloseSeitAm IS NOT NULL')
-            ->andWhere('t.menschenloseSeitAm <= :schwelle')
-            ->setParameter('schwelle', $schwelle)
             ->getQuery()
             ->getResult();
     }

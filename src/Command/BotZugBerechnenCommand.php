@@ -149,8 +149,7 @@ class BotZugBerechnenCommand extends Command
 
     private function pruefeMenschenloseTische(OutputInterface $output): void
     {
-        $loeschenNachMinuten = $this->einstellungService->getInt('tisch_loeschen_nach_minuten');
-        $tische = $this->tischRepo->findMenschenloseFuerLoeschung($loeschenNachMinuten);
+        $tische = $this->tischRepo->findMenschenlose();
 
         foreach ($tische as $tisch) {
             // Nicht löschen wenn gerade ein Spiel läuft (Bots spielen durch)
