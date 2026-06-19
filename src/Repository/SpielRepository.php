@@ -31,6 +31,19 @@ class SpielRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function findLetztesBeendetesSpielFuerTisch(Tisch $tisch): ?Spiel
+    {
+        return $this->createQueryBuilder('s')
+            ->where('s.tisch = :tisch')
+            ->andWhere('s.status = :status')
+            ->setParameter('tisch', $tisch)
+            ->setParameter('status', SpielStatus::BEENDET)
+            ->orderBy('s.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     /**
      * Alle laufenden Spiele, in denen der aktuelle Spieler seit mindestens $sekunden
      * nicht gezogen hat (für Bot-Timeout-Erkennung).

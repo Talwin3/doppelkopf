@@ -74,9 +74,12 @@ class SpielController extends AbstractController
 
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
 
+        $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
+
         return $this->render('spieltisch/index.html.twig', [
             'tisch'              => $tisch,
             'spiel'              => $spiel,
+            'letztesSpiel'       => $letztesSpiel,
             'teilnehmer'         => $teilnehmer,
             'hand'               => $hand,
             'ansagen'            => $ansagen,
@@ -97,9 +100,12 @@ class SpielController extends AbstractController
 
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
 
+        $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
+
         return $this->render('spieltisch/_spielzustand.html.twig', [
             'tisch'              => $tisch,
             'spiel'              => $spiel,
+            'letztesSpiel'       => $letztesSpiel,
             'teilnehmer'         => $teilnehmer,
             'hand'               => $hand,
             'ansagen'            => $ansagen,

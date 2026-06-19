@@ -1,7 +1,27 @@
+{% macro letzte_wertung(letztesSpiel) %}
+    {% if letztesSpiel %}
+    <div class="bg-tisch-800/60 rounded-xl p-4 border border-tisch-700 w-full max-w-md mx-auto">
+        <p class="text-tisch-300 text-xs font-medium uppercase tracking-wider text-center mb-3">Letztes Ergebnis</p>
+        <div class="grid grid-cols-4 gap-2">
+            {% for t in letztesSpiel.teilnehmer %}
+                <div class="text-center">
+                    <p class="text-white text-xs font-medium truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    <p class="text-xs {{ t.team and t.team.value == 'RE' ? 'text-blue-400' : 'text-red-400' }}">{{ t.team ? t.team.value : '?' }}</p>
+                    <p class="text-lg font-bold {{ t.gewonnen ? 'text-green-400' : 'text-gray-500' }}">
+                        {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
+                    </p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+{% endmacro %}
+
 {% if spiel is null %}
     <div class="text-center py-16 text-gray-400">
         <p class="text-xl font-medium">Warte auf Spieler…</p>
         <p class="text-sm mt-2">{{ tisch.aktiveSpieler.count }}/4 Spieler am Tisch</p>
+        {{ _self.letzte_wertung(letztesSpiel ?? null) }}
     </div>
 
 {% elseif spiel.status.value == 'BEENDET' %}
@@ -136,6 +156,9 @@
                 Warte auf Sitzplatz {{ spiel.aktuellerSpielerSitzplatz }}…
             </div>
         {% endif %}
+
+        {# Letzte Wertung #}
+        {{ _self.letzte_wertung(letztesSpiel ?? null) }}
 
         {# Karten-Vorschau (nicht spielbar in Vorbehaltsrunde) #}
         {% if hand is not empty %}
@@ -305,11 +328,11 @@
     </div>
 
 {% else %}
-    {# Teilnehmer nach Sitzplatz indexieren #}
+    {# Teilnehmer nach Sitzplatz indexieren (String-Keys wegen Twig merge) #}
     {% set meinSitzplatz = teilnehmer ? teilnehmer.sitzplatz : 0 %}
     {% set teilnehmerMap = {} %}
     {% for t in spiel.teilnehmer %}
-        {% set teilnehmerMap = teilnehmerMap|merge({(t.sitzplatz): t}) %}
+        {% set teilnehmerMap = teilnehmerMap|merge({('s' ~ t.sitzplatz): t}) %}
     {% endfor %}
 
     {% set linkerSitz  = (meinSitzplatz % 4) + 1 %}
@@ -320,22 +343,68 @@
     {% set alleGespielten = spiel.gespielteKarten %}
     {% set maxKarten = spiel.tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
 
-    {# Ansagen pro Sitzplatz indexieren (für Gegner-Anzeige) #}
+    {# Ansagen pro Sitzplatz indexieren (String-Keys) #}
     {% set ansagenBySitzplatz = {} %}
     {% for a in ansagen %}
-        {% set bisherige = ansagenBySitzplatz[a.sitzplatz] ?? [] %}
-        {% set ansagenBySitzplatz = ansagenBySitzplatz|merge({(a.sitzplatz): bisherige|merge([a.ansageTyp.value])}) %}
+        {% set key = 's' ~ a.sitzplatz %}
+        {% set bisherige = ansagenBySitzplatz[key] ?? [] %}
+        {% set ansagenBySitzplatz = ansagenBySitzplatz|merge({(key): bisherige|merge([a.ansageTyp.value])}) %}
     {% endfor %}
+
+    {# Team-Sichtbarkeit: Bei Solo/Hochzeit sofort bekannt, sonst erst bei Kreuz-Dame-Ausspiel oder Ansage #}
+    {% set istSolo = spiel.variante and spiel.variante.value starts with 'SOLO_' %}
+    {% set teamSichtbar = {} %}
+    {% if istSolo %}
+        {% for t in spiel.teilnehmer %}
+            {% set teamSichtbar = teamSichtbar|merge({('s' ~ t.sitzplatz): true}) %}
+        {% endfor %}
+    {% else %}
+        {# Kreuz-Damen-Spieler sind RE → sichtbar #}
+        {% set kreuzDamenGespielt = [] %}
+        {% for gk in alleGespielten %}
+            {% if gk.karteId starts with 'KREUZ_DAME' %}
+                {% set kreuzDamenGespielt = kreuzDamenGespielt|merge([gk.sitzplatz]) %}
+            {% endif %}
+        {% endfor %}
+        {% set beideKreuzDamen = kreuzDamenGespielt|length >= 2 %}
+
+        {% for t in spiel.teilnehmer %}
+            {% set key = 's' ~ t.sitzplatz %}
+            {% set sichtbar = false %}
+            {# Hochzeit: Hochzeits-Spieler ist sofort als RE bekannt #}
+            {% if spiel.variante and spiel.variante.value == 'HOCHZEIT' and t.team and t.team.value == 'RE' and t.vorbehaltTyp is defined and t.vorbehaltTyp and t.vorbehaltTyp.value == 'HOCHZEIT' %}
+                {% set sichtbar = true %}
+            {% endif %}
+            {# Hat Kreuz Dame gespielt → RE bekannt #}
+            {% if t.sitzplatz in kreuzDamenGespielt %}
+                {% set sichtbar = true %}
+            {% endif %}
+            {# Beide Kreuz-Damen gespielt → alle Teams bekannt #}
+            {% if beideKreuzDamen %}
+                {% set sichtbar = true %}
+            {% endif %}
+            {# RE/KONTRA angesagt → Team bekannt #}
+            {% if (ansagenBySitzplatz[key] ?? [])|length > 0 %}
+                {% set sichtbar = true %}
+            {% endif %}
+            {# Eigenes Team immer sichtbar #}
+            {% if t.sitzplatz == meinSitzplatz %}
+                {% set sichtbar = true %}
+            {% endif %}
+            {% set teamSichtbar = teamSichtbar|merge({(key): sichtbar}) %}
+        {% endfor %}
+    {% endif %}
 
     <div class="flex flex-col h-full gap-2">
 
         {# ── Oberer Spieler ─────────────────────────────────────────────── #}
         <div class="flex justify-center">
             {% include 'spieltisch/_gegner_strip.html.twig' with {
-                teilnehmer: teilnehmerMap[obererSitz] ?? null,
+                teilnehmer: teilnehmerMap['s' ~ obererSitz] ?? null,
                 istDran: spiel.aktuellerSpielerSitzplatz == obererSitz,
                 anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == obererSitz)|length),
-                ansagen: ansagenBySitzplatz[obererSitz] ?? []
+                ansagen: ansagenBySitzplatz['s' ~ obererSitz] ?? [],
+                teamSichtbar: teamSichtbar['s' ~ obererSitz] ?? false
             } %}
         </div>
 
@@ -344,10 +413,11 @@
 
             <div class="flex-none w-28">
                 {% include 'spieltisch/_gegner_strip.html.twig' with {
-                    teilnehmer: teilnehmerMap[linkerSitz] ?? null,
+                    teilnehmer: teilnehmerMap['s' ~ linkerSitz] ?? null,
                     istDran: spiel.aktuellerSpielerSitzplatz == linkerSitz,
                     anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == linkerSitz)|length),
-                    ansagen: ansagenBySitzplatz[linkerSitz] ?? [],
+                    ansagen: ansagenBySitzplatz['s' ~ linkerSitz] ?? [],
+                    teamSichtbar: teamSichtbar['s' ~ linkerSitz] ?? false,
                     vertikal: true
                 } %}
             </div>
@@ -397,10 +467,11 @@
 
             <div class="flex-none w-28">
                 {% include 'spieltisch/_gegner_strip.html.twig' with {
-                    teilnehmer: teilnehmerMap[rechterSitz] ?? null,
+                    teilnehmer: teilnehmerMap['s' ~ rechterSitz] ?? null,
                     istDran: spiel.aktuellerSpielerSitzplatz == rechterSitz,
                     anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == rechterSitz)|length),
-                    ansagen: ansagenBySitzplatz[rechterSitz] ?? [],
+                    ansagen: ansagenBySitzplatz['s' ~ rechterSitz] ?? [],
+                    teamSichtbar: teamSichtbar['s' ~ rechterSitz] ?? false,
                     vertikal: true
                 } %}
             </div>
@@ -414,14 +485,14 @@
             {# Kopfzeile: Team-Badge, Dran-Anzeige #}
             <div class="flex items-center justify-between px-1">
                 <span class="text-white text-sm font-medium flex items-center gap-2">
-                    {% if meinTeam %}
+                    {% if meinTeam and (teamSichtbar['s' ~ meinSitzplatz] ?? false) %}
                         <span class="px-2 py-0.5 rounded text-xs font-bold {{ meinTeam.value == 'RE' ? 'bg-blue-500' : 'bg-red-500' }} text-white">
                             {{ meinTeam.value }}
                         </span>
                     {% endif %}
                     Deine Karten ({{ hand|length }})
                     {# Eigene aktive Ansagen anzeigen #}
-                    {% for typWert in ansagenBySitzplatz[meinSitzplatz] ?? [] %}
+                    {% for typWert in ansagenBySitzplatz['s' ~ meinSitzplatz] ?? [] %}
                         <span class="px-2 py-0.5 rounded text-xs font-bold bg-yellow-500 text-black">
                             {{ typWert|replace({'_': ' '}) }}!
                         </span>

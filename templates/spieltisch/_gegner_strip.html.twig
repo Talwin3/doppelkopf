@@ -1,6 +1,7 @@
-{# Parameter: teilnehmer, istDran (bool), anzahlKarten (int), ansagen (string[]), vertikal (bool) #}
-{% set vertikal = vertikal ?? false %}
-{% set ansagen  = ansagen ?? [] %}
+{# Parameter: teilnehmer, istDran (bool), anzahlKarten (int), ansagen (string[]), vertikal (bool), teamSichtbar (bool) #}
+{% set vertikal      = vertikal ?? false %}
+{% set ansagen       = ansagen ?? [] %}
+{% set teamSichtbar  = teamSichtbar ?? false %}
 
 <div class="flex flex-col items-center gap-1">
 
@@ -9,7 +10,7 @@
             <span class="text-white text-xs font-medium">
                 {{ teilnehmer.user ? teilnehmer.user.username : 'Bot' }}
             </span>
-            {% if teilnehmer.team %}
+            {% if teilnehmer.team and teamSichtbar %}
                 <span class="text-xs px-1 rounded {{ teilnehmer.team.value == 'RE' ? 'bg-blue-500' : 'bg-red-500' }} text-white">
                     {{ teilnehmer.team.value }}
                 </span>
