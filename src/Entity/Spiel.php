@@ -21,7 +21,7 @@ class Spiel
     private Uuid $id;
 
     #[ORM\ManyToOne(targetEntity: Tisch::class)]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Tisch $tisch;
 
     /** Null während der Vorbehaltsrunde (wird durch SpielTypResolver gesetzt). */

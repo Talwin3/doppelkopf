@@ -33,13 +33,16 @@ export default class extends Controller {
 
   _apply(modus) {
     const html = document.documentElement
+    let isDark
     if (modus === 'dunkel') {
-      html.classList.add('dark')
+      isDark = true
     } else if (modus === 'hell') {
-      html.classList.remove('dark')
+      isDark = false
     } else {
-      this._mediaQuery.matches ? html.classList.add('dark') : html.classList.remove('dark')
+      isDark = this._mediaQuery.matches
     }
+    html.classList.toggle('dark', isDark)
+    html.style.colorScheme = isDark ? 'dark' : 'light'
   }
 
   _updateIcon() {

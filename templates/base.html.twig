@@ -11,15 +11,34 @@
     (function(){
         var t=localStorage.getItem('dk_theme')||'system';
         var d=document.documentElement;
-        if(t==='dunkel'||(t==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){
-            d.classList.add('dark');
-        }
+        var isDark=t==='dunkel'||(t==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+        if(isDark){d.classList.add('dark');}
+        d.style.colorScheme=isDark?'dark':'light';
     })();
     </script>
 
     {% block stylesheets %}
         {{ encore_entry_link_tags('app') }}
     {% endblock %}
+
+    {# Dark-Mode-Override: @tailwindcss/forms setzt .form-input background in @layer utilities,
+       was alle components-Layer-Overrides schlägt. Inline-Style umgeht die PostCSS-Pipeline. #}
+    <style>
+    html{color-scheme:light}
+    html.dark{color-scheme:dark}
+    .dark .form-input,.dark select:not([multiple]),.dark textarea{
+        background-color:oklch(27.8% .033 256.848);
+        border-color:oklch(44.6% .043 257.281);
+        color:oklch(92.8% .006 264.531)
+    }
+    .dark .form-input::placeholder,.dark textarea::placeholder{
+        color:oklch(55.1% .027 264.364)
+    }
+    .dark .form-input:focus,.dark select:focus,.dark textarea:focus{
+        border-color:oklch(76.6% .209 152.579);
+        --tw-ring-color:oklch(76.6% .209 152.579)
+    }
+    </style>
 
     {% block head_extra %}{% endblock %}
 

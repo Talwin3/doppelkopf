@@ -317,6 +317,8 @@
     {% set rechterSitz = (obererSitz % 4) + 1 %}
 
     {% set stichKarten = spiel.aktuelleStichKarten %}
+    {% set alleGespielten = spiel.gespielteKarten %}
+    {% set maxKarten = spiel.tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
 
     {# Ansagen pro Sitzplatz indexieren (für Gegner-Anzeige) #}
     {% set ansagenBySitzplatz = {} %}
@@ -332,7 +334,7 @@
             {% include 'spieltisch/_gegner_strip.html.twig' with {
                 teilnehmer: teilnehmerMap[obererSitz] ?? null,
                 istDran: spiel.aktuellerSpielerSitzplatz == obererSitz,
-                anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == obererSitz)|length),
+                anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == obererSitz)|length),
                 ansagen: ansagenBySitzplatz[obererSitz] ?? []
             } %}
         </div>
@@ -344,7 +346,7 @@
                 {% include 'spieltisch/_gegner_strip.html.twig' with {
                     teilnehmer: teilnehmerMap[linkerSitz] ?? null,
                     istDran: spiel.aktuellerSpielerSitzplatz == linkerSitz,
-                    anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == linkerSitz)|length),
+                    anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == linkerSitz)|length),
                     ansagen: ansagenBySitzplatz[linkerSitz] ?? [],
                     vertikal: true
                 } %}
@@ -397,7 +399,7 @@
                 {% include 'spieltisch/_gegner_strip.html.twig' with {
                     teilnehmer: teilnehmerMap[rechterSitz] ?? null,
                     istDran: spiel.aktuellerSpielerSitzplatz == rechterSitz,
-                    anzahlKarten: 12 - (stichKarten|filter(k => k.sitzplatz == rechterSitz)|length),
+                    anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == rechterSitz)|length),
                     ansagen: ansagenBySitzplatz[rechterSitz] ?? [],
                     vertikal: true
                 } %}

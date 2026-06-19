@@ -165,8 +165,16 @@ class BotZugBerechnenCommand extends Command
                 $tisch->getMenschenloseSeitAm()?->format('H:i:s') ?? '-',
             ));
 
-            $this->em->remove($tisch);
-            $this->em->flush();
+            try {
+                $this->em->remove($tisch);
+                $this->em->flush();
+            } catch (\Throwable $e) {
+                $output->writeln(sprintf('  <error>Tisch-Löschung Fehler: %s</error>', $e->getMessage()));
+                if (!$this->em->isOpen()) {
+                    $this->doctrine->resetManager();
+                }
+                break;
+            }
         }
     }
 }

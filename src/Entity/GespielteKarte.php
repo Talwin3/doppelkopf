@@ -20,7 +20,7 @@ class GespielteKarte
     private Uuid $id;
 
     #[ORM\ManyToOne(targetEntity: Spiel::class, inversedBy: 'gespielteKarten')]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Spiel $spiel;
 
     #[ORM\Column]

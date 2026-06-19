@@ -24,7 +24,7 @@ class SpielTeilnehmer
     private Uuid $id;
 
     #[ORM\ManyToOne(targetEntity: Spiel::class, inversedBy: 'teilnehmer')]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Spiel $spiel;
 
     /** Null bei Bot-Platzhaltern. */
