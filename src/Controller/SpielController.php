@@ -12,6 +12,7 @@ use App\Application\Doppelkopf\TischBeitrittsService;
 use App\Application\Doppelkopf\VorbehaltService;
 use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Tisch;
@@ -76,7 +77,7 @@ class SpielController extends AbstractController
             ? $this->spielStartService->starten($tisch)
             : $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 
         $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
 
@@ -89,9 +90,10 @@ class SpielController extends AbstractController
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
             'vorbehaltOptionen'  => $vorbehaltOptionen,
-            'armutTauschKarten'  => $armutTauschKarten,
-            'mercurePublicUrl'   => $this->mercurePublicUrl,
-            'mercureTopic'       => $spiel ? $this->mercurePublisher->topic($spiel) : null,
+            'armutTauschKarten'       => $armutTauschKarten,
+            'vorbehaltSortierungen'  => $vorbehaltSortierungen,
+            'mercurePublicUrl'       => $this->mercurePublicUrl,
+            'mercureTopic'           => $spiel ? $this->mercurePublisher->topic($spiel) : null,
         ]);
     }
 
@@ -102,7 +104,7 @@ class SpielController extends AbstractController
         $user  = $this->getUser();
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
 
-        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten] = $this->spielDaten($spiel, $user);
+        [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 
         $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
 
@@ -115,7 +117,8 @@ class SpielController extends AbstractController
             'ansagen'            => $ansagen,
             'verfuegbareAnsagen' => $verfuegbareAnsagen,
             'vorbehaltOptionen'  => $vorbehaltOptionen,
-            'armutTauschKarten'  => $armutTauschKarten,
+            'armutTauschKarten'       => $armutTauschKarten,
+            'vorbehaltSortierungen'  => $vorbehaltSortierungen,
         ]);
     }
 
@@ -390,7 +393,12 @@ class SpielController extends AbstractController
             $ansagen = $this->ansageRepo->findFuerSpiel($spiel);
         }
 
-        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten];
+        $vorbehaltSortierungen = [];
+        if ($spiel !== null && $spiel->getStatus() === \App\Enum\SpielStatus::VORBEHALT && !empty($hand)) {
+            $vorbehaltSortierungen = $this->vorbehaltSortierungenBerechnen($hand, $spiel);
+        }
+
+        return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen];
     }
 
     /**
@@ -400,7 +408,39 @@ class SpielController extends AbstractController
     private function handSortieren(array $hand, object $spiel): array
     {
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        return $this->handSortierenMitOrdnung($hand, $ordnung);
+    }
 
+    /** @return array<string, string[]> Varianten-Key → sortierte Karten-IDs */
+    private function vorbehaltSortierungenBerechnen(array $hand, object $spiel): array
+    {
+        $varianten = [
+            'HOCHZEIT'       => SpielVariante::HOCHZEIT,
+            'SOLO_BUBEN'     => SpielVariante::SOLO_BUBEN,
+            'SOLO_DAMEN'     => SpielVariante::SOLO_DAMEN,
+            'SOLO_FLEISCHLOS' => SpielVariante::SOLO_FLEISCHLOS,
+            'SOLO_KARO'      => SpielVariante::SOLO_KARO,
+            'SOLO_HERZ'      => SpielVariante::SOLO_HERZ,
+            'SOLO_PIK'       => SpielVariante::SOLO_PIK,
+            'SOLO_KREUZ'     => SpielVariante::SOLO_KREUZ,
+        ];
+
+        $result = [];
+        foreach ($varianten as $key => $variante) {
+            $ordnung = $this->trumpfOrdnungFactory->fuer($variante);
+            $sortiert = $this->handSortierenMitOrdnung($hand, $ordnung);
+            $result[$key] = array_map(fn(Karte $k) => $k->id(), $sortiert);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param Karte[] $hand
+     * @return Karte[]
+     */
+    private function handSortierenMitOrdnung(array $hand, TrumpfOrdnung $ordnung): array
+    {
         $fehlfarbenPrio = [
             Kartenfarbe::KREUZ->value => 1,
             Kartenfarbe::PIK->value   => 2,
