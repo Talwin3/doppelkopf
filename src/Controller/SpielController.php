@@ -12,8 +12,11 @@ use App\Application\Doppelkopf\TischBeitrittsService;
 use App\Application\Doppelkopf\VorbehaltService;
 use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
+use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Tisch;
 use App\Enum\AnsageTyp;
+use App\Enum\Kartenfarbe;
 use App\Enum\SpielVariante;
 use App\Enum\VorbehaltTyp;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
@@ -45,6 +48,7 @@ class SpielController extends AbstractController
         private readonly TischBeitrittsService $beitrittsService,
         private readonly VorbehaltService $vorbehaltService,
         private readonly ArmutService $armutService,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -370,6 +374,7 @@ class SpielController extends AbstractController
             if ($teilnehmer !== null) {
                 $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
                 $hand         = $teilnehmer->aktuelleHand($gespielteIds);
+                $hand         = $this->handSortieren($hand, $spiel);
                 $verfuegbareAnsagen = $this->ansageService->verfuegbareAnsagen($spiel, $user);
                 $vorbehaltOptionen  = $this->vorbehaltService->verfuegbareOptionen($spiel, $user);
 
@@ -386,5 +391,43 @@ class SpielController extends AbstractController
         }
 
         return [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten];
+    }
+
+    /**
+     * @param Karte[] $hand
+     * @return Karte[]
+     */
+    private function handSortieren(array $hand, object $spiel): array
+    {
+        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+
+        $fehlfarbenPrio = [
+            Kartenfarbe::KREUZ->value => 1,
+            Kartenfarbe::PIK->value   => 2,
+            Kartenfarbe::HERZ->value  => 3,
+            Kartenfarbe::KARO->value  => 4,
+        ];
+
+        usort($hand, function (Karte $a, Karte $b) use ($ordnung, $fehlfarbenPrio): int {
+            $aTrumpf = $ordnung->istTrumpf($a);
+            $bTrumpf = $ordnung->istTrumpf($b);
+
+            if ($aTrumpf && !$bTrumpf) return -1;
+            if (!$aTrumpf && $bTrumpf) return 1;
+
+            if ($aTrumpf && $bTrumpf) {
+                return $ordnung->trumpfRang($b) <=> $ordnung->trumpfRang($a);
+            }
+
+            $aFarbe = $ordnung->fehlfarbe($a);
+            $bFarbe = $ordnung->fehlfarbe($b);
+
+            $farbVergleich = $fehlfarbenPrio[$aFarbe->value] <=> $fehlfarbenPrio[$bFarbe->value];
+            if ($farbVergleich !== 0) return $farbVergleich;
+
+            return $ordnung->fehlfarbenRang($b) <=> $ordnung->fehlfarbenRang($a);
+        });
+
+        return $hand;
     }
 }
