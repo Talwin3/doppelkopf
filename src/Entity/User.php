@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\Kartendeck;
 use App\Repository\UserRepository;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
@@ -58,11 +59,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?string $verificationToken = null;
 
     /**
-     * Bevorzugtes Kartenblatt – erweiterbar für zukünftige Designs.
-     * Aktuell implementiert: FRANZOESISCH.
+     * Bevorzugtes Kartendeck (Wert eines {@see Kartendeck}-Falls).
+     * Unbekannte/Alt-Werte fallen über {@see getKartendeck()} auf den Default zurück.
      */
-    #[ORM\Column(length: 20, options: ['default' => 'FRANZOESISCH'])]
-    private string $kartenbildPraeferenz = 'FRANZOESISCH';
+    #[ORM\Column(length: 20, options: ['default' => 'BELLOT'])]
+    private string $kartenbildPraeferenz = 'BELLOT';
 
     /** Letzter Zeitpunkt der Benutzernamen-Änderung (für 7-Tage-Cooldown). */
     #[ORM\Column(nullable: true)]
@@ -188,6 +189,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         $this->kartenbildPraeferenz = $kartenbildPraeferenz;
 
         return $this;
+    }
+
+    /** Gewähltes Kartendeck (toleranter Lookup mit Fallback auf den Default). */
+    public function getKartendeck(): Kartendeck
+    {
+        return Kartendeck::vonWert($this->kartenbildPraeferenz);
     }
 
     public function getNutzernameGeaendertAm(): ?\DateTimeImmutable { return $this->nutzernameGeaendertAm; }

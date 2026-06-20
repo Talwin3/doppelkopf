@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Application\ProfilService;
 use App\Application\StatistikService;
 use App\Entity\User;
+use App\Enum\Kartendeck;
 use App\Form\BenutzernameAendernType;
 use App\Form\EmailAendernType;
 use App\Form\PasswortAendernType;
@@ -76,6 +77,7 @@ class ProfilController extends AbstractController
             'passwortForm'     => $this->createForm(PasswortAendernType::class),
             'emailForm'        => $this->createForm(EmailAendernType::class),
             'cooldownBis'      => $cooldownBis,
+            'kartendecks'      => Kartendeck::cases(),
         ]);
     }
 
@@ -183,6 +185,25 @@ class ProfilController extends AbstractController
         $user = $this->getUser();
         $this->profilService->datenschutzAendern($user, (bool) $request->request->get('profil_oeffentlich'));
         $this->addFlash('success', 'Datenschutz-Einstellung gespeichert.');
+
+        return $this->redirectToRoute('app_profil_einstellungen');
+    }
+
+    // ── Kartendeck ─────────────────────────────────────────────────────────
+
+    #[Route('/einstellungen/kartendeck', name: 'app_profil_kartendeck', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function kartendeckAendern(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('kartendeck', $request->request->get('_token'))) {
+            $this->addFlash('error', 'Ungültige Anfrage.');
+            return $this->redirectToRoute('app_profil_einstellungen');
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $this->profilService->kartendeckAendern($user, (string) $request->request->get('kartendeck', ''));
+        $this->addFlash('success', 'Kartendeck gespeichert.');
 
         return $this->redirectToRoute('app_profil_einstellungen');
     }

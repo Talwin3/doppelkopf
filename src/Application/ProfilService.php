@@ -88,6 +88,17 @@ final class ProfilService
         $this->em->flush();
     }
 
+    public function kartendeckAendern(User $user, string $wert): void
+    {
+        $deck = \App\Enum\Kartendeck::tryFrom($wert);
+        if ($deck === null) {
+            return; // unbekannten Wert ignorieren
+        }
+
+        $user->setKartenbildPraeferenz($deck->value);
+        $this->em->flush();
+    }
+
     /**
      * Erstellt ein DSGVO-Datenpaket (Art. 20) als Array.
      * @return array<string, mixed>

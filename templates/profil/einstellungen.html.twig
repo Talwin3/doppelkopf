@@ -105,6 +105,31 @@
         </form>
     </section>
 
+    {# ── Kartendeck ───────────────────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Kartendeck</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Wähle das Design der Spielkarten (französisches Blatt).</p>
+
+        <form method="post" action="{{ path('app_profil_kartendeck') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('kartendeck') }}">
+            <div class="space-y-3">
+                {% for deck in kartendecks %}
+                    {% set aktiv = user.kartendeck.value == deck.value %}
+                    <label class="flex items-center gap-4 cursor-pointer rounded-xl border p-3 transition-colors
+                                  {{ aktiv
+                                     ? 'border-tisch-500 bg-tisch-50 dark:bg-tisch-900/20'
+                                     : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40' }}">
+                        <input type="radio" name="kartendeck" value="{{ deck.value }}" {{ aktiv ? 'checked' : '' }}
+                               class="text-tisch-600 border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                        <span class="text-sm font-medium text-gray-900 dark:text-gray-100 w-44 shrink-0">{{ deck.label }}</span>
+                        <div class="ml-auto">{{ karten_deck_vorschau(deck.value) }}</div>
+                    </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn-primary mt-4">Speichern</button>
+        </form>
+    </section>
+
     {# ── Meine Daten (DSGVO Art. 20) ──────────────────────────────────── #}
     <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Meine Daten exportieren</h2>

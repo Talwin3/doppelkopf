@@ -103,5 +103,11 @@
         stroke: #FACC15;
         stroke-width: 3;
     }
+
+    /* Highlight für Decks mit externem SVG/Bild (Bellot/Knoll), wo das innere
+       <rect> nicht stilisierbar ist. */
+    .spielkarte--spielbar:hover {
+        @apply ring-2 ring-yellow-400 rounded-lg;
+    }
 }
 

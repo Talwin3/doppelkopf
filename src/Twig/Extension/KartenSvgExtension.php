@@ -5,13 +5,20 @@ declare(strict_types=1);
 namespace App\Twig\Extension;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Entity\User;
+use App\Enum\Kartendeck;
 use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
+use Symfony\Bundle\SecurityBundle\Security;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 
 final class KartenSvgExtension extends AbstractExtension
 {
+    private ?Kartendeck $deckCache = null;
+
+    public function __construct(private readonly Security $security) {}
+
     private const ROT = '#DC2626';
     private const SCHWARZ = '#1F2937';
     private const KARTEN_BG = '#FFFFFF';
@@ -54,10 +61,111 @@ final class KartenSvgExtension extends AbstractExtension
         return [
             new TwigFunction('karten_svg', $this->renderKarte(...), ['is_safe' => ['html']]),
             new TwigFunction('karten_ruecken_svg', $this->renderRuecken(...), ['is_safe' => ['html']]),
+            new TwigFunction('karten_deck_vorschau', $this->renderVorschau(...), ['is_safe' => ['html']]),
         ];
     }
 
+    /** Vorschau-Karten (Dame, Zehn, Ass) eines bestimmten Decks – für die Profil-Auswahl. */
+    public function renderVorschau(string $deckWert): string
+    {
+        $deck   = Kartendeck::vonWert($deckWert);
+        $proben = ['KREUZ_DAME_1', 'HERZ_ZEHN_1', 'PIK_ASS_1'];
+
+        $html = '<div class="flex gap-1">';
+        foreach ($proben as $id) {
+            $karte = Karte::vonId($id);
+            $svg = match ($deck) {
+                Kartendeck::BELLOT    => $this->renderBellot($karte),
+                Kartendeck::KNOLL     => $this->renderKnoll($karte),
+                Kartendeck::KLASSISCH => $this->renderKlassisch($karte),
+            };
+            $html .= '<div class="spielkarte spielkarte--mittel">' . $svg . '</div>';
+        }
+
+        return $html . '</div>';
+    }
+
     public function renderKarte(Karte $karte): string
+    {
+        return match ($this->deck()) {
+            Kartendeck::BELLOT => $this->renderBellot($karte),
+            Kartendeck::KNOLL  => $this->renderKnoll($karte),
+            Kartendeck::KLASSISCH => $this->renderKlassisch($karte),
+        };
+    }
+
+    /** Aktuelles Kartendeck des angemeldeten Nutzers (Default, falls kein Nutzer). */
+    private function deck(): Kartendeck
+    {
+        if ($this->deckCache === null) {
+            $user = $this->security->getUser();
+            $this->deckCache = $user instanceof User ? $user->getKartendeck() : Kartendeck::default();
+        }
+
+        return $this->deckCache;
+    }
+
+    /** Bellot-Deck (LGPL): externe Sprite-Datei, Karte per <use> referenziert. */
+    private function renderBellot(Karte $karte): string
+    {
+        $id = $this->bellotId($karte);
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+            . ' viewBox="0 0 169.075 244.640" class="karte-svg">'
+            . '<use href="/cards/bellot/svg-cards.svg#' . $id . '" xlink:href="/cards/bellot/svg-cards.svg#' . $id . '"/>'
+            . '</svg>';
+    }
+
+    /** Byron-Knoll-Deck (Public Domain): einzelne SVG-Datei je Karte. */
+    private function renderKnoll(Karte $karte): string
+    {
+        $code = $this->knollCode($karte);
+        $alt  = self::WERT_LABELS[$karte->wert->value] . ' ' . $karte->farbe->value;
+
+        return '<img src="/cards/knoll/' . $code . '.svg" alt="' . $alt . '" class="karte-svg" draggable="false">';
+    }
+
+    private function bellotId(Karte $karte): string
+    {
+        $farbe = match ($karte->farbe) {
+            Kartenfarbe::HERZ  => 'heart',
+            Kartenfarbe::KARO  => 'diamond',
+            Kartenfarbe::PIK   => 'spade',
+            Kartenfarbe::KREUZ => 'club',
+        };
+        $wert = match ($karte->wert) {
+            Kartenwert::ASS    => '1',
+            Kartenwert::ZEHN   => '10',
+            Kartenwert::KOENIG => 'king',
+            Kartenwert::DAME   => 'queen',
+            Kartenwert::BUBE   => 'jack',
+            Kartenwert::NEUN   => '9',
+        };
+
+        return $farbe . '_' . $wert;
+    }
+
+    private function knollCode(Karte $karte): string
+    {
+        $farbe = match ($karte->farbe) {
+            Kartenfarbe::HERZ  => 'H',
+            Kartenfarbe::KARO  => 'D',
+            Kartenfarbe::PIK   => 'S',
+            Kartenfarbe::KREUZ => 'C',
+        };
+        $wert = match ($karte->wert) {
+            Kartenwert::ASS    => 'A',
+            Kartenwert::ZEHN   => '10',
+            Kartenwert::KOENIG => 'K',
+            Kartenwert::DAME   => 'Q',
+            Kartenwert::BUBE   => 'J',
+            Kartenwert::NEUN   => '9',
+        };
+
+        return $wert . $farbe;
+    }
+
+    private function renderKlassisch(Karte $karte): string
     {
         $farbe = $karte->farbe;
         $wert = $karte->wert;
@@ -89,6 +197,14 @@ final class KartenSvgExtension extends AbstractExtension
 
     public function renderRuecken(): string
     {
+        // Bellot bringt einen eigenen Rücken mit; Knoll nicht → prozeduraler Rücken.
+        if ($this->deck() === Kartendeck::BELLOT) {
+            return '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+                . ' viewBox="0 0 169.075 244.640" class="karte-svg">'
+                . '<use href="/cards/bellot/svg-cards.svg#alternate-back" xlink:href="/cards/bellot/svg-cards.svg#alternate-back"/>'
+                . '</svg>';
+        }
+
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" class="karte-svg">';
         $svg .= '<rect x="2" y="2" width="246" height="346" rx="16" ry="16" fill="#14532D" stroke="#166534" stroke-width="1.5"/>';
         $svg .= '<rect x="14" y="14" width="222" height="322" rx="10" ry="10" fill="none" stroke="#22C55E" stroke-width="1" stroke-dasharray="6,4" opacity="0.4"/>';
