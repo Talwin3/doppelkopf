@@ -19,7 +19,6 @@ final class SystemEinstellungService
     /** Standard-Werte, falls kein DB-Eintrag vorhanden. */
     private const DEFAULTS = [
         'pause_zwischen_spielen_sekunden' => '5',
-        'tisch_loeschen_nach_minuten'     => '30',
         'disconnect_timeout_sekunden'     => '30',
     ];
 
@@ -74,7 +73,6 @@ final class SystemEinstellungService
             if ($this->repo->findBySchluessel($schluessel) === null) {
                 $beschreibungen = [
                     'pause_zwischen_spielen_sekunden' => 'Wartezeit in Sekunden zwischen zwei Spielen (Auto-Start)',
-                    'tisch_loeschen_nach_minuten'     => 'Minuten bis ein menschenloser Tisch automatisch gelöscht wird',
                     'disconnect_timeout_sekunden'     => 'Sekunden bis nach einem Disconnect ein Bot übernimmt',
                 ];
 
