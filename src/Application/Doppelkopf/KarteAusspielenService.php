@@ -23,6 +23,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class KarteAusspielenService
 {
+    /** Sekunden, die der Endstich sichtbar bleibt, bevor der Worker das Spiel abschließt. */
+    private const ABSCHLUSS_VERZOEGERUNG_SEK = 2;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
@@ -168,8 +171,16 @@ final class KarteAusspielenService
         $maxStiche      = $spiel->getTisch()->getRegelEinstellung('ohne_neuner') ? 10 : 12;
 
         if ($naechsterStich > $maxStiche) {
+            // Letzter Stich: Endstich wie jeden anderen Stich kurz anzeigen und den
+            // Spielabschluss (Wertung) verzögert über den Worker ausführen, damit die
+            // vierte Karte sichtbar bleibt, statt sofort zur Wertung zu springen.
+            $spiel->setAktuellerSpielerSitzplatz($gewinnerSitzplatz);
+            $spiel->setAktuellerZugBegannAm(null); // kein weiterer Zug → kein Bot-Timeout
+            $spiel->setAbschlussFaelligAm(
+                (new \DateTimeImmutable())->modify('+' . self::ABSCHLUSS_VERZOEGERUNG_SEK . ' seconds')
+            );
             $this->em->flush();
-            $this->abschlussService->abschliessen($spiel);
+            $this->mercurePublisher->stichAbgeschlossen($spiel, $gewinnerSitzplatz, $gespielterSitzplatz);
         } else {
             $spiel->setAktuellerStichNr($naechsterStich);
             $spiel->setAktuellerSpielerSitzplatz($gewinnerSitzplatz);

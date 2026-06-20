@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Application\Doppelkopf\BotZugService;
+use App\Application\Doppelkopf\SpielAbschlussService;
 use App\Application\Doppelkopf\SpielStartService;
 use App\Application\SystemEinstellungService;
 use App\Entity\Tisch;
@@ -43,6 +44,7 @@ class BotZugBerechnenCommand extends Command
         private readonly TischRepository $tischRepo,
         private readonly BotZugService $botZugService,
         private readonly SpielStartService $spielStartService,
+        private readonly SpielAbschlussService $abschlussService,
         private readonly SystemEinstellungService $einstellungService,
         private readonly EntityManagerInterface $em,
         private readonly ManagerRegistry $doctrine,
@@ -66,6 +68,7 @@ class BotZugBerechnenCommand extends Command
 
         do {
             $this->em->clear();
+            $this->pruefeFaelligenAbschluss($output);
             $this->pruefeZugTimeouts($output);
             $this->pruefeAutoStart($output);
             $this->pruefeMenschenloseTische($output);
@@ -76,6 +79,25 @@ class BotZugBerechnenCommand extends Command
         } while (!$einmalig);
 
         return Command::SUCCESS;
+    }
+
+    private function pruefeFaelligenAbschluss(OutputInterface $output): void
+    {
+        foreach ($this->spielRepo->findMitFaelligemAbschluss() as $spiel) {
+            $output->writeln(sprintf(
+                '  Spiel %s – Abschluss nach Endstich',
+                substr((string) $spiel->getId(), 0, 8),
+            ));
+
+            try {
+                $this->abschlussService->abschliessen($spiel);
+            } catch (\Throwable $e) {
+                $output->writeln(sprintf('  <error>Abschluss-Fehler: %s</error>', $e->getMessage()));
+                if (!$this->em->isOpen()) {
+                    $this->doctrine->resetManager();
+                }
+            }
+        }
     }
 
     private function pruefeZugTimeouts(OutputInterface $output): void

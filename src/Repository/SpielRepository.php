@@ -47,6 +47,24 @@ class SpielRepository extends ServiceEntityRepository
     }
 
     /**
+     * Spiele, deren verzögerter Abschluss fällig ist (Endstich wurde gezeigt,
+     * jetzt Wertung durchführen).
+     *
+     * @return Spiel[]
+     */
+    public function findMitFaelligemAbschluss(): array
+    {
+        return $this->createQueryBuilder('s')
+            ->where('s.status = :status')
+            ->andWhere('s.abschlussFaelligAm IS NOT NULL')
+            ->andWhere('s.abschlussFaelligAm <= :jetzt')
+            ->setParameter('status', SpielStatus::LAUFEND)
+            ->setParameter('jetzt', new \DateTimeImmutable())
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Alle laufenden Spiele, in denen der aktuelle Spieler seit mindestens $sekunden
      * nicht gezogen hat (für Bot-Timeout-Erkennung).
      *

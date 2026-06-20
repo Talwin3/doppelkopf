@@ -65,6 +65,13 @@ class Spiel
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $aktuellerZugBegannAm = null;
 
+    /**
+     * Zeitpunkt, ab dem der Worker das Spiel abschließt. Wird nach der letzten
+     * Karte gesetzt, damit der Endstich kurz sichtbar bleibt, bevor die Wertung erscheint.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $abschlussFaelligAm = null;
+
     /** @var Collection<int, SpielTeilnehmer> */
     #[ORM\OneToMany(targetEntity: SpielTeilnehmer::class, mappedBy: 'spiel', cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['sitzplatz' => 'ASC'])]
@@ -121,6 +128,9 @@ class Spiel
 
     public function getAktuellerZugBegannAm(): ?\DateTimeImmutable { return $this->aktuellerZugBegannAm; }
     public function setAktuellerZugBegannAm(?\DateTimeImmutable $am): static { $this->aktuellerZugBegannAm = $am; return $this; }
+
+    public function getAbschlussFaelligAm(): ?\DateTimeImmutable { return $this->abschlussFaelligAm; }
+    public function setAbschlussFaelligAm(?\DateTimeImmutable $am): static { $this->abschlussFaelligAm = $am; return $this; }
 
     /** @return Collection<int, SpielTeilnehmer> */
     public function getTeilnehmer(): Collection { return $this->teilnehmer; }
