@@ -23,38 +23,58 @@ final class TrumpfOrdnungFactory
             return new NormalspielTrumpfOrdnung(); // Fallback während Vorbehaltsrunde
         }
 
-        $basis = $this->fuer($variante);
+        $basis  = $this->fuer($variante);
+        $status = $this->schweinchenStatus($spiel);
+
+        if (!$status['schweinchen']) {
+            return $basis;
+        }
+
+        return new SchweinchentTrumpfOrdnung($basis, $status['superschweinchen']);
+    }
+
+    /**
+     * Ermittelt, ob in diesem Spiel tatsächlich ein Schweinchen bzw. Superschweinchen vorliegt.
+     *
+     * - Schweinchen: Regel aktiv (nur Normalspiel/Hochzeit) UND ein Spieler hält beide
+     *   Trumpf-Asse (Karo-Asse) in der Starthand.
+     * - Superschweinchen: zusätzlich Regel aktiv UND ein Spieler hält beide Trumpf-Neuner
+     *   (Karo-Neuner) — nicht zwingend derselbe Spieler wie beim Schweinchen.
+     *
+     * @return array{schweinchen: bool, superschweinchen: bool}
+     */
+    public function schweinchenStatus(Spiel $spiel): array
+    {
+        $variante = $spiel->getVariante();
 
         // Schweinchen gilt nur bei Normalspiel und Hochzeit (nicht in Soli)
         if ($variante !== SpielVariante::NORMALSPIEL && $variante !== SpielVariante::HOCHZEIT) {
-            return $basis;
+            return ['schweinchen' => false, 'superschweinchen' => false];
         }
 
         $regel = $spiel->getTisch()->getRegelEinstellungen();
-        if (empty($regel['schweinchen'])) {
-            return $basis;
-        }
 
-        $karoAssRang = $this->ermittleKaroAssRang($spiel, $regel);
+        $schweinchen = !empty($regel['schweinchen'])
+            && $this->einSpielerHaeltBeide($spiel, 'KARO_ASS_1', 'KARO_ASS_2');
 
-        return new SchweinchentTrumpfOrdnung($basis, $karoAssRang);
+        $superschweinchen = $schweinchen
+            && !empty($regel['superschweinchen'])
+            && $this->einSpielerHaeltBeide($spiel, 'KARO_NEUN_1', 'KARO_NEUN_2');
+
+        return ['schweinchen' => $schweinchen, 'superschweinchen' => $superschweinchen];
     }
 
-    /** Superschweinchen (Rang 15) wenn ein Spieler beide Karo-Asse in der Starthand hält. */
-    private function ermittleKaroAssRang(Spiel $spiel, array $regel): int
+    /** Prüft, ob ein einzelner Spieler beide genannten Karten in der Starthand hält. */
+    private function einSpielerHaeltBeide(Spiel $spiel, string $karteId1, string $karteId2): bool
     {
-        if (empty($regel['superschweinchen'])) {
-            return 14;
-        }
-
         foreach ($spiel->getTeilnehmer() as $teilnehmer) {
             $ids = $teilnehmer->getStartkartenIds();
-            if (in_array('KARO_ASS_1', $ids, true) && in_array('KARO_ASS_2', $ids, true)) {
-                return 15;
+            if (in_array($karteId1, $ids, true) && in_array($karteId2, $ids, true)) {
+                return true;
             }
         }
 
-        return 14; // Asse auf zwei Spieler verteilt → normales Schweinchen
+        return false;
     }
 
     public function fuer(SpielVariante $variante): TrumpfOrdnung

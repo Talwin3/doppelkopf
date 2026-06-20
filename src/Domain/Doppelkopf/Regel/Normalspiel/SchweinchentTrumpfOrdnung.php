@@ -12,9 +12,13 @@ use App\Enum\Kartenwert;
 /**
  * Decorator: Erweitert eine TrumpfOrdnung um Schweinchen-/Superschweinchen-Regeln.
  *
+ * Dieser Decorator wird nur konstruiert, wenn das Schweinchen tatsächlich vorliegt
+ * (ein Spieler hält beide Trumpf-Asse). Liegt zusätzlich ein Superschweinchen vor
+ * (ein Spieler hält beide Trumpf-Neuner), werden auch die Neuner hochgestuft.
+ *
  * Rang-Hierarchie (hoch → niedrig):
- *   15  Superschweinchen (Karo-Asse, wenn ein Spieler beide Exemplare in Starthand hält)
- *   14  Schweinchen (Karo-Asse, normal verteilt)
+ *   15  Superschweinchen (Karo-Neuner) — nur wenn $superschweinchen
+ *   14  Schweinchen (Karo-Asse)
  *   13  Dulle (Herz-Zehn)
  *   12… alle anderen Trumpfränge der Basisordnung
  *
@@ -24,7 +28,7 @@ final class SchweinchentTrumpfOrdnung implements TrumpfOrdnung
 {
     public function __construct(
         private readonly TrumpfOrdnung $inner,
-        private readonly int $karoAssRang, // 14 = Schweinchen, 15 = Superschweinchen
+        private readonly bool $superschweinchen,
     ) {}
 
     public function istTrumpf(Karte $karte): bool
@@ -35,7 +39,13 @@ final class SchweinchentTrumpfOrdnung implements TrumpfOrdnung
     public function trumpfRang(Karte $karte): int
     {
         if ($karte->farbe === Kartenfarbe::KARO && $karte->wert === Kartenwert::ASS) {
-            return $this->karoAssRang;
+            return 14; // Schweinchen
+        }
+
+        if ($this->superschweinchen
+            && $karte->farbe === Kartenfarbe::KARO
+            && $karte->wert === Kartenwert::NEUN) {
+            return 15; // Superschweinchen — höchster Trumpf, über dem Schweinchen
         }
 
         return $this->inner->trumpfRang($karte);

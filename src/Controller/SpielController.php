@@ -81,6 +81,7 @@ class SpielController extends AbstractController
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 
         $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
+        $schweinchen  = $this->schweinchenStatus($spiel);
 
         return $this->render('spieltisch/index.html.twig', [
             'tisch'              => $tisch,
@@ -93,6 +94,8 @@ class SpielController extends AbstractController
             'vorbehaltOptionen'  => $vorbehaltOptionen,
             'armutTauschKarten'       => $armutTauschKarten,
             'vorbehaltSortierungen'  => $vorbehaltSortierungen,
+            'schweinchenAktiv'        => $schweinchen['schweinchen'],
+            'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
             'mercurePublicUrl'       => $this->mercurePublicUrl,
             'mercureTopic'           => $spiel ? $this->mercurePublisher->topic($spiel) : null,
         ]);
@@ -108,6 +111,7 @@ class SpielController extends AbstractController
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 
         $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
+        $schweinchen  = $this->schweinchenStatus($spiel);
 
         return $this->render('spieltisch/_spielzustand.html.twig', [
             'tisch'              => $tisch,
@@ -120,6 +124,8 @@ class SpielController extends AbstractController
             'vorbehaltOptionen'  => $vorbehaltOptionen,
             'armutTauschKarten'       => $armutTauschKarten,
             'vorbehaltSortierungen'  => $vorbehaltSortierungen,
+            'schweinchenAktiv'        => $schweinchen['schweinchen'],
+            'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
         ]);
     }
 
@@ -410,6 +416,16 @@ class SpielController extends AbstractController
     {
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
         return $this->handSortierenMitOrdnung($hand, $ordnung);
+    }
+
+    /** @return array{schweinchen: bool, superschweinchen: bool} */
+    private function schweinchenStatus(?object $spiel): array
+    {
+        if (!$spiel instanceof \App\Entity\Spiel) {
+            return ['schweinchen' => false, 'superschweinchen' => false];
+        }
+
+        return $this->trumpfOrdnungFactory->schweinchenStatus($spiel);
     }
 
     /** @return array<string, string[]> Varianten-Key → sortierte Karten-IDs */

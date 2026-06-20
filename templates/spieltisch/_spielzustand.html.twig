@@ -472,10 +472,10 @@
 
                 {% set maxStiche = tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
                 <p class="text-tisch-200 text-xs">Stich {{ angezeigteStichNr }}/{{ maxStiche }}</p>
-                {% if tisch.regelEinstellung('schweinchen') %}
-                    <p class="text-yellow-400 text-xs font-medium">
-                        {{ tisch.regelEinstellung('superschweinchen') ? 'Super-Schweinchen aktiv' : 'Schweinchen aktiv' }}
-                    </p>
+                {% if superschweinchenAktiv|default(false) %}
+                    <p class="text-yellow-400 text-xs font-medium">Super-Schweinchen aktiv</p>
+                {% elseif schweinchenAktiv|default(false) %}
+                    <p class="text-yellow-400 text-xs font-medium">Schweinchen aktiv</p>
                 {% endif %}
             </div>
 
