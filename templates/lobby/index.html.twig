@@ -9,21 +9,30 @@
     <aside class="lg:w-72 shrink-0">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Neuen Tisch erstellen</h2>
-            {{ form_start(erstellenForm, {attr: {class: 'space-y-4'}}) }}
-                <div>
-                    {{ form_label(erstellenForm.name, null, {label_attr: {class: 'form-label'}}) }}
-                    {{ form_widget(erstellenForm.name, {attr: {class: 'form-input'}}) }}
-                    {{ form_errors(erstellenForm.name) }}
-                </div>
-                <div>
-                    {{ form_label(erstellenForm.zugangsmodus, null, {label_attr: {class: 'form-label'}}) }}
-                    {{ form_widget(erstellenForm.zugangsmodus, {attr: {class: 'form-input'}}) }}
-                    {{ form_errors(erstellenForm.zugangsmodus) }}
-                </div>
-                <button type="submit" class="btn-primary w-full text-sm">
-                    Tisch erstellen
-                </button>
-            {{ form_end(erstellenForm) }}
+            {% if aktiverTisch %}
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    Du sitzt bereits an einem Tisch. Verlasse ihn zuerst, um einen neuen zu erstellen.
+                </p>
+                <a href="{{ path('app_spieltisch', {id: aktiverTisch.id}) }}" class="btn-primary w-full text-sm text-center block">
+                    Zu deinem Tisch
+                </a>
+            {% else %}
+                {{ form_start(erstellenForm, {attr: {class: 'space-y-4'}}) }}
+                    <div>
+                        {{ form_label(erstellenForm.name, null, {label_attr: {class: 'form-label'}}) }}
+                        {{ form_widget(erstellenForm.name, {attr: {class: 'form-input'}}) }}
+                        {{ form_errors(erstellenForm.name) }}
+                    </div>
+                    <div>
+                        {{ form_label(erstellenForm.zugangsmodus, null, {label_attr: {class: 'form-label'}}) }}
+                        {{ form_widget(erstellenForm.zugangsmodus, {attr: {class: 'form-input'}}) }}
+                        {{ form_errors(erstellenForm.zugangsmodus) }}
+                    </div>
+                    <button type="submit" class="btn-primary w-full text-sm">
+                        Tisch erstellen
+                    </button>
+                {{ form_end(erstellenForm) }}
+            {% endif %}
         </div>
     </aside>
 

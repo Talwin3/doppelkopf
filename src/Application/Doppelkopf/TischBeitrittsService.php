@@ -32,6 +32,10 @@ final class TischBeitrittsService
 
     public function erstelleTisch(User $ersteller, string $name, ZugangsModusTyp $zugangsmodus): Tisch
     {
+        if ($this->tischSpielerRepo->findAktiveMitgliedschaft($ersteller) !== null) {
+            throw TischZugangVerweigertException::weilAnAnderemTisch();
+        }
+
         $tisch = new Tisch();
         $tisch->setName($name);
         $tisch->setErsteller($ersteller);
@@ -60,6 +64,11 @@ final class TischBeitrittsService
 
         if ($this->tischSpielerRepo->findByTischAndUser($tisch, $user) !== null) {
             throw TischZugangVerweigertException::weilBereitsAmTisch();
+        }
+
+        // Ein-Tisch-Regel: kein Beitritt, wenn bereits an einem anderen Tisch aktiv
+        if ($this->tischSpielerRepo->findAktiveMitgliedschaft($user) !== null) {
+            throw TischZugangVerweigertException::weilAnAnderemTisch();
         }
 
         if ($tisch->getZugangsmodus() === ZugangsModusTyp::PRIVAT) {

@@ -25,4 +25,9 @@ final class TischZugangVerweigertException extends \RuntimeException
     {
         return new self('Du bist bereits an diesem Tisch.');
     }
+
+    public static function weilAnAnderemTisch(): self
+    {
+        return new self('Du sitzt bereits an einem anderen Tisch. Verlasse ihn zuerst.');
+    }
 }

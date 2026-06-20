@@ -7,6 +7,7 @@ namespace App\Repository;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Entity\User;
+use App\Enum\TischStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -28,6 +29,23 @@ class TischSpielerRepository extends ServiceEntityRepository
             ->andWhere('ts.user = :user')
             ->setParameter('tisch', $tisch)
             ->setParameter('user', $user)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * Findet die aktive Tisch-Mitgliedschaft eines Users (Sitzplatz oder Warteschlange)
+     * an einem noch nicht beendeten Tisch. Grundlage der Ein-Tisch-Regel.
+     */
+    public function findAktiveMitgliedschaft(User $user): ?TischSpieler
+    {
+        return $this->createQueryBuilder('ts')
+            ->join('ts.tisch', 't')
+            ->where('ts.user = :user')
+            ->andWhere('t.status != :beendet')
+            ->setParameter('user', $user)
+            ->setParameter('beendet', TischStatus::BEENDET)
+            ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
     }

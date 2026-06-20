@@ -84,6 +84,10 @@
                                 Verlassen
                             </button>
                         </form>
+                    {% elseif aktiverTisch is defined and aktiverTisch %}
+                        <span class="text-sm text-gray-400 dark:text-gray-500 text-center" title="Du sitzt bereits an einem anderen Tisch">
+                            An anderem Tisch
+                        </span>
                     {% elseif not tisch.istGesperrt %}
                         <form method="post" action="{{ path('app_tisch_beitreten', {id: tisch.id}) }}">
                             <input type="hidden" name="_token" value="{{ csrf_token('tisch_beitreten_' ~ tisch.id) }}">
