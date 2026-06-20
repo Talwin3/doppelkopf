@@ -4,22 +4,22 @@
 
 {% block body %}
 <div class="mb-8">
-    <h1 class="text-2xl font-bold text-gray-900">Admin-Dashboard</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin-Dashboard</h1>
 </div>
 
 <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-10">
-    <div class="bg-white overflow-hidden shadow rounded-lg px-6 py-5">
-        <p class="text-sm font-medium text-gray-500">Registrierte Benutzer</p>
-        <p class="mt-1 text-3xl font-bold text-gray-900">{{ gesamtBenutzer }}</p>
+    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg px-6 py-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Registrierte Benutzer</p>
+        <p class="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">{{ gesamtBenutzer }}</p>
     </div>
-    <div class="bg-white overflow-hidden shadow rounded-lg px-6 py-5">
-        <p class="text-sm font-medium text-gray-500">Verifizierte Benutzer</p>
-        <p class="mt-1 text-3xl font-bold text-tisch-700">{{ verifiziert }}</p>
+    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg px-6 py-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Verifizierte Benutzer</p>
+        <p class="mt-1 text-3xl font-bold text-tisch-700 dark:text-tisch-400">{{ verifiziert }}</p>
     </div>
-    <div class="bg-white overflow-hidden shadow rounded-lg px-6 py-5">
-        <p class="text-sm font-medium text-gray-500">Aktive Tische</p>
-        <p class="mt-1 text-3xl font-bold text-gray-900">—</p>
-        <p class="text-xs text-gray-400 mt-1">verfügbar ab Phase 1</p>
+    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg px-6 py-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Aktive Tische</p>
+        <p class="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">—</p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">verfügbar ab Phase 1</p>
     </div>
 </div>
 

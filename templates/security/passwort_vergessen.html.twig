@@ -5,7 +5,7 @@
 {% block body %}
 <div class="flex min-h-[60vh] items-center justify-center">
     <div class="w-full max-w-sm">
-        <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">Passwort zurücksetzen</h1>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-50 text-center mb-2">Passwort zurücksetzen</h1>
 
         {% if gesendet %}
             <div class="flash-success mt-6">
@@ -13,18 +13,18 @@
                 Bitte prüfe auch deinen Spam-Ordner.
             </div>
             <div class="mt-6 text-center">
-                <a href="{{ path('app_login') }}" class="text-tisch-700 hover:text-tisch-900 text-sm font-medium">
+                <a href="{{ path('app_login') }}" class="text-tisch-700 dark:text-tisch-400 hover:text-tisch-900 dark:hover:text-tisch-300 text-sm font-medium">
                     Zurück zum Login
                 </a>
             </div>
         {% else %}
-            <p class="text-sm text-gray-500 text-center mb-8">
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">
                 Gib deine E-Mail-Adresse ein. Wir schicken dir einen Link zum Zurücksetzen.
             </p>
 
             <form method="post" class="space-y-5">
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">E-Mail-Adresse</label>
+                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail-Adresse</label>
                     <input type="email" id="email" name="email"
                            class="form-input" autocomplete="email" required autofocus>
                 </div>
@@ -35,7 +35,7 @@
             </form>
 
             <p class="mt-6 text-center">
-                <a href="{{ path('app_login') }}" class="text-sm text-tisch-700 hover:text-tisch-900">
+                <a href="{{ path('app_login') }}" class="text-sm text-tisch-700 dark:text-tisch-400 hover:text-tisch-900 dark:hover:text-tisch-300">
                     Zurück zum Login
                 </a>
             </p>
