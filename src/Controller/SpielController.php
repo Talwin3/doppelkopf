@@ -73,9 +73,10 @@ class SpielController extends AbstractController
             return $this->redirectToRoute('app_lobby');
         }
 
-        $spiel = $tisch->anzahlAktiveSpieler() === 4
-            ? $this->spielStartService->starten($tisch)
-            : $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+        if ($spiel === null && $tisch->anzahlAktiveSpieler() === 4) {
+            $spiel = $this->spielStartService->starten($tisch);
+        }
 
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 

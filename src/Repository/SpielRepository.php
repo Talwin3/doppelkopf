@@ -27,6 +27,8 @@ class SpielRepository extends ServiceEntityRepository
             ->andWhere('s.status IN (:status)')
             ->setParameter('tisch', $tisch)
             ->setParameter('status', [SpielStatus::VORBEHALT, SpielStatus::LAUFEND, SpielStatus::ARMUT_ANFRAGE, SpielStatus::ARMUT_TAUSCH])
+            ->orderBy('s.id', 'DESC')
+            ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
     }
