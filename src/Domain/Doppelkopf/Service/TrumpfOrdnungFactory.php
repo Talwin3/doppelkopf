@@ -30,36 +30,58 @@ final class TrumpfOrdnungFactory
             return $basis;
         }
 
-        return new SchweinchentTrumpfOrdnung($basis, $status['superschweinchen']);
+        // Trumpffarbe ist hier garantiert gesetzt (sonst wäre schweinchen=false).
+        $trumpffarbe = $this->trumpffarbe($variante);
+
+        return new SchweinchentTrumpfOrdnung($basis, $trumpffarbe, $status['superschweinchen']);
+    }
+
+    /**
+     * Trumpffarbe, in der Schweinchen/Superschweinchen entstehen können:
+     * Karo im Normalspiel/Hochzeit/Karo-Solo, sonst die jeweilige Farb-Solo-Farbe.
+     * Buben-/Damen-/Fleischlos-Solo haben keine Trumpffarbe (→ null, kein Schweinchen).
+     */
+    private function trumpffarbe(SpielVariante $variante): ?Kartenfarbe
+    {
+        return match ($variante) {
+            SpielVariante::NORMALSPIEL, SpielVariante::HOCHZEIT, SpielVariante::SOLO_KARO => Kartenfarbe::KARO,
+            SpielVariante::SOLO_HERZ  => Kartenfarbe::HERZ,
+            SpielVariante::SOLO_PIK   => Kartenfarbe::PIK,
+            SpielVariante::SOLO_KREUZ => Kartenfarbe::KREUZ,
+            default => null,
+        };
     }
 
     /**
      * Ermittelt, ob in diesem Spiel tatsächlich ein Schweinchen bzw. Superschweinchen vorliegt.
      *
-     * - Schweinchen: Regel aktiv (nur Normalspiel/Hochzeit) UND ein Spieler hält beide
-     *   Trumpf-Asse (Karo-Asse) in der Starthand.
-     * - Superschweinchen: zusätzlich Regel aktiv UND ein Spieler hält beide Trumpf-Neuner
-     *   (Karo-Neuner) — nicht zwingend derselbe Spieler wie beim Schweinchen.
+     * - Schweinchen: Regel aktiv UND ein Spieler hält beide Trumpffarb-Asse in der Starthand.
+     * - Superschweinchen: zusätzlich Regel aktiv UND ein Spieler hält beide Trumpffarb-Neuner
+     *   — nicht zwingend derselbe Spieler wie beim Schweinchen.
+     *
+     * Gilt für Normalspiel/Hochzeit (Karo) sowie Farb-Soli (Solo-Farbe). Buben-/Damen-/
+     * Fleischlos-Solo haben keine Trumpffarbe und damit nie ein Schweinchen.
      *
      * @return array{schweinchen: bool, superschweinchen: bool}
      */
     public function schweinchenStatus(Spiel $spiel): array
     {
         $variante = $spiel->getVariante();
+        $farbe    = $variante !== null ? $this->trumpffarbe($variante) : null;
 
-        // Schweinchen gilt nur bei Normalspiel und Hochzeit (nicht in Soli)
-        if ($variante !== SpielVariante::NORMALSPIEL && $variante !== SpielVariante::HOCHZEIT) {
+        if ($farbe === null) {
             return ['schweinchen' => false, 'superschweinchen' => false];
         }
 
         $regel = $spiel->getTisch()->getRegelEinstellungen();
+        $f     = $farbe->value;
 
         $schweinchen = !empty($regel['schweinchen'])
-            && $this->einSpielerHaeltBeide($spiel, 'KARO_ASS_1', 'KARO_ASS_2');
+            && $this->einSpielerHaeltBeide($spiel, $f . '_ASS_1', $f . '_ASS_2');
 
         $superschweinchen = $schweinchen
             && !empty($regel['superschweinchen'])
-            && $this->einSpielerHaeltBeide($spiel, 'KARO_NEUN_1', 'KARO_NEUN_2');
+            && $this->einSpielerHaeltBeide($spiel, $f . '_NEUN_1', $f . '_NEUN_2');
 
         return ['schweinchen' => $schweinchen, 'superschweinchen' => $superschweinchen];
     }
