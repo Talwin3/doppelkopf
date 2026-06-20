@@ -146,4 +146,20 @@ class Spiel
         $nr = $this->aktuellerStichNr;
         return $this->gespielteKarten->filter(fn(GespielteKarte $gk) => $gk->getStichNr() === $nr);
     }
+
+    /**
+     * Karten für die Tischmitte: der aktuelle Stich – oder, solange dieser noch
+     * leer ist, der gerade abgeschlossene vorherige Stich. So bleibt die vierte
+     * Karte sichtbar, bis zum nächsten Stich angespielt wird.
+     */
+    public function getAnzuzeigendeStichKarten(): Collection
+    {
+        $aktuelle = $this->getAktuelleStichKarten();
+        if (!$aktuelle->isEmpty() || $this->aktuellerStichNr <= 1) {
+            return $aktuelle;
+        }
+
+        $vorherigeNr = $this->aktuellerStichNr - 1;
+        return $this->gespielteKarten->filter(fn(GespielteKarte $gk) => $gk->getStichNr() === $vorherigeNr);
+    }
 }

@@ -351,7 +351,9 @@
     {% set obererSitz  = (linkerSitz % 4) + 1 %}
     {% set rechterSitz = (obererSitz % 4) + 1 %}
 
-    {% set stichKarten = spiel.aktuelleStichKarten %}
+    {% set zeigtAbgeschlossenenStich = spiel.aktuelleStichKarten is empty and spiel.aktuellerStichNr > 1 %}
+    {% set stichKarten = spiel.anzuzeigendeStichKarten %}
+    {% set angezeigteStichNr = zeigtAbgeschlossenenStich ? spiel.aktuellerStichNr - 1 : spiel.aktuellerStichNr %}
     {% set alleGespielten = spiel.gespielteKarten %}
     {% set maxKarten = spiel.tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
 
@@ -469,7 +471,7 @@
                 {% endif %}
 
                 {% set maxStiche = tisch.regelEinstellung('ohne_neuner') ? 10 : 12 %}
-                <p class="text-tisch-200 text-xs">Stich {{ spiel.aktuellerStichNr }}/{{ maxStiche }}</p>
+                <p class="text-tisch-200 text-xs">Stich {{ angezeigteStichNr }}/{{ maxStiche }}</p>
                 {% if tisch.regelEinstellung('schweinchen') %}
                     <p class="text-yellow-400 text-xs font-medium">
                         {{ tisch.regelEinstellung('superschweinchen') ? 'Super-Schweinchen aktiv' : 'Schweinchen aktiv' }}

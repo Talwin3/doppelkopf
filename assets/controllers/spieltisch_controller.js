@@ -15,6 +15,10 @@ export default class extends Controller {
     this.sound = new SoundEngine()
     this._warMeinZug = false
     this._letzteEigeneSpieleZeit = 0
+    // Abgeschlossenen Stich (inkl. vierter Karte) mindestens so lange zeigen,
+    // bevor der nächste Zug die Tischmitte überschreibt.
+    this._STICH_ANZEIGE_MS = 1500
+    this._stichAbschlussGezeigtAm = null
 
     this._soundToggleAktualisieren()
 
@@ -36,6 +40,16 @@ export default class extends Controller {
   }
 
   async aktualisieren(daten) {
+    // Gerade abgeschlossenen Stich noch eine Mindestzeit stehen lassen,
+    // bevor das nächste Event die Tischmitte (und die vierte Karte) ersetzt.
+    if (this._stichAbschlussGezeigtAm !== null) {
+      const rest = this._STICH_ANZEIGE_MS - (Date.now() - this._stichAbschlussGezeigtAm)
+      this._stichAbschlussGezeigtAm = null
+      if (rest > 0) {
+        await new Promise((resolve) => setTimeout(resolve, rest))
+      }
+    }
+
     // Sofort-Sounds (bevor DOM-Update)
     this._spieleEreignisSound(daten)
 
@@ -49,6 +63,10 @@ export default class extends Controller {
 
       // Zustands-Sounds (nach DOM-Update)
       this._spieleZustandsSound(daten)
+
+      if (daten.typ === 'STICH_ABGESCHLOSSEN') {
+        this._stichAbschlussGezeigtAm = Date.now()
+      }
 
       if (daten.typ === 'SPIEL_BEENDET') {
         this.eventSource?.close()
