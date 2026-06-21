@@ -6,6 +6,9 @@
 # Mercure SQLite-Datenbank (Laufzeit-Datei)
 mercure.db
 
+# Playwright MCP Test-Artefakte
+.playwright-mcp/
+
 # IDE
 .idea/
 .vscode/

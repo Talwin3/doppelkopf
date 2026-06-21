@@ -17,7 +17,11 @@ Encore
     .enableSingleRuntimeChunk()
     .cleanupOutputBeforeBuild()
     .enableSourceMaps(!Encore.isProduction())
-    .enableVersioning(Encore.isProduction())
+    // Versioning auch im Dev-Modus: Caddy liefert .js/.css mit
+    // "Cache-Control: immutable" aus (siehe Caddyfile @static). Ohne Hash im
+    // Dateinamen friert der Browser app.js dauerhaft ein und zieht Code-Änderungen
+    // selbst per Hard-Reload nicht. Mit Hash erzwingt jeder Build eine neue URL.
+    .enableVersioning(true)
 
     // PostCSS für Tailwind
     .enablePostCssLoader()

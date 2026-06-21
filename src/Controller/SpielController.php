@@ -97,7 +97,9 @@ class SpielController extends AbstractController
             'schweinchenAktiv'        => $schweinchen['schweinchen'],
             'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
             'mercurePublicUrl'       => $this->mercurePublicUrl,
-            'mercureTopic'           => $spiel ? $this->mercurePublisher->topic($spiel) : null,
+            // Tischbezogenes Topic: bleibt über Spielgrenzen hinweg stabil, damit der
+            // Client auch den Auto-Start des nächsten Spiels nach dem Punktestand mitbekommt.
+            'mercureTopic'           => $this->mercurePublisher->topicFuerTisch($tisch),
         ]);
     }
 

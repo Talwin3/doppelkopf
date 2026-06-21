@@ -67,10 +67,9 @@ export default class extends Controller {
       if (daten.typ === 'STICH_ABGESCHLOSSEN') {
         this._stichAbschlussGezeigtAm = Date.now()
       }
-
-      if (daten.typ === 'SPIEL_BEENDET') {
-        this.eventSource?.close()
-      }
+      // Verbindung bei SPIEL_BEENDET bewusst offen lassen: Das Topic ist
+      // tischbezogen, daher kommt über dieselbe EventSource auch der Auto-Start
+      // des nächsten Spiels (KARTEN_AUSGETEILT) an und der Zustand wird neu geladen.
     } catch {
       // Nächstes Event versucht es erneut
     }

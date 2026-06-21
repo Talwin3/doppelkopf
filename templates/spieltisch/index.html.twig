@@ -11,8 +11,8 @@
 {% endfor %}
 <div class="bg-tisch-900 rounded-2xl shadow-2xl min-h-[calc(100vh-12rem)] p-4 flex flex-col"
      data-controller="spieltisch"
-     data-spieltisch-mercure-url-value="{{ spiel and mercureTopic ? mercurePublicUrl : '' }}"
-     data-spieltisch-topic-value="{{ spiel and mercureTopic ? mercureTopic : '' }}"
+     data-spieltisch-mercure-url-value="{{ mercureTopic ? mercurePublicUrl : '' }}"
+     data-spieltisch-topic-value="{{ mercureTopic ?: '' }}"
      data-spieltisch-zustand-url-value="{{ path('app_spieltisch_zustand', {id: tisch.id}) }}"
      data-spieltisch-mein-sitzplatz-value="{{ meinSitzplatz }}">
 

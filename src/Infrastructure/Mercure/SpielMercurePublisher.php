@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Mercure;
 
 use App\Entity\Spiel;
+use App\Entity\Tisch;
 use App\Infrastructure\Logger\MercureLogger;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
@@ -92,6 +93,17 @@ final class SpielMercurePublisher
 
     public function topic(Spiel $spiel): string
     {
-        return 'https://doppelkopf.de/spiel/' . $spiel->getId();
+        return $this->topicFuerTisch($spiel->getTisch());
+    }
+
+    /**
+     * Tischbezogenes (nicht spielbezogenes) Topic: bleibt über Spielgrenzen hinweg
+     * stabil, damit ein Client am Tisch auch den Start des nächsten Spiels mitbekommt
+     * (Auto-Start nach dem Punktestand) und nicht auf das Topic des beendeten Spiels
+     * abonniert bleibt.
+     */
+    public function topicFuerTisch(Tisch $tisch): string
+    {
+        return 'https://doppelkopf.de/tisch/' . $tisch->getId();
     }
 }
