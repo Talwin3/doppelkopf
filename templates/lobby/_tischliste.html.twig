@@ -9,11 +9,16 @@
             {% set aktiveSpieler = tisch.aktiveSpieler.count %}
             {% set wartend = tisch.warteschlange.count %}
             {% set istAmTisch = false %}
+            {% set sitztAktiv = false %}
             {% for spieler in tisch.spieler %}
                 {% if app.user and spieler.user and spieler.user.id == app.user.id %}
                     {% set istAmTisch = true %}
+                    {% if spieler.sitzplatz is not null %}
+                        {% set sitztAktiv = true %}
+                    {% endif %}
                 {% endif %}
             {% endfor %}
+            {% set verlassenGesperrt = sitztAktiv and tisch.status.value == 'LAUFEND' %}
 
             <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
 
@@ -77,13 +82,19 @@
                         <a href="{{ path('app_spieltisch', {id: tisch.id}) }}" class="btn-primary text-sm text-center">
                             Zum Spieltisch
                         </a>
-                        <form method="post" action="{{ path('app_tisch_verlassen', {id: tisch.id}) }}">
-                            <input type="hidden" name="_token" value="{{ csrf_token('tisch_verlassen_' ~ tisch.id) }}">
-                            <button type="submit"
-                                    class="w-full rounded-lg px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 transition-colors">
-                                Verlassen
-                            </button>
-                        </form>
+                        {% if verlassenGesperrt %}
+                            <span class="text-xs text-gray-400 dark:text-gray-500 text-center" title="Verlassen erst nach dem laufenden Spiel möglich">
+                                Im Spiel – nutze „Nach Spiel verlassen“
+                            </span>
+                        {% else %}
+                            <form method="post" action="{{ path('app_tisch_verlassen', {id: tisch.id}) }}">
+                                <input type="hidden" name="_token" value="{{ csrf_token('tisch_verlassen_' ~ tisch.id) }}">
+                                <button type="submit"
+                                        class="w-full rounded-lg px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 transition-colors">
+                                    Verlassen
+                                </button>
+                            </form>
+                        {% endif %}
                     {% elseif aktiverTisch is defined and aktiverTisch %}
                         <span class="text-sm text-gray-400 dark:text-gray-500 text-center" title="Du sitzt bereits an einem anderen Tisch">
                             An anderem Tisch

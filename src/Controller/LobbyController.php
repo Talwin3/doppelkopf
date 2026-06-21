@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Application\Doppelkopf\TischBeitrittsService;
 use App\Domain\Doppelkopf\Exception\TischGesperrtException;
+use App\Domain\Doppelkopf\Exception\TischVerlassenGesperrtException;
 use App\Domain\Doppelkopf\Exception\TischZugangVerweigertException;
 use App\Entity\Tisch;
 use App\Entity\User;
@@ -125,8 +126,12 @@ class LobbyController extends AbstractController
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
-        $this->beitrittsService->verlassen($tisch, $user);
-        $this->addFlash('success', 'Du hast den Tisch verlassen.');
+        try {
+            $this->beitrittsService->verlassen($tisch, $user);
+            $this->addFlash('success', 'Du hast den Tisch verlassen.');
+        } catch (TischVerlassenGesperrtException $e) {
+            $this->addFlash('error', $e->getMessage());
+        }
 
         return $this->redirectToRoute('app_lobby');
     }

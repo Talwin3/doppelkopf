@@ -124,9 +124,23 @@ final class ProfilService
     {
         $shortId = substr(str_replace('-', '', (string) $user->getId()), 0, 10);
 
-        // Alle aktiven Tisch-Sitzplätze freigeben
+        // Alle aktiven Tisch-Sitzplätze freigeben. Betroffene Tische merken, um sie
+        // danach ggf. als menschenlos zu markieren (sonst räumt der Worker sie nie auf).
+        // Laufende Spiele werden vom Worker per Disconnect-Timeout zu Ende gespielt.
+        $betroffeneTische = [];
         foreach ($this->tischSpielerRepo->findBy(['user' => $user]) as $ts) {
+            $tisch = $ts->getTisch();
+            $betroffeneTische[(string) $tisch->getId()] = $tisch;
             $this->em->remove($ts);
+            // Auch aus der In-Memory-Collection lösen, damit hatMenschAmTisch() unten stimmt.
+            $tisch->getSpieler()->removeElement($ts);
+        }
+        $this->em->flush();
+
+        foreach ($betroffeneTische as $tisch) {
+            if (!$tisch->hatMenschAmTisch() && $tisch->getMenschenloseSeitAm() === null) {
+                $tisch->setMenschenloseSeitAm(new \DateTimeImmutable());
+            }
         }
 
         // Spiel-Teilnahmen anonymisieren (User-Bezug kappen)

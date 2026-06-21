@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Domain\Doppelkopf\Exception\TischGesperrtException;
+use App\Domain\Doppelkopf\Exception\TischVerlassenGesperrtException;
 use App\Domain\Doppelkopf\Exception\TischZugangVerweigertException;
 use App\Entity\Spiel;
 use App\Entity\Tisch;
@@ -119,13 +120,35 @@ final class TischBeitrittsService
             return;
         }
 
+        // Ein aktiver (sitzender) Spieler darf einen Tisch nicht verlassen,
+        // solange ein Spiel läuft — das würde das laufende Spiel zerstören.
+        // Wer raus will, nutzt „Nach Spiel verlassen“ (moechteNachSpielVerlassen).
+        if ($tischSpieler->istAktiv() && $this->spielRepo->findLaufendesSpielFuerTisch($tisch) !== null) {
+            throw new TischVerlassenGesperrtException();
+        }
+
         $freigegebenerPlatz = $tischSpieler->getSitzplatz();
 
         $this->em->remove($tischSpieler);
+        // Auch aus der In-Memory-Collection lösen, damit hatMenschAmTisch() unten
+        // den korrekten Stand sieht (em->remove allein leert die Collection nicht).
+        $tisch->getSpieler()->removeElement($tischSpieler);
         $this->em->flush();
 
         if ($freigegebenerPlatz !== null) {
             $this->warteschlangeNachruecken($tisch, $freigegebenerPlatz);
+        }
+
+        // Tisch als menschenlos markieren, wenn der letzte Mensch gegangen ist —
+        // sonst räumt der Worker (findMenschenlose) den Tisch nie auf.
+        if (!$tisch->hatMenschAmTisch()) {
+            if ($tisch->getMenschenloseSeitAm() === null) {
+                $tisch->setMenschenloseSeitAm(new \DateTimeImmutable());
+                $this->em->flush();
+            }
+        } elseif ($tisch->getMenschenloseSeitAm() !== null) {
+            $tisch->setMenschenloseSeitAm(null);
+            $this->em->flush();
         }
 
         $this->mercurePublisher->lobbyAktualisiert();
