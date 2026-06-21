@@ -18,10 +18,11 @@ final class TrumpfOrdnungFactory
 {
     public function fuerSpiel(Spiel $spiel): TrumpfOrdnung
     {
-        $variante = $spiel->getVariante();
-        if ($variante === null) {
-            return new NormalspielTrumpfOrdnung(); // Fallback während Vorbehaltsrunde
-        }
+        // Während der Vorbehaltsrunde steht die Variante noch nicht fest (null).
+        // Für die Sortierung gehen wir dann vom Normalspiel aus: Karo ist Trumpf,
+        // und ein Schweinchen ist allein aus der Starthand bestimmbar — so erscheinen
+        // die Karo-Asse bereits beim Gesund/Vorbehalt-Blatt korrekt als höchster Trumpf.
+        $variante = $spiel->getVariante() ?? SpielVariante::NORMALSPIEL;
 
         $basis  = $this->fuer($variante);
         $status = $this->schweinchenStatus($spiel);
@@ -66,8 +67,9 @@ final class TrumpfOrdnungFactory
      */
     public function schweinchenStatus(Spiel $spiel): array
     {
-        $variante = $spiel->getVariante();
-        $farbe    = $variante !== null ? $this->trumpffarbe($variante) : null;
+        // Null-Variante (Vorbehaltsrunde) wie Normalspiel behandeln: Trumpffarbe Karo.
+        $variante = $spiel->getVariante() ?? SpielVariante::NORMALSPIEL;
+        $farbe    = $this->trumpffarbe($variante);
 
         if ($farbe === null) {
             return ['schweinchen' => false, 'superschweinchen' => false];
