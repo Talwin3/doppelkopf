@@ -28,7 +28,7 @@ class Spiel
     #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
     private ?SpielVariante $variante = null;
 
-    #[ORM\Column(length: 10, enumType: SpielStatus::class)]
+    #[ORM\Column(length: 20, enumType: SpielStatus::class)]
     private SpielStatus $status = SpielStatus::LAUFEND;
 
     /** Sitzplatz (1–4) des Spielers, der als nächstes eine Karte spielen muss. */

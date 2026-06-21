@@ -65,6 +65,11 @@ services:
       - vendor_data:/app/vendor
     environment:
       APP_ENV: "${APP_ENV:-dev}"
+      # Debug aus: Der Worker ist eine Dauerschleife. Mit kernel.debug=true sammelt
+      # Doctrines BacktraceDebugDataHolder bei jeder Query unbegrenzt Backtraces im
+      # Speicher (em->clear() leert das nicht) -> OOM-Crash mitten in der Spiellogik,
+      # der z. B. die Vorbehalt-Auflösung halb ausgeführt zurücklässt.
+      APP_DEBUG: "0"
       APP_SECRET: "${APP_SECRET}"
       DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
       MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"

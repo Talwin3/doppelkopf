@@ -84,7 +84,21 @@ final class VorbehaltService
     public function deklarierenAlsBot(Spiel $spiel, int $sitzplatz): void
     {
         $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
-        if ($teilnehmer === null || $teilnehmer->isVorbehaltDeklariert()) {
+        if ($teilnehmer === null) {
+            return;
+        }
+
+        if ($teilnehmer->isVorbehaltDeklariert()) {
+            // Selbstheilung: Haben bereits alle deklariert, hängt das Spiel aber noch
+            // in der Vorbehaltsrunde (z. B. weil eine frühere Auflösung abbrach), die
+            // Auflösung erneut anstoßen statt den Bot endlos wirkungslos aufzurufen.
+            $alleDeklariert = count(array_filter(
+                $spiel->getTeilnehmer()->toArray(),
+                fn($t) => $t->isVorbehaltDeklariert(),
+            )) === 4;
+            if ($alleDeklariert) {
+                $this->typResolver->aufloesen($spiel);
+            }
             return;
         }
 
