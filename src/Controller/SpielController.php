@@ -444,7 +444,7 @@ class SpielController extends AbstractController
 
         $result = [];
         foreach ($varianten as $key => $variante) {
-            $ordnung = $this->trumpfOrdnungFactory->fuer($variante);
+            $ordnung = $this->trumpfOrdnungFactory->fuerVariante($spiel, $variante);
             $sortiert = $this->handSortierenMitOrdnung($hand, $ordnung);
             $result[$key] = array_map(fn(Karte $k) => $k->id(), $sortiert);
         }

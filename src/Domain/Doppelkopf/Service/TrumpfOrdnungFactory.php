@@ -24,8 +24,20 @@ final class TrumpfOrdnungFactory
         // die Karo-Asse bereits beim Gesund/Vorbehalt-Blatt korrekt als höchster Trumpf.
         $variante = $spiel->getVariante() ?? SpielVariante::NORMALSPIEL;
 
+        return $this->fuerVariante($spiel, $variante);
+    }
+
+    /**
+     * TrumpfOrdnung für eine (ggf. hypothetische) Variante inkl. Schweinchen/
+     * Superschweinchen. Dient u. a. den Vorbehalt-Vorschauen, die zeigen, wie das
+     * Blatt bei Wahl von Hochzeit/Farb-Solo sortiert würde — dort entstehen
+     * Schweinchen in der jeweiligen Trumpffarbe (Karo bei Hochzeit/Karo-Solo,
+     * sonst die Solo-Farbe; Buben-/Damen-/Fleischlos-Solo haben keine Trumpffarbe).
+     */
+    public function fuerVariante(Spiel $spiel, SpielVariante $variante): TrumpfOrdnung
+    {
         $basis  = $this->fuer($variante);
-        $status = $this->schweinchenStatus($spiel);
+        $status = $this->schweinchenStatusFuerVariante($spiel, $variante);
 
         if (!$status['schweinchen']) {
             return $basis;
@@ -69,7 +81,20 @@ final class TrumpfOrdnungFactory
     {
         // Null-Variante (Vorbehaltsrunde) wie Normalspiel behandeln: Trumpffarbe Karo.
         $variante = $spiel->getVariante() ?? SpielVariante::NORMALSPIEL;
-        $farbe    = $this->trumpffarbe($variante);
+
+        return $this->schweinchenStatusFuerVariante($spiel, $variante);
+    }
+
+    /**
+     * Wie {@see schweinchenStatus()}, aber für eine explizit vorgegebene Variante —
+     * nötig für die Vorbehalt-Vorschauen, in denen die endgültige Variante noch
+     * offen ist und je Vorschau-Variante eine andere Trumpffarbe gilt.
+     *
+     * @return array{schweinchen: bool, superschweinchen: bool}
+     */
+    public function schweinchenStatusFuerVariante(Spiel $spiel, SpielVariante $variante): array
+    {
+        $farbe = $this->trumpffarbe($variante);
 
         if ($farbe === null) {
             return ['schweinchen' => false, 'superschweinchen' => false];
