@@ -20,7 +20,7 @@ enum Kartendeck: string
     /** Systemweiter Default für neue Nutzer. Hier zentral änderbar. */
     public static function default(): self
     {
-        return self::BELLOT;
+        return self::KNOLL;
     }
 
     /** Toleranter Lookup: unbekannte/Alt-Werte fallen auf den Default zurück. */

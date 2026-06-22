@@ -62,8 +62,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      * Bevorzugtes Kartendeck (Wert eines {@see Kartendeck}-Falls).
      * Unbekannte/Alt-Werte fallen über {@see getKartendeck()} auf den Default zurück.
      */
-    #[ORM\Column(length: 20, options: ['default' => 'BELLOT'])]
-    private string $kartenbildPraeferenz = 'BELLOT';
+    #[ORM\Column(length: 20, options: ['default' => 'KNOLL'])]
+    private string $kartenbildPraeferenz = 'KNOLL';
 
     /** Letzter Zeitpunkt der Benutzernamen-Änderung (für 7-Tage-Cooldown). */
     #[ORM\Column(nullable: true)]
