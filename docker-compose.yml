@@ -8,23 +8,21 @@ services:
       target: dev
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"        # HTTP/3
+      - "8443:8443"          # App im Browser: http://localhost:8443 (eigener Port, kollidiert nicht mit anderem lokalen Webserver)
     volumes:
       - .:/app
       - vendor_data:/app/vendor   # Eigenes Volume: composer install läuft im Container (PHP 8.3)
       - caddy_data:/data
       - caddy_config:/config
     environment:
-      SERVER_NAME: "${SERVER_NAME:-localhost}"
+      SERVER_NAME: "${SERVER_NAME:-http://localhost:8443}"
       APP_ENV: "${APP_ENV:-dev}"
       APP_SECRET: "${APP_SECRET}"
       DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
       MAILER_DSN: "${MAILER_DSN:-smtp://localhost:1025}"
       # Mercure – integriert in FrankenPHP
       MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"
-      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost/.well-known/mercure}"
+      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost:8443/.well-known/mercure}"
       MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
       MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
       # Bot-Service
@@ -73,7 +71,7 @@ services:
       APP_SECRET: "${APP_SECRET}"
       DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
       MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"
-      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost/.well-known/mercure}"
+      MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost:8443/.well-known/mercure}"
       MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
       MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
       BOT_API_URL: "http://bot:8001"
