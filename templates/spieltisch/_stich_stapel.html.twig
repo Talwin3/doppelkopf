@@ -3,6 +3,9 @@
   Erscheint ab dem ersten gewonnenen Stich. Mouse-Over zeigt die Augensumme,
   sofern augenAnzeige aktiv ist (Tisch-Einstellung).
 
+  Selbst gezeichnetes SVG (deck-unabhängig, keine externen Assets/Lizenzen):
+  drei versetzte Kartenrücken als Pile.
+
   Parameter:
     anzahl       (int)  Anzahl gewonnener Stiche
     augen        (int)  Summe der Augen aller gewonnenen Stiche
@@ -10,15 +13,19 @@
 #}
 {% set anzahl = anzahl ?? 0 %}
 {% if anzahl > 0 %}
-    {% set sichtbar = min(anzahl, 6) %}
-    <div class="relative flex items-center"
+    <div class="relative inline-flex items-center"
          {% if augenAnzeige ?? true %}title="{{ augen ?? 0 }} Augen aus {{ anzahl }} {{ anzahl == 1 ? 'Stich' : 'Stichen' }}"{% endif %}>
-        {% for i in 1..sichtbar %}
-            <div class="spielkarte spielkarte--klein spielkarte--ruecken {{ i > 1 ? '-ml-4' : '' }}"
-                 style="z-index: {{ i }}">
-                {{ karten_ruecken_svg() }}
-            </div>
-        {% endfor %}
+        <svg viewBox="0 0 44 56" class="stich-stapel-svg" role="img"
+             aria-label="{{ anzahl }} gewonnene {{ anzahl == 1 ? 'Stich' : 'Stiche' }}">
+            {# untere Karten – erzeugen die Stapel-Tiefe #}
+            <rect x="8" y="10" width="32" height="44" rx="3" fill="#7a1230" stroke="#f8fafc" stroke-width="1.2"/>
+            <rect x="4" y="5"  width="32" height="44" rx="3" fill="#8e1538" stroke="#f8fafc" stroke-width="1.2"/>
+            {# oberste Karte mit Rücken-Muster #}
+            <rect x="0" y="0" width="32" height="44" rx="3" fill="#9f1239" stroke="#f8fafc" stroke-width="1.2"/>
+            <rect x="3" y="3" width="26" height="38" rx="2" fill="none" stroke="#fbcfe8" stroke-width="1"/>
+            <path d="M16 8 L24 22 L16 36 L8 22 Z" fill="none" stroke="#fbcfe8" stroke-width="1"/>
+            <path d="M16 14 L20 22 L16 30 L12 22 Z" fill="#fbcfe8" opacity="0.55"/>
+        </svg>
         <span class="ml-1 inline-flex items-center justify-center text-[10px] font-bold text-white bg-tisch-900/80 rounded-full min-w-4 h-4 px-1">
             {{ anzahl }}
         </span>

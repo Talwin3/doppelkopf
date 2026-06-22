@@ -93,6 +93,11 @@
         @apply w-full h-full;
     }
 
+    /* Verdeckter Stich-Stapel (gewonnene Stiche) – selbst gezeichnetes Pile-SVG */
+    .stich-stapel-svg {
+        @apply w-8 h-10 drop-shadow;
+    }
+
     .spielkarte--spielbar {
         @apply cursor-pointer hover:scale-110 hover:-translate-y-2 hover:shadow-lg
                transition-all duration-150
