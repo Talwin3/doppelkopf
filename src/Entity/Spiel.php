@@ -72,6 +72,13 @@ class Spiel
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $abschlussFaelligAm = null;
 
+    /**
+     * Detaillierte Abrechnung des beendeten Spiels (Augensummen, einzelne Wertungs-Positionen,
+     * Sieger, Spielwert). Wird beim Abschluss vom WertungsRechner befüllt. null solange laufend.
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $wertungDetails = null;
+
     /** @var Collection<int, SpielTeilnehmer> */
     #[ORM\OneToMany(targetEntity: SpielTeilnehmer::class, mappedBy: 'spiel', cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['sitzplatz' => 'ASC'])]
@@ -125,6 +132,11 @@ class Spiel
 
     public function getBeendetAm(): ?\DateTimeImmutable { return $this->beendetAm; }
     public function setBeendetAm(?\DateTimeImmutable $am): static { $this->beendetAm = $am; return $this; }
+
+    /** @return array<string, mixed>|null */
+    public function getWertungDetails(): ?array { return $this->wertungDetails; }
+    /** @param array<string, mixed>|null $details */
+    public function setWertungDetails(?array $details): static { $this->wertungDetails = $details; return $this; }
 
     public function getAktuellerZugBegannAm(): ?\DateTimeImmutable { return $this->aktuellerZugBegannAm; }
     public function setAktuellerZugBegannAm(?\DateTimeImmutable $am): static { $this->aktuellerZugBegannAm = $am; return $this; }

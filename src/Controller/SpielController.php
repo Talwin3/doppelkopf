@@ -12,9 +12,11 @@ use App\Application\Doppelkopf\TischBeitrittsService;
 use App\Application\Doppelkopf\VorbehaltService;
 use App\Domain\Doppelkopf\Exception\UngueltigeAnsageException;
 use App\Domain\Doppelkopf\Exception\UngueltigerZugException;
+use App\Domain\Doppelkopf\Service\StichStatistik;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Enum\AnsageTyp;
 use App\Enum\Kartenfarbe;
@@ -50,6 +52,7 @@ class SpielController extends AbstractController
         private readonly VorbehaltService $vorbehaltService,
         private readonly ArmutService $armutService,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
+        private readonly StichStatistik $stichStatistik,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -96,6 +99,8 @@ class SpielController extends AbstractController
             'vorbehaltSortierungen'  => $vorbehaltSortierungen,
             'schweinchenAktiv'        => $schweinchen['schweinchen'],
             'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
+            'gewonneneStiche'        => $this->gewonneneStiche($spiel),
+            'augenAnzeige'           => (bool) $tisch->getRegelEinstellung('augen_mouseover', true),
             'mercurePublicUrl'       => $this->mercurePublicUrl,
             // Tischbezogenes Topic: bleibt über Spielgrenzen hinweg stabil, damit der
             // Client auch den Auto-Start des nächsten Spiels nach dem Punktestand mitbekommt.
@@ -128,6 +133,8 @@ class SpielController extends AbstractController
             'vorbehaltSortierungen'  => $vorbehaltSortierungen,
             'schweinchenAktiv'        => $schweinchen['schweinchen'],
             'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
+            'gewonneneStiche'        => $this->gewonneneStiche($spiel),
+            'augenAnzeige'           => (bool) $tisch->getRegelEinstellung('augen_mouseover', true),
         ]);
     }
 
@@ -332,6 +339,7 @@ class SpielController extends AbstractController
         $regelwerk['superschweinchen']   = (bool) $request->request->get('superschweinchen') && $regelwerk['schweinchen'];
         $regelwerk['ohne_neuner']        = (bool) $request->request->get('ohne_neuner');
         $regelwerk['zweite_dulle_sticht'] = (bool) $request->request->get('zweite_dulle_sticht');
+        $regelwerk['augen_mouseover']    = (bool) $request->request->get('augen_mouseover');
 
         // Superschweinchen auto-deaktivieren wenn ohne_neuner
         if ($regelwerk['ohne_neuner']) {
@@ -369,6 +377,42 @@ class SpielController extends AbstractController
         $neuerWert = $this->beitrittsService->autoStartToggle($tisch, $user);
 
         return new JsonResponse(['autoStart' => $neuerWert]);
+    }
+
+    /**
+     * Bereits gewonnene Stiche je Sitzplatz (Anzahl + Augensumme) — für die verdeckten Stich-Stapel.
+     * Nur abgeschlossene Stiche (4 Karten) zählen.
+     *
+     * @return array<int, array{anzahl: int, augen: int}>
+     */
+    private function gewonneneStiche(?Spiel $spiel): array
+    {
+        if ($spiel === null) {
+            return [];
+        }
+
+        $sticheRoh = [];
+        foreach ($spiel->getGespielteKarten() as $gk) {
+            $sticheRoh[$gk->getStichNr()][] = $gk;
+        }
+
+        $vollstaendige = [];
+        foreach ($sticheRoh as $stichKarten) {
+            if (count($stichKarten) < 4) {
+                continue; // laufender Stich noch nicht abgeschlossen
+            }
+            usort($stichKarten, fn($a, $b) => $a->getPositionImStich() <=> $b->getPositionImStich());
+            $eintraege = [];
+            foreach ($stichKarten as $gk) {
+                $eintraege[] = ['sitzplatz' => $gk->getSitzplatz(), 'karte' => $gk->alsKarte()];
+            }
+            $vollstaendige[] = $eintraege;
+        }
+
+        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+
+        return $this->stichStatistik->gewonneneStiche($vollstaendige, $ordnung, $zweiteDulleSticht);
     }
 
     /** Hilfsmethode: Spiel-Kontextdaten für ein Template aufbereiten. */

@@ -134,6 +134,18 @@
                         </label>
                     </div>
 
+                    {# Anzeige-Optionen #}
+                    <div class="border-t border-tisch-700 pt-2 mb-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   name="augen_mouseover"
+                                   value="1"
+                                   {{ (rw.augen_mouseover ?? true) ? 'checked' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500">
+                            <span class="text-white text-xs">Augen-Summe der Stich-Stapel im Mouse-Over zeigen</span>
+                        </label>
+                    </div>
+
                     {# Erlaubte Soli #}
                     <p class="text-tisch-400 text-xs mb-1">Erlaubte Soli:</p>
                     <div class="grid grid-cols-2 gap-1 mb-3">

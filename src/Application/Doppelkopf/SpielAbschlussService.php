@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Application\SystemEinstellungService;
-use App\Domain\Doppelkopf\Service\PunkteZaehler;
-use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
+use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Entity\GespielteKarte;
 use App\Entity\Spiel;
 use App\Entity\Tisch;
@@ -26,9 +25,8 @@ final class SpielAbschlussService
         private readonly EntityManagerInterface $em,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielAnsageRepository $ansageRepo,
-        private readonly StichGewinner $stichGewinner,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
-        private readonly PunkteZaehler $punkteZaehler,
+        private readonly WertungsRechner $wertungsRechner,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly LobbyMercurePublisher $lobbyPublisher,
         private readonly SystemEinstellungService $einstellungService,
@@ -38,51 +36,76 @@ final class SpielAbschlussService
     {
         $alleGespielten = $this->gespielteKarteRepo->findAlleGespieltenKarten($spiel);
 
+        // Stiche in Spielreihenfolge aufbauen (je Stich die Karten in Ausspielreihenfolge).
         $sticheRoh = [];
         foreach ($alleGespielten as $gk) {
             $sticheRoh[$gk->getStichNr()][] = $gk;
         }
+        ksort($sticheRoh);
 
-        $teamProSitzplatz = [];
-        foreach ($spiel->getTeilnehmer() as $t) {
-            $teamProSitzplatz[$t->getSitzplatz()] = $t->getTeam();
-        }
-
-        $augenProTeam = [Team::RE->value => 0, Team::KONTRA->value => 0];
-
+        $stiche = [];
         foreach ($sticheRoh as $stichKartenRoh) {
             usort($stichKartenRoh, fn(GespielteKarte $a, GespielteKarte $b)
                 => $a->getPositionImStich() <=> $b->getPositionImStich());
 
-            $kartenFuerGewinner = [];
-            $stichAugen = 0;
+            $eintraege = [];
             foreach ($stichKartenRoh as $gk) {
-                $kartenFuerGewinner[$gk->getSitzplatz()] = $gk->alsKarte();
-                $stichAugen += $gk->alsKarte()->augen();
+                $eintraege[] = ['sitzplatz' => $gk->getSitzplatz(), 'karte' => $gk->alsKarte()];
             }
+            $stiche[] = $eintraege;
+        }
 
-            $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
-            $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
-            $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
-            $team = $teamProSitzplatz[$gewinnerSitzplatz] ?? null;
-            if ($team !== null) {
-                $augenProTeam[$team->value] += $stichAugen;
+        $teamProSitzplatz = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if ($t->getTeam() !== null) {
+                $teamProSitzplatz[$t->getSitzplatz()] = $t->getTeam();
             }
         }
 
-        $ergebnis    = $this->punkteZaehler->berechneErgebnis($augenProTeam);
-        $anzahlAnsagen = count($this->ansageRepo->findFuerSpiel($spiel));
+        // Solist (lonely RE-Spieler) bei Soli ermitteln → zählt dreifach.
+        $solistSitzplatz = null;
+        if ($spiel->getVariante() !== null && str_starts_with($spiel->getVariante()->value, 'SOLO_')) {
+            foreach ($spiel->getTeilnehmer() as $t) {
+                if ($t->getTeam() === Team::RE) {
+                    $solistSitzplatz = $t->getSitzplatz();
+                    break;
+                }
+            }
+        }
+
+        $ansagen = [];
+        foreach ($this->ansageRepo->findFuerSpiel($spiel) as $a) {
+            $ansagen[] = ['sitzplatz' => $a->getSitzplatz(), 'typ' => $a->getAnsageTyp()];
+        }
+
+        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+
+        $wertung = $this->wertungsRechner->berechne(
+            $stiche,
+            $teamProSitzplatz,
+            $ordnung,
+            $ansagen,
+            $zweiteDulleSticht,
+            $solistSitzplatz,
+        );
+
+        $spiel->setWertungDetails($wertung);
+
+        $spielwert = $wertung['spielwert'];
 
         foreach ($spiel->getTeilnehmer() as $teilnehmer) {
             $team = $teilnehmer->getTeam();
             if ($team === null) continue;
 
-            $basisDelta = $ergebnis['punkteDelta'][$team->value];
-            $delta = $basisDelta > 0
-                ? $basisDelta + $anzahlAnsagen
-                : $basisDelta - $anzahlAnsagen;
+            $istGewinner = $team->value === $wertung['sieger'];
+            $delta = $istGewinner ? $spielwert : -$spielwert;
 
-            $teilnehmer->setGewonnen($team === $ergebnis['sieger']);
+            if ($solistSitzplatz !== null && $teilnehmer->getSitzplatz() === $solistSitzplatz) {
+                $delta *= 3;
+            }
+
+            $teilnehmer->setGewonnen($istGewinner);
             $teilnehmer->setPunkteDelta($delta);
         }
 

@@ -1,7 +1,10 @@
-{# Parameter: teilnehmer, istDran (bool), anzahlKarten (int), ansagen (string[]), vertikal (bool), teamSichtbar (bool) #}
+{# Parameter: teilnehmer, istDran (bool), anzahlKarten (int), ansagen (string[]), vertikal (bool),
+   teamSichtbar (bool), gewonneneStiche (map sitzplatz→{anzahl,augen}), augenAnzeige (bool) #}
 {% set vertikal      = vertikal ?? false %}
 {% set ansagen       = ansagen ?? [] %}
 {% set teamSichtbar  = teamSichtbar ?? false %}
+{% set sitz          = teilnehmer ? teilnehmer.sitzplatz : 0 %}
+{% set stapel        = (gewonneneStiche ?? {})[sitz]|default(null) %}
 
 <div class="flex flex-col items-center gap-1">
 
@@ -39,4 +42,13 @@
             {% endfor %}
         {% endif %}
     </div>
+
+    {# Verdeckter Stapel der gewonnenen Stiche #}
+    {% if stapel %}
+        {% include 'spieltisch/_stich_stapel.html.twig' with {
+            anzahl: stapel.anzahl,
+            augen: stapel.augen,
+            augenAnzeige: augenAnzeige ?? true
+        } only %}
+    {% endif %}
 </div>

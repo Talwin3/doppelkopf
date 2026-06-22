@@ -1,18 +1,57 @@
+{# Pro-Spieler-Deltas als 4er-Raster #}
+{% macro spieler_deltas(spiel) %}
+    <div class="grid grid-cols-4 gap-2">
+        {% for t in spiel.teilnehmer %}
+            <div class="text-center">
+                <p class="text-white text-xs font-medium truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
+                <p class="text-xs {{ t.team and t.team.value == 'RE' ? 'text-blue-400' : 'text-red-400' }}">{{ t.team ? t.team.value : '?' }}</p>
+                <p class="text-lg font-bold {{ t.gewonnen ? 'text-green-400' : 'text-gray-500' }}">
+                    {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
+                </p>
+            </div>
+        {% endfor %}
+    </div>
+{% endmacro %}
+
+{# Detaillierte Abrechnung aus spiel.wertungDetails: Augensummen + einzelne Wertungs-Positionen #}
+{% macro wertung_aufstellung(spiel) %}
+    {% set w = spiel.wertungDetails ?? null %}
+    {% if w %}
+    <div class="bg-tisch-900/50 rounded-lg p-3 text-left mt-3">
+        <div class="grid grid-cols-2 gap-2 mb-3">
+            <div class="rounded-lg bg-blue-900/40 border border-blue-700 px-3 py-2 text-center">
+                <p class="text-blue-300 text-xs font-bold uppercase tracking-wider">RE</p>
+                <p class="text-white text-lg font-bold">{{ w.augen.RE }}<span class="text-xs font-normal text-tisch-300"> Augen</span></p>
+            </div>
+            <div class="rounded-lg bg-red-900/40 border border-red-700 px-3 py-2 text-center">
+                <p class="text-red-300 text-xs font-bold uppercase tracking-wider">KONTRA</p>
+                <p class="text-white text-lg font-bold">{{ w.augen.KONTRA }}<span class="text-xs font-normal text-tisch-300"> Augen</span></p>
+            </div>
+        </div>
+        <ul class="space-y-1 text-sm">
+            {% for p in w.positionen %}
+                <li class="flex items-center justify-between gap-2">
+                    <span class="text-tisch-200">{{ p.label }}</span>
+                    <span class="font-bold whitespace-nowrap {{ p.team == 'RE' ? 'text-blue-300' : 'text-red-300' }}">
+                        {{ p.team }} +{{ p.punkte }}
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+        <div class="border-t border-tisch-700 mt-2 pt-2 flex items-center justify-between text-sm">
+            <span class="text-tisch-300">Sieger: <strong class="{{ w.sieger == 'RE' ? 'text-blue-300' : 'text-red-300' }}">{{ w.sieger }}</strong></span>
+            <span class="text-white font-bold">Spielwert {{ w.spielwert }}</span>
+        </div>
+    </div>
+    {% endif %}
+{% endmacro %}
+
 {% macro letzte_wertung(letztesSpiel) %}
     {% if letztesSpiel %}
     <div class="bg-tisch-800/60 rounded-xl p-4 border border-tisch-700 w-full max-w-md mx-auto">
         <p class="text-tisch-300 text-xs font-medium uppercase tracking-wider text-center mb-3">Letztes Ergebnis</p>
-        <div class="grid grid-cols-4 gap-2">
-            {% for t in letztesSpiel.teilnehmer %}
-                <div class="text-center">
-                    <p class="text-white text-xs font-medium truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
-                    <p class="text-xs {{ t.team and t.team.value == 'RE' ? 'text-blue-400' : 'text-red-400' }}">{{ t.team ? t.team.value : '?' }}</p>
-                    <p class="text-lg font-bold {{ t.gewonnen ? 'text-green-400' : 'text-gray-500' }}">
-                        {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
-                    </p>
-                </div>
-            {% endfor %}
-        </div>
+        {{ _self.spieler_deltas(letztesSpiel) }}
+        {{ _self.wertung_aufstellung(letztesSpiel) }}
     </div>
     {% endif %}
 {% endmacro %}
@@ -48,6 +87,12 @@
                 </div>
             {% endfor %}
         </div>
+
+        {# Detaillierte Abrechnung #}
+        <div class="max-w-md mx-auto mt-6">
+            {{ _self.wertung_aufstellung(spiel) }}
+        </div>
+
         <a href="{{ path('app_lobby') }}" class="btn-primary mt-8 inline-block">Zurück zur Lobby</a>
     </div>
 
@@ -418,7 +463,9 @@
                 istDran: spiel.aktuellerSpielerSitzplatz == obererSitz,
                 anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == obererSitz)|length),
                 ansagen: ansagenBySitzplatz['s' ~ obererSitz] ?? [],
-                teamSichtbar: teamSichtbar['s' ~ obererSitz] ?? false
+                teamSichtbar: teamSichtbar['s' ~ obererSitz] ?? false,
+                gewonneneStiche: gewonneneStiche ?? {},
+                augenAnzeige: augenAnzeige ?? true
             } %}
         </div>
 
@@ -432,6 +479,8 @@
                     anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == linkerSitz)|length),
                     ansagen: ansagenBySitzplatz['s' ~ linkerSitz] ?? [],
                     teamSichtbar: teamSichtbar['s' ~ linkerSitz] ?? false,
+                    gewonneneStiche: gewonneneStiche ?? {},
+                    augenAnzeige: augenAnzeige ?? true,
                     vertikal: true
                 } %}
             </div>
@@ -486,6 +535,8 @@
                     anzahlKarten: maxKarten - (alleGespielten|filter(k => k.sitzplatz == rechterSitz)|length),
                     ansagen: ansagenBySitzplatz['s' ~ rechterSitz] ?? [],
                     teamSichtbar: teamSichtbar['s' ~ rechterSitz] ?? false,
+                    gewonneneStiche: gewonneneStiche ?? {},
+                    augenAnzeige: augenAnzeige ?? true,
                     vertikal: true
                 } %}
             </div>
@@ -511,6 +562,15 @@
                             {{ typWert|replace({'_': ' '}) }}!
                         </span>
                     {% endfor %}
+                    {# Eigener Stapel gewonnener Stiche #}
+                    {% set meinStapel = (gewonneneStiche ?? {})[meinSitzplatz]|default(null) %}
+                    {% if meinStapel %}
+                        {% include 'spieltisch/_stich_stapel.html.twig' with {
+                            anzahl: meinStapel.anzahl,
+                            augen: meinStapel.augen,
+                            augenAnzeige: augenAnzeige ?? true
+                        } only %}
+                    {% endif %}
                 </span>
                 {% if ichBinDran %}
                     <span class="text-yellow-300 text-xs font-bold animate-pulse"
