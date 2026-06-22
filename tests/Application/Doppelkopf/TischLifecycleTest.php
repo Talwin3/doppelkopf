@@ -4,18 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Application\Doppelkopf;
 
-use App\Application\Doppelkopf\TischBeitrittsService;
-use App\Application\ProfilService;
 use App\Domain\Doppelkopf\Exception\TischVerlassenGesperrtException;
-use App\Entity\Spiel;
-use App\Entity\Tisch;
-use App\Entity\User;
 use App\Enum\ZugangsModusTyp;
-use App\Repository\TischRepository;
-use App\Repository\TischSpielerRepository;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
-use Symfony\Component\Uid\Uuid;
+use App\Tests\Support\DoppelkopfIntegrationTestCase;
 
 /**
  * Integrationstests für die Tisch-Lifecycle-Logik aus Commit e4cac0b:
@@ -23,33 +14,10 @@ use Symfony\Component\Uid\Uuid;
  *  - „menschenlos"-Markierung, wenn der letzte Mensch geht (sonst räumt der Worker nie auf)
  *  - dieselbe Markierung bei Konto-Löschung
  *
- * Läuft gegen eine echte Test-DB (doppelkopf_test). dama/doctrine-test-bundle kapselt
- * jeden Test in eine Transaktion und rollt sie danach zurück → vollständige Isolation.
- *
- * Wichtig: Vor der zu testenden Aktion wird der EntityManager geleert und der Tisch
- * frisch geladen — so verhält sich die (lazy) Spieler-Collection wie in einem echten
- * HTTP-Request. Sonst wäre die In-Memory-Collection leer (setTisch() synct die
- * inverse Seite nicht) und der Test würde am eigentlichen Bug vorbeilaufen.
+ * Die tatsächliche Löschung durch den Worker testet {@see \App\Tests\Command\BotWorkerCleanupTest}.
  */
-final class TischLifecycleTest extends KernelTestCase
+final class TischLifecycleTest extends DoppelkopfIntegrationTestCase
 {
-    private EntityManagerInterface $em;
-    private TischBeitrittsService $beitritt;
-    private ProfilService $profil;
-    private TischRepository $tischRepo;
-    private TischSpielerRepository $tischSpielerRepo;
-
-    protected function setUp(): void
-    {
-        self::bootKernel();
-        $c = static::getContainer();
-        $this->em = $c->get(EntityManagerInterface::class);
-        $this->beitritt = $c->get(TischBeitrittsService::class);
-        $this->profil = $c->get(ProfilService::class);
-        $this->tischRepo = $c->get(TischRepository::class);
-        $this->tischSpielerRepo = $c->get(TischSpielerRepository::class);
-    }
-
     public function testSitzenderSpielerKannBeiLaufendemSpielNichtVerlassen(): void
     {
         $alice = $this->neuerUser('alice');
@@ -151,58 +119,5 @@ final class TischLifecycleTest extends KernelTestCase
             'Der Sitzplatz des gelöschten Kontos muss freigegeben sein',
         );
         self::assertContains($tischId->toRfc4122(), $this->menschenloseTischIds());
-    }
-
-    // ── Helfer ───────────────────────────────────────────────────────────────
-
-    private function neuerUser(string $name): User
-    {
-        $user = new User();
-        $user->setUsername($name);
-        $user->setEmail($name . '@test.invalid');
-
-        $this->em->persist($user);
-        $this->em->flush();
-
-        return $user;
-    }
-
-    private function laufendesSpiel(Tisch $tisch): Spiel
-    {
-        $spiel = new Spiel();          // Status ist per Default SpielStatus::LAUFEND
-        $spiel->setTisch($tisch);
-
-        $this->em->persist($spiel);
-        $this->em->flush();
-
-        return $spiel;
-    }
-
-    /**
-     * Leert den EntityManager und lädt Tisch + User frisch aus der DB —
-     * simuliert einen frischen HTTP-Request mit lazy geladener Spieler-Collection.
-     *
-     * @return array{0: Tisch, 1: User}
-     */
-    private function frischLaden(Uuid $tischId, Uuid $userId): array
-    {
-        $this->em->clear();
-
-        $tisch = $this->tischRepo->find($tischId);
-        $user = $this->em->getRepository(User::class)->find($userId);
-
-        self::assertInstanceOf(Tisch::class, $tisch);
-        self::assertInstanceOf(User::class, $user);
-
-        return [$tisch, $user];
-    }
-
-    /** @return list<string> RFC-4122-IDs aller aktuell als menschenlos markierten Tische. */
-    private function menschenloseTischIds(): array
-    {
-        return array_map(
-            static fn(Tisch $t): string => $t->getId()->toRfc4122(),
-            $this->tischRepo->findMenschenlose(),
-        );
     }
 }
