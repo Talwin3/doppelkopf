@@ -417,6 +417,18 @@
         {% for t in spiel.teilnehmer %}
             {% set teamSichtbar = teamSichtbar|merge({('s' ~ t.sitzplatz): true}) %}
         {% endfor %}
+    {% elseif spiel.variante and spiel.variante.value == 'HOCHZEIT' %}
+        {# Hochzeit: Der Hochzeitsspieler (beide Kreuz-Damen) ist sofort als RE
+           bekannt. Der Partner steht aber erst fest, wenn ein KONTRA-Spieler den
+           ersten fremden Stich gewinnt (spiel.hochzeitAufgeloest). Bis dahin sind
+           die Parteien der drei anderen offen und werden NICHT angezeigt – die
+           Kreuz-Damen-Regel greift hier nicht, da sie beim selben Spieler liegen. #}
+        {% for t in spiel.teilnehmer %}
+            {% set key = 's' ~ t.sitzplatz %}
+            {% set istHochzeitspieler = t.vorbehaltTyp is defined and t.vorbehaltTyp and t.vorbehaltTyp.value == 'HOCHZEIT' %}
+            {% set sichtbar = istHochzeitspieler or spiel.hochzeitAufgeloest %}
+            {% set teamSichtbar = teamSichtbar|merge({(key): sichtbar}) %}
+        {% endfor %}
     {% else %}
         {# Kreuz-Damen-Spieler sind RE → sichtbar #}
         {% set kreuzDamenGespielt = [] %}
@@ -430,10 +442,6 @@
         {% for t in spiel.teilnehmer %}
             {% set key = 's' ~ t.sitzplatz %}
             {% set sichtbar = false %}
-            {# Hochzeit: Hochzeits-Spieler ist sofort als RE bekannt #}
-            {% if spiel.variante and spiel.variante.value == 'HOCHZEIT' and t.team and t.team.value == 'RE' and t.vorbehaltTyp is defined and t.vorbehaltTyp and t.vorbehaltTyp.value == 'HOCHZEIT' %}
-                {% set sichtbar = true %}
-            {% endif %}
             {# Hat Kreuz Dame gespielt → RE bekannt #}
             {% if t.sitzplatz in kreuzDamenGespielt %}
                 {% set sichtbar = true %}
