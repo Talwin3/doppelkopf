@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
+use App\Domain\Doppelkopf\Service\BotHeuristik;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Entity\Spiel;
 use App\Enum\SpielStatus;
+use App\Repository\GespielteKarteRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -15,6 +18,9 @@ final class BotZugService
         private readonly KarteAusspielenService $karteAusspielenService,
         private readonly VorbehaltService $vorbehaltService,
         private readonly ArmutService $armutService,
+        private readonly BotHeuristik $botHeuristik,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
+        private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly LoggerInterface $logger,
         #[Autowire('%env(BOT_API_URL)%')]
         private readonly string $botApiUrl,
@@ -50,7 +56,7 @@ final class BotZugService
         }
 
         $gewaehlt = $this->botApiKarteWaehlen($spiel, $sitzplatz, $erlaubte)
-            ?? $erlaubte[array_rand($erlaubte)]->id();
+            ?? $this->heuristikKarteWaehlen($spiel, $teilnehmer, $erlaubte);
 
         try {
             $this->karteAusspielenService->spielenAlsBot($spiel, $sitzplatz, $gewaehlt);
@@ -62,6 +68,32 @@ final class BotZugService
                 'fehler'    => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Wählt per regelbasierter Heuristik eine Karte (Fallback ohne externen Bot-Service).
+     *
+     * @param \App\Domain\Doppelkopf\ValueObject\Karte[] $erlaubte
+     */
+    private function heuristikKarteWaehlen(Spiel $spiel, \App\Entity\SpielTeilnehmer $teilnehmer, array $erlaubte): string
+    {
+        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+
+        // Aktuellen Stich als Sitzplatz → Karte in Spielreihenfolge aufbauen.
+        $stich = [];
+        foreach ($this->gespielteKarteRepo->findAktuellerStich($spiel, $spiel->getAktuellerStichNr()) as $gk) {
+            $stich[$gk->getSitzplatz()] = $gk->alsKarte();
+        }
+
+        // Teams aller vier Sitzplätze (null bei noch ungelöster Hochzeit).
+        $teams = [];
+        for ($sitz = 1; $sitz <= 4; $sitz++) {
+            $teams[$sitz] = $spiel->getTeilnehmerBySitzplatz($sitz)?->getTeam();
+        }
+
+        return $this->botHeuristik
+            ->entscheide($erlaubte, $stich, $teilnehmer->getTeam(), $teams, $ordnung)
+            ->id();
     }
 
     /** Ruft den externen Bot-Service auf; gibt null zurück wenn nicht erreichbar. */
