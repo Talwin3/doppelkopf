@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { toast } from '../toast.js'
 
 const LABELS = {
   HOCHZEIT: 'Hochzeit ♛♛',
@@ -49,36 +50,30 @@ export default class extends Controller {
     this.bestaetigungTarget.classList.remove('hidden')
   }
 
-  bestaetigen() {
+  async bestaetigen() {
     if (!this._gewaehlterTyp) return
 
-    const form = document.createElement('form')
-    form.method = 'POST'
-    form.action = this.actionUrlValue
-    form.style.display = 'none'
-
-    const token = document.createElement('input')
-    token.type = 'hidden'
-    token.name = '_token'
-    token.value = this.csrfValue
-    form.appendChild(token)
-
-    const typ = document.createElement('input')
-    typ.type = 'hidden'
-    typ.name = 'vorbehalt_typ'
-    typ.value = this._gewaehlterTyp
-    form.appendChild(typ)
-
+    // Per fetch absenden statt nativer Formular-Submit: Der Endpoint liefert
+    // JSON ({"ok":true}); eine echte Navigation würde dieses JSON als Seite
+    // anzeigen. Der Spielzustand wird anschließend über Mercure aktualisiert.
+    const body = new FormData()
+    body.append('_token', this.csrfValue)
+    body.append('vorbehalt_typ', this._gewaehlterTyp)
     if (this._gewaehlteVariante) {
-      const variante = document.createElement('input')
-      variante.type = 'hidden'
-      variante.name = 'solo_variante'
-      variante.value = this._gewaehlteVariante
-      form.appendChild(variante)
+      body.append('solo_variante', this._gewaehlteVariante)
     }
 
-    document.body.appendChild(form)
-    form.requestSubmit()
+    try {
+      const response = await fetch(this.actionUrlValue, { method: 'POST', body })
+      const json = await response.json()
+      if (!response.ok) {
+        toast(json.fehler ?? 'Vorbehalt nicht möglich.', 'error', 4000)
+        return
+      }
+      this.bestaetigungTarget.classList.add('hidden')
+    } catch {
+      toast('Verbindungsfehler.', 'error', 4000)
+    }
   }
 
   abbrechen() {
