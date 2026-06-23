@@ -63,8 +63,8 @@
                                 {% if spieler.sitzplatz == i %}
                                     {% set belegt = true %}
                                     <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-tisch-700 text-white text-xs font-medium"
-                                          title="{{ spieler.istBot ? 'Bot' : spieler.user.username }}">
-                                        {{ spieler.istBot ? 'B' : spieler.user.username|first|upper }}
+                                          title="{{ spieler.anzeigeName }}">
+                                        {{ spieler.anzeigeName|first|upper }}
                                     </span>
                                 {% endif %}
                             {% endfor %}

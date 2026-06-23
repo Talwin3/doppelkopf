@@ -45,6 +45,10 @@ class TischSpieler
     #[ORM\Column(options: ['default' => false])]
     private bool $istBot = false;
 
+    /** Zufälliger Anzeigename für Bot-Platzhalter (null bei menschlichen Spielern). */
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $botName = null;
+
     /** Spieler hat gewünscht, nach dem laufenden Spiel den Tisch zu verlassen. */
     #[ORM\Column(options: ['default' => false])]
     private bool $moechteNachSpielVerlassen = false;
@@ -125,6 +129,31 @@ class TischSpieler
         $this->istBot = $istBot;
 
         return $this;
+    }
+
+    public function getBotName(): ?string
+    {
+        return $this->botName;
+    }
+
+    public function setBotName(?string $botName): static
+    {
+        $this->botName = $botName;
+
+        return $this;
+    }
+
+    /**
+     * Öffentlicher Anzeigename am Tisch: bei Menschen der Username, bei Bots
+     * der zufällige Vorname mit Suffix "(Bot)", damit Bots erkennbar bleiben.
+     */
+    public function getAnzeigeName(): string
+    {
+        if ($this->user !== null) {
+            return $this->user->getUsername();
+        }
+
+        return $this->botName !== null ? $this->botName . ' (Bot)' : 'Bot';
     }
 
     public function getBeigetretenAm(): \DateTimeImmutable

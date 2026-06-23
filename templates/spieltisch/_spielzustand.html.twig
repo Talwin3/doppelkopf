@@ -3,7 +3,7 @@
     <div class="grid grid-cols-4 gap-2">
         {% for t in spiel.teilnehmer %}
             <div class="text-center">
-                <p class="text-white text-xs font-medium truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
+                <p class="text-white text-xs font-medium truncate">{{ t.anzeigeName }}</p>
                 <p class="text-xs {{ t.team and t.team.value == 'RE' ? 'text-blue-400' : 'text-red-400' }}">{{ t.team ? t.team.value : '?' }}</p>
                 <p class="text-lg font-bold {{ t.gewonnen ? 'text-green-400' : 'text-gray-500' }}">
                     {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
@@ -79,7 +79,7 @@
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-lg mx-auto">
             {% for t in spiel.teilnehmer %}
                 <div class="bg-white rounded-xl p-4 text-center shadow">
-                    <p class="font-bold text-gray-900 text-sm truncate">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    <p class="font-bold text-gray-900 text-sm truncate">{{ t.anzeigeName }}</p>
                     <p class="text-xs mt-1 {{ t.team and t.team.value == 'RE' ? 'text-blue-600' : 'text-red-600' }}">{{ t.team ? t.team.value : '?' }}</p>
                     <p class="text-2xl font-bold mt-2 {{ t.gewonnen ? 'text-green-600' : 'text-gray-400' }}">
                         {{ t.punkteDelta > 0 ? '+' : '' }}{{ t.punkteDelta }}
@@ -119,7 +119,7 @@
                         {% if t.vorbehaltDeklariert %}bg-green-600 text-white{% elseif spiel.aktuellerSpielerSitzplatz == t.sitzplatz %}bg-yellow-400 text-black animate-pulse{% else %}bg-tisch-700 text-tisch-400{% endif %}">
                         {{ t.vorbehaltDeklariert ? '✓' : (spiel.aktuellerSpielerSitzplatz == t.sitzplatz ? '?' : '…') }}
                     </div>
-                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.anzeigeName }}</p>
                     {% if t.vorbehaltDeklariert and t.sitzplatz == meinSitzplatz %}
                         <p class="text-xs text-green-400 mt-0.5">{{ t.vorbehaltTyp ? t.vorbehaltTyp.value : '' }}</p>
                     {% endif %}
@@ -260,7 +260,7 @@
                         {% elseif spiel.aktuellerSpielerSitzplatz == t.sitzplatz %}?
                         {% else %}…{% endif %}
                     </div>
-                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.user ? t.user.username : 'Bot' }}</p>
+                    <p class="text-xs text-tisch-300 mt-1 truncate max-w-16">{{ t.anzeigeName }}</p>
                 </div>
             {% endfor %}
         </div>

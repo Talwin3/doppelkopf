@@ -49,6 +49,10 @@ class SpielTeilnehmer
     #[ORM\Column(options: ['default' => false])]
     private bool $istBot = false;
 
+    /** Zufälliger Anzeigename für Bot-Teilnehmer (null bei menschlichen Spielern). */
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $botName = null;
+
     /** Hat dieser Spieler seinen Vorbehalt bereits deklariert? */
     #[ORM\Column(options: ['default' => false])]
     private bool $vorbehaltDeklariert = false;
@@ -97,6 +101,22 @@ class SpielTeilnehmer
 
     public function isIstBot(): bool { return $this->istBot; }
     public function setIstBot(bool $istBot): static { $this->istBot = $istBot; return $this; }
+
+    public function getBotName(): ?string { return $this->botName; }
+    public function setBotName(?string $botName): static { $this->botName = $botName; return $this; }
+
+    /**
+     * Öffentlicher Anzeigename: bei Menschen der Username, bei Bots der
+     * zufällige Vorname mit Suffix "(Bot)", damit Bots erkennbar bleiben.
+     */
+    public function getAnzeigeName(): string
+    {
+        if ($this->user !== null) {
+            return $this->user->getUsername();
+        }
+
+        return $this->botName !== null ? $this->botName . ' (Bot)' : 'Bot';
+    }
 
     public function isVorbehaltDeklariert(): bool { return $this->vorbehaltDeklariert; }
     public function setVorbehaltDeklariert(bool $deklariert): static { $this->vorbehaltDeklariert = $deklariert; return $this; }

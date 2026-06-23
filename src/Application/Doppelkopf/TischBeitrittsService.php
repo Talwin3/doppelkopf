@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Domain\Doppelkopf\Exception\TischGesperrtException;
+use App\Domain\Doppelkopf\Service\BotNamenProvider;
 use App\Domain\Doppelkopf\Exception\TischVerlassenGesperrtException;
 use App\Domain\Doppelkopf\Exception\TischZugangVerweigertException;
 use App\Entity\Spiel;
@@ -29,6 +30,7 @@ final class TischBeitrittsService
         private readonly LobbyMercurePublisher $mercurePublisher,
         private readonly SpielMercurePublisher $spielPublisher,
         private readonly SpielRepository $spielRepo,
+        private readonly BotNamenProvider $botNamenProvider,
     ) {}
 
     public function erstelleTisch(User $ersteller, string $name, ZugangsModusTyp $zugangsmodus): Tisch
@@ -242,17 +244,27 @@ final class TischBeitrittsService
             $tisch->getAktiveSpieler()->toArray()
         );
 
+        // Bereits vergebene Bot-Namen am Tisch sammeln, um Dopplungen zu vermeiden.
+        $vergebeneNamen = array_values(array_filter(array_map(
+            fn(TischSpieler $ts) => $ts->getBotName(),
+            $tisch->getAktiveSpieler()->toArray(),
+        )));
+
         $anzahl = 0;
         foreach (range(1, 4) as $platz) {
             if (in_array($platz, $belegtePlätze, true)) {
                 continue;
             }
 
+            $name = $this->botNamenProvider->zufaelligerName($vergebeneNamen);
+            $vergebeneNamen[] = $name;
+
             $bot = new TischSpieler();
             $bot->setTisch($tisch);
             $bot->setUser(null);
             $bot->setSitzplatz($platz);
             $bot->setIstBot(true);
+            $bot->setBotName($name);
             $this->em->persist($bot);
             $anzahl++;
         }

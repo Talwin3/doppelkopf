@@ -58,7 +58,7 @@ final class VorbehaltService
 
         $this->logger->spielzugAusgefuehrt(
             (string) $spiel->getId(),
-            $teilnehmer->getUser()?->getUsername() ?? 'Bot',
+            $teilnehmer->getAnzeigeName(),
             'VORBEHALT:' . $typ->value . ($soloVariante ? ':' . $soloVariante->value : ''),
         );
 
