@@ -43,7 +43,9 @@
                             </td>
                             <td class="py-3">
                                 <a href="{{ path('app_profil', {username: zeile.username}) }}"
-                                   class="font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                   class="flex items-center gap-2.5 font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                    <img src="{{ avatar_url_roh(zeile.avatar_stil, zeile.avatar_seed, 64) }}" alt=""
+                                         class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
                                     {{ zeile.username }}
                                 </a>
                             </td>
@@ -95,7 +97,9 @@
                             </td>
                             <td class="py-3">
                                 <a href="{{ path('app_profil', {username: zeile.username}) }}"
-                                   class="font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                   class="flex items-center gap-2.5 font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
+                                    <img src="{{ avatar_url_roh(zeile.avatar_stil, zeile.avatar_seed, 64) }}" alt=""
+                                         class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
                                     {{ zeile.username }}
                                 </a>
                             </td>

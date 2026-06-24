@@ -20,6 +20,7 @@ final class SystemEinstellungService
     private const DEFAULTS = [
         'pause_zwischen_spielen_sekunden' => '5',
         'disconnect_timeout_sekunden'     => '30',
+        'bot_avatar_stil'                 => 'bottts',
     ];
 
     public function __construct(
@@ -74,6 +75,7 @@ final class SystemEinstellungService
                 $beschreibungen = [
                     'pause_zwischen_spielen_sekunden' => 'Wartezeit in Sekunden zwischen zwei Spielen (Auto-Start)',
                     'disconnect_timeout_sekunden'     => 'Sekunden bis nach einem Disconnect ein Bot übernimmt',
+                    'bot_avatar_stil'                 => 'Avatar-Stil für Bots (z. B. bottts, avataaars, lorelei)',
                 ];
 
                 $einstellung = new SystemEinstellung(

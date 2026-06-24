@@ -99,6 +99,24 @@ final class ProfilService
         $this->em->flush();
     }
 
+    public function avatarStilAendern(User $user, string $wert): void
+    {
+        $stil = \App\Enum\AvatarStil::tryFrom($wert);
+        if ($stil === null) {
+            return; // unbekannten Wert ignorieren
+        }
+
+        $user->setAvatarStil($stil->value);
+        $this->em->flush();
+    }
+
+    /** Würfelt einen neuen, stabilen Seed → neuer Avatar bei gleichem Stil. */
+    public function avatarNeuWuerfeln(User $user): void
+    {
+        $user->setAvatarSeed(bin2hex(random_bytes(8)));
+        $this->em->flush();
+    }
+
     /**
      * Erstellt ein DSGVO-Datenpaket (Art. 20) als Array.
      * @return array<string, mixed>

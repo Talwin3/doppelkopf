@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\AvatarStil;
 use App\Enum\Kartendeck;
 use App\Repository\UserRepository;
 use Doctrine\ORM\Mapping as ORM;
@@ -65,6 +66,20 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 20, options: ['default' => 'KNOLL'])]
     private string $kartenbildPraeferenz = 'KNOLL';
 
+    /**
+     * Gewählter Avatar-Stil (Wert eines {@see AvatarStil}-Falls).
+     * Unbekannte/Alt-Werte fallen über {@see getAvatarStil()} auf den Default zurück.
+     */
+    #[ORM\Column(length: 20, options: ['default' => 'lorelei'])]
+    private string $avatarStil = 'lorelei';
+
+    /**
+     * Stabiler Zufalls-Seed für die deterministische Avatar-Generierung.
+     * Bleibt bei Benutzernamen-Änderung erhalten; per „Neu würfeln" änderbar.
+     */
+    #[ORM\Column(length: 32, options: ['default' => ''])]
+    private string $avatarSeed = '';
+
     /** Letzter Zeitpunkt der Benutzernamen-Änderung (für 7-Tage-Cooldown). */
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $nutzernameGeaendertAm = null;
@@ -83,6 +98,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $this->id = Uuid::v7();
         $this->erstelltAm = new \DateTimeImmutable();
+        $this->avatarSeed = bin2hex(random_bytes(8));
     }
 
     public function getId(): Uuid
@@ -195,6 +211,37 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getKartendeck(): Kartendeck
     {
         return Kartendeck::vonWert($this->kartenbildPraeferenz);
+    }
+
+    public function getAvatarStilWert(): string
+    {
+        return $this->avatarStil;
+    }
+
+    public function setAvatarStil(string $avatarStil): static
+    {
+        $this->avatarStil = $avatarStil;
+
+        return $this;
+    }
+
+    /** Gewählter Avatar-Stil (toleranter Lookup mit Fallback auf den Default). */
+    public function getAvatarStil(): AvatarStil
+    {
+        return AvatarStil::vonWert($this->avatarStil);
+    }
+
+    public function getAvatarSeed(): string
+    {
+        // Fallback für Alt-Datensätze ohne Seed: stabil aus der User-ID ableiten.
+        return $this->avatarSeed !== '' ? $this->avatarSeed : substr((string) $this->id, 0, 16);
+    }
+
+    public function setAvatarSeed(string $avatarSeed): static
+    {
+        $this->avatarSeed = $avatarSeed;
+
+        return $this;
     }
 
     public function getNutzernameGeaendertAm(): ?\DateTimeImmutable { return $this->nutzernameGeaendertAm; }

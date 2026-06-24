@@ -10,6 +10,9 @@
 
     <div class="flex items-center gap-1 flex-wrap justify-center">
         {% if teilnehmer %}
+            <img src="{{ avatar_url(teilnehmer, 48) }}" alt=""
+                 class="w-6 h-6 rounded-full bg-tisch-700 ring-1 ring-tisch-600 shrink-0
+                        {{ istDran ? 'ring-2 ring-yellow-300' : '' }}">
             <span class="text-white text-xs font-medium">
                 {{ teilnehmer.anzeigeName }}
             </span>

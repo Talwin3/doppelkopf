@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Application\ProfilService;
 use App\Application\StatistikService;
 use App\Entity\User;
+use App\Enum\AvatarStil;
 use App\Enum\Kartendeck;
 use App\Form\BenutzernameAendernType;
 use App\Form\EmailAendernType;
@@ -78,6 +79,7 @@ class ProfilController extends AbstractController
             'emailForm'        => $this->createForm(EmailAendernType::class),
             'cooldownBis'      => $cooldownBis,
             'kartendecks'      => Kartendeck::cases(),
+            'avatarStile'      => AvatarStil::cases(),
         ]);
     }
 
@@ -204,6 +206,42 @@ class ProfilController extends AbstractController
         $user = $this->getUser();
         $this->profilService->kartendeckAendern($user, (string) $request->request->get('kartendeck', ''));
         $this->addFlash('success', 'Kartendeck gespeichert.');
+
+        return $this->redirectToRoute('app_profil_einstellungen');
+    }
+
+    // ── Avatar ─────────────────────────────────────────────────────────────
+
+    #[Route('/einstellungen/avatar', name: 'app_profil_avatar', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function avatarAendern(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('avatar', $request->request->get('_token'))) {
+            $this->addFlash('error', 'Ungültige Anfrage.');
+            return $this->redirectToRoute('app_profil_einstellungen');
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $this->profilService->avatarStilAendern($user, (string) $request->request->get('avatar_stil', ''));
+        $this->addFlash('success', 'Avatar gespeichert.');
+
+        return $this->redirectToRoute('app_profil_einstellungen');
+    }
+
+    #[Route('/einstellungen/avatar/wuerfeln', name: 'app_profil_avatar_wuerfeln', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function avatarWuerfeln(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('avatar_wuerfeln', $request->request->get('_token'))) {
+            $this->addFlash('error', 'Ungültige Anfrage.');
+            return $this->redirectToRoute('app_profil_einstellungen');
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $this->profilService->avatarNeuWuerfeln($user);
+        $this->addFlash('success', 'Neuer Avatar gewürfelt.');
 
         return $this->redirectToRoute('app_profil_einstellungen');
     }

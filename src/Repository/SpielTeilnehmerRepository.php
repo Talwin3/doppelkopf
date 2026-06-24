@@ -96,6 +96,8 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
         return $conn->executeQuery(
             'SELECT u.id,
                     u.username,
+                    u.avatar_stil,
+                    u.avatar_seed,
                     COALESCE(SUM(st.punkte_delta), 0)       AS punkte,
                     COUNT(st.id)                             AS spiele,
                     COUNT(CASE WHEN st.gewonnen THEN 1 END)  AS siege
@@ -105,7 +107,7 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
              WHERE st.ist_bot         = false
                AND u.profil_oeffentlich = true
                AND s.status            = ?
-             GROUP BY u.id, u.username
+             GROUP BY u.id, u.username, u.avatar_stil, u.avatar_seed
              ORDER BY punkte DESC, spiele ASC
              LIMIT ' . $limit,
             [SpielStatus::BEENDET->value],
@@ -125,6 +127,8 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
         return $conn->executeQuery(
             'SELECT u.id,
                     u.username,
+                    u.avatar_stil,
+                    u.avatar_seed,
                     COALESCE(SUM(st.punkte_delta), 0)       AS punkte,
                     COUNT(st.id)                             AS spiele,
                     COUNT(CASE WHEN st.gewonnen THEN 1 END)  AS siege
@@ -135,7 +139,7 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
                AND u.profil_oeffentlich = true
                AND s.status             = ?
                AND s.beendet_am        >= ?
-             GROUP BY u.id, u.username
+             GROUP BY u.id, u.username, u.avatar_stil, u.avatar_seed
              ORDER BY punkte DESC, spiele ASC
              LIMIT ' . $limit,
             [SpielStatus::BEENDET->value, $von->format('Y-m-d')],

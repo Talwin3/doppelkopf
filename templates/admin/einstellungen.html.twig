@@ -36,10 +36,21 @@
                 <td class="px-6 py-4">
                     <form method="post" action="{{ path('app_admin_einstellung_speichern', {schluessel: einstellung.schluessel}) }}" class="flex items-center gap-2">
                         <input type="hidden" name="_token" value="{{ csrf_token('einstellung_' ~ einstellung.schluessel) }}">
-                        <input type="text"
-                               name="wert"
-                               value="{{ einstellung.wert }}"
-                               class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded px-2 py-1 text-sm w-24 focus:ring-1 focus:ring-tisch-500 focus:border-tisch-500">
+                        {% if einstellung.schluessel == 'bot_avatar_stil' %}
+                            <img src="{{ avatar_url_roh(einstellung.wert, 'Hans', 64) }}" alt="Vorschau"
+                                 class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
+                            <select name="wert"
+                                    class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-tisch-500 focus:border-tisch-500">
+                                {% for stil in avatarStile %}
+                                    <option value="{{ stil.value }}" {{ einstellung.wert == stil.value ? 'selected' : '' }}>{{ stil.label }}</option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            <input type="text"
+                                   name="wert"
+                                   value="{{ einstellung.wert }}"
+                                   class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded px-2 py-1 text-sm w-24 focus:ring-1 focus:ring-tisch-500 focus:border-tisch-500">
+                        {% endif %}
                         <button type="submit" class="text-xs bg-tisch-600 text-white px-3 py-1.5 rounded hover:bg-tisch-700">Speichern</button>
                     </form>
                 </td>

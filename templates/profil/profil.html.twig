@@ -9,9 +9,9 @@
     <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8">
         <div class="flex items-start justify-between gap-4">
             <div>
-                <div class="w-16 h-16 rounded-full bg-tisch-700 flex items-center justify-center text-white text-2xl font-bold mb-4">
-                    {{ profilUser.username|first|upper }}
-                </div>
+                <img src="{{ avatar_url(profilUser, 128) }}" alt="Avatar von {{ profilUser.username }}"
+                     class="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 ring-2 ring-gray-200 dark:ring-gray-600 mb-4">
+
 
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     {{ profilUser.username }}
