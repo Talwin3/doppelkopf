@@ -1,0 +1,69 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Meine Replays – Doppelkopf Online{% endblock %}
+
+{% set variantenLabels = {
+    'NORMALSPIEL': 'Normalspiel',
+    'HOCHZEIT': 'Hochzeit',
+    'SOLO_BUBEN': 'Buben-Solo',
+    'SOLO_DAMEN': 'Damen-Solo',
+    'SOLO_FLEISCHLOS': 'Fleischlos-Solo',
+    'SOLO_KARO': 'Karo-Solo',
+    'SOLO_HERZ': 'Herz-Solo',
+    'SOLO_PIK': 'Pik-Solo',
+    'SOLO_KREUZ': 'Kreuz-Solo'
+} %}
+
+{% block body %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Meine Replays</h1>
+        <a href="{{ path('app_lobby') }}" class="btn-secondary text-sm">Zur Lobby</a>
+    </div>
+
+    {% if spiele is empty %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
+            <p class="text-gray-400 dark:text-gray-500 text-sm">Noch keine abgeschlossenen Spiele zum Anschauen.</p>
+        </div>
+    {% else %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm divide-y divide-gray-100 dark:divide-gray-700">
+            {% for spiel in spiele %}
+                {# Eigener Teilnehmer für Ergebnis-Anzeige #}
+                {% set ich = null %}
+                {% for t in spiel.teilnehmer %}
+                    {% if t.user and t.user.id == app.user.id %}{% set ich = t %}{% endif %}
+                {% endfor %}
+                <a href="{{ path('app_replay', {id: spiel.id}) }}"
+                   class="flex items-center justify-between gap-4 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <div class="min-w-0">
+                        <p class="font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {{ variantenLabels[spiel.variante.value] ?? 'Normalspiel' }}
+                            {% if ich and ich.team %}
+                                <span class="ml-1 px-1.5 py-0.5 rounded text-xs font-bold
+                                    {{ ich.team.value == 'RE' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white' }}">
+                                    {{ ich.team.value }}
+                                </span>
+                            {% endif %}
+                        </p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {{ spiel.beendetAm ? spiel.beendetAm|date('d.m.Y H:i') : '' }}
+                            &middot;
+                            {{ spiel.teilnehmer|map(t => t.anzeigeName)|join(', ') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        {% if ich %}
+                            <span class="text-lg font-bold {{ ich.gewonnen ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500' }}">
+                                {{ ich.punkteDelta > 0 ? '+' : '' }}{{ ich.punkteDelta }}
+                            </span>
+                        {% endif %}
+                        <svg class="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

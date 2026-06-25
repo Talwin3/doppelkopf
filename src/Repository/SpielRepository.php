@@ -6,6 +6,7 @@ namespace App\Repository;
 
 use App\Entity\Spiel;
 use App\Entity\Tisch;
+use App\Entity\User;
 use App\Enum\SpielStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -44,6 +45,26 @@ class SpielRepository extends ServiceEntityRepository
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
+    }
+
+    /**
+     * Beendete Spiele, an denen der Nutzer als Spieler teilgenommen hat —
+     * neueste zuerst. Grundlage der Replay-Liste.
+     *
+     * @return Spiel[]
+     */
+    public function findeBeendeteFuerUser(User $user, int $limit = 30): array
+    {
+        return $this->createQueryBuilder('s')
+            ->innerJoin('s.teilnehmer', 't')
+            ->where('t.user = :user')
+            ->andWhere('s.status = :status')
+            ->setParameter('user', $user)
+            ->setParameter('status', SpielStatus::BEENDET)
+            ->orderBy('s.beendetAm', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
     }
 
     /**

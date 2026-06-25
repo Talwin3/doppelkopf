@@ -1,0 +1,149 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Replay – Doppelkopf Online{% endblock %}
+
+{% set variantenLabels = {
+    'NORMALSPIEL': 'Normalspiel', 'HOCHZEIT': 'Hochzeit',
+    'SOLO_BUBEN': 'Buben-Solo', 'SOLO_DAMEN': 'Damen-Solo', 'SOLO_FLEISCHLOS': 'Fleischlos-Solo',
+    'SOLO_KARO': 'Karo-Solo', 'SOLO_HERZ': 'Herz-Solo', 'SOLO_PIK': 'Pik-Solo', 'SOLO_KREUZ': 'Kreuz-Solo'
+} %}
+
+{# Teilnehmer nach Sitzplatz für Panel-Rendering #}
+{% set teilnehmerMap = {} %}
+{% for t in spiel.teilnehmer %}
+    {% set teilnehmerMap = teilnehmerMap|merge({('s' ~ t.sitzplatz): t}) %}
+{% endfor %}
+
+{% set meinSitz   = replay.meinSitzplatz > 0 ? replay.meinSitzplatz : 1 %}
+{% set linkerSitz = (meinSitz % 4) + 1 %}
+{% set obererSitz = (linkerSitz % 4) + 1 %}
+{% set rechterSitz = (obererSitz % 4) + 1 %}
+
+{% macro panel(t, seat) %}
+    <div class="flex flex-col items-center gap-1" data-replay-target="panel" data-seat="{{ seat }}">
+        <div class="relative">
+            <img src="{{ avatar_url(t, 96) }}" alt=""
+                 class="w-12 h-12 rounded-full bg-tisch-700 ring-2 ring-tisch-600"
+                 data-replay-target="avatar">
+            <span class="hidden absolute -top-1 -right-1 bg-yellow-400 text-black text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow"
+                  data-replay-target="winnerBadge" data-seat="{{ seat }}">★</span>
+        </div>
+        <p class="text-white text-xs font-medium truncate max-w-24 text-center">{{ t ? t.anzeigeName : '—' }}</p>
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold opacity-0 transition-opacity
+                     {{ t and t.team and t.team.value == 'RE' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white' }}"
+              data-replay-target="teamBadge" data-seat="{{ seat }}">
+            {{ t and t.team ? t.team.value : '?' }}
+        </span>
+        {# Karten-Slot dieses Spielers #}
+        <div class="spielkarte spielkarte--mittel opacity-0 transition-opacity" data-replay-target="cardSlot" data-seat="{{ seat }}"></div>
+    </div>
+{% endmacro %}
+
+{% block body %}
+<div class="max-w-3xl mx-auto"
+     data-controller="replay"
+     data-replay-data-value="{{ replay|json_encode }}"
+     data-action="keydown.left@window->replay#prev keydown.right@window->replay#next keydown.space@window->replay#togglePlay">
+
+    {# Kopfzeile #}
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">Replay</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ variantenLabels[replay.variante] ?? 'Normalspiel' }}
+                {% if spiel.beendetAm %} &middot; {{ spiel.beendetAm|date('d.m.Y H:i') }}{% endif %}
+            </p>
+        </div>
+        <a href="{{ path('app_replay_liste') }}" class="btn-secondary text-sm">Alle Replays</a>
+    </div>
+
+    {# Spielbrett #}
+    <div class="bg-tisch-900 rounded-2xl border border-tisch-700 shadow-lg p-4 sm:p-6">
+        <div class="grid grid-cols-3 grid-rows-3 gap-2 items-center justify-items-center" style="min-height: 26rem">
+            {# Oben #}
+            <div class="col-start-2 row-start-1">{{ _self.panel(teilnehmerMap['s' ~ obererSitz] ?? null, obererSitz) }}</div>
+            {# Links #}
+            <div class="col-start-1 row-start-2">{{ _self.panel(teilnehmerMap['s' ~ linkerSitz] ?? null, linkerSitz) }}</div>
+            {# Mitte: Anzeigetafel #}
+            <div class="col-start-2 row-start-2 text-center">
+                <div class="bg-tisch-800/70 rounded-xl border border-tisch-700 px-4 py-3 min-w-40">
+                    <p class="text-tisch-300 text-xs uppercase tracking-wider" data-replay-target="trickLabel">Stich 0</p>
+                    <div class="flex items-center justify-center gap-3 mt-2">
+                        <div class="text-center">
+                            <p class="text-blue-300 text-[10px] font-bold">RE</p>
+                            <p class="text-white text-lg font-bold" data-replay-target="scoreRe">0</p>
+                        </div>
+                        <div class="text-tisch-500">:</div>
+                        <div class="text-center">
+                            <p class="text-red-300 text-[10px] font-bold">KONTRA</p>
+                            <p class="text-white text-lg font-bold" data-replay-target="scoreKontra">0</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1 justify-center mt-2 min-h-5" data-replay-target="ansagen"></div>
+                </div>
+            </div>
+            {# Rechts #}
+            <div class="col-start-3 row-start-2">{{ _self.panel(teilnehmerMap['s' ~ rechterSitz] ?? null, rechterSitz) }}</div>
+            {# Unten (Betrachter) #}
+            <div class="col-start-2 row-start-3">{{ _self.panel(teilnehmerMap['s' ~ meinSitz] ?? null, meinSitz) }}</div>
+        </div>
+    </div>
+
+    {# Steuerung #}
+    <div class="mt-4 space-y-3">
+        <input type="range" min="0" max="100" value="0" step="1"
+               class="w-full accent-tisch-500"
+               data-replay-target="slider" data-action="input->replay#seek">
+        <div class="flex items-center justify-center gap-2">
+            <button type="button" class="replay-btn" title="Anfang" data-action="replay#first">⏮</button>
+            <button type="button" class="replay-btn" title="Vorheriger Stich" data-action="replay#prevTrick">⏪</button>
+            <button type="button" class="replay-btn" title="Karte zurück (←)" data-action="replay#prev">◀</button>
+            <button type="button" class="replay-btn replay-btn--play w-14" title="Abspielen (Leertaste)" data-action="replay#togglePlay" data-replay-target="playBtn">▶</button>
+            <button type="button" class="replay-btn" title="Karte vor (→)" data-action="replay#next">▶</button>
+            <button type="button" class="replay-btn" title="Nächster Stich" data-action="replay#nextTrick">⏩</button>
+            <button type="button" class="replay-btn" title="Ende" data-action="replay#last">⏭</button>
+        </div>
+        <p class="text-center text-xs text-gray-400 dark:text-gray-500" data-replay-target="status"></p>
+    </div>
+
+    {# Endabrechnung (nach letztem Stich eingeblendet) #}
+    {% if spiel.wertungDetails %}
+        {% set w = spiel.wertungDetails %}
+        <div class="mt-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 opacity-60 transition-opacity"
+             data-replay-target="endabrechnung">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Endabrechnung</h2>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="rounded-lg bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-700 px-3 py-2 text-center">
+                    <p class="text-blue-700 dark:text-blue-300 text-xs font-bold uppercase tracking-wider">RE</p>
+                    <p class="text-gray-900 dark:text-white text-lg font-bold">{{ w.augen.RE }}<span class="text-xs font-normal text-gray-400"> Augen</span></p>
+                </div>
+                <div class="rounded-lg bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700 px-3 py-2 text-center">
+                    <p class="text-red-700 dark:text-red-300 text-xs font-bold uppercase tracking-wider">KONTRA</p>
+                    <p class="text-gray-900 dark:text-white text-lg font-bold">{{ w.augen.KONTRA }}<span class="text-xs font-normal text-gray-400"> Augen</span></p>
+                </div>
+            </div>
+            <ul class="space-y-1 text-sm">
+                {% for p in w.positionen %}
+                    <li class="flex items-center justify-between gap-2">
+                        <span class="text-gray-600 dark:text-gray-300">{{ p.label }}</span>
+                        <span class="font-bold whitespace-nowrap {{ p.team == 'RE' ? 'text-blue-600 dark:text-blue-300' : 'text-red-600 dark:text-red-300' }}">
+                            {{ p.team }} +{{ p.punkte }}
+                        </span>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2 flex items-center justify-between text-sm">
+                <span class="text-gray-500 dark:text-gray-400">Sieger: <strong class="{{ w.sieger == 'RE' ? 'text-blue-600 dark:text-blue-300' : 'text-red-600 dark:text-red-300' }}">{{ w.sieger }}</strong></span>
+                <span class="text-gray-900 dark:text-white font-bold">Spielwert {{ w.spielwert }}</span>
+            </div>
+        </div>
+    {% endif %}
+
+    {# SVG-Pool: je gespielter Karte ein <template> #}
+    <div class="hidden" data-replay-target="svgPool">
+        {% for gk in spiel.gespielteKarten %}
+            <template data-karte-id="{{ gk.karteId }}">{{ karten_svg(gk.alsKarte()) }}</template>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
