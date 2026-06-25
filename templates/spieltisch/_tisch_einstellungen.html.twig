@@ -3,6 +3,8 @@
   Variablen: tisch, spiel (nullable), istAktiverSpieler
 #}
 {% if istAktiverSpieler %}
+{% set darfVerwalten = is_granted('TISCH_VERWALTEN', tisch) %}
+{% set istErsteller  = app.user and tisch.ersteller.id == app.user.id %}
 <details class="bg-tisch-800 border border-tisch-600 rounded-xl overflow-hidden">
     <summary class="px-4 py-2 text-tisch-300 text-sm cursor-pointer hover:text-white flex items-center gap-2">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -14,7 +16,34 @@
 
     <div class="px-4 pb-4 pt-2 space-y-3">
 
+        {% if not darfVerwalten %}
+        <p class="text-tisch-400 text-xs bg-tisch-900/40 rounded-lg px-3 py-2">
+            Nur der Tischersteller kann die Einstellungen dieses Tisches ändern.
+        </p>
+        {% endif %}
+
+        {# Steuerungsmodus — nur der Ersteller legt fest, wer ändern darf #}
+        {% if istErsteller %}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white text-sm font-medium">Einstellungen änderbar durch</p>
+                <p class="text-tisch-400 text-xs">Wer Regelwerk, Auto-Start &amp; Bots steuern darf</p>
+            </div>
+            <form method="post"
+                  action="{{ path('app_steuerung_modus', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#steuerungModus">
+                <input type="hidden" name="_token" value="{{ csrf_token('steuerung_' ~ tisch.id) }}">
+                <select name="modus" onchange="this.form.requestSubmit()"
+                        class="rounded-lg bg-tisch-700 border-tisch-600 text-white text-xs py-1">
+                    <option value="NUR_ERSTELLER" {{ tisch.steuerungsModus.value == 'NUR_ERSTELLER' ? 'selected' : '' }}>Nur ich</option>
+                    <option value="ALLE" {{ tisch.steuerungsModus.value == 'ALLE' ? 'selected' : '' }}>Alle Spieler</option>
+                </select>
+            </form>
+        </div>
+        {% endif %}
+
         {# Auto-Start Toggle #}
+        {% if darfVerwalten %}
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-white text-sm font-medium">Auto-Start</p>
@@ -32,8 +61,9 @@
                 </button>
             </form>
         </div>
+        {% endif %}
 
-        {# Nach Spiel verlassen #}
+        {# Nach Spiel verlassen — persönliche Aktion, für jeden aktiven Spieler #}
         {% if spiel and spiel.status.value in ['VORBEHALT', 'LAUFEND', 'ARMUT_ANFRAGE', 'ARMUT_TAUSCH'] %}
         <div class="flex items-center justify-between">
             <div>
@@ -56,7 +86,8 @@
         {% endif %}
 
         {# Bots auffüllen — nur zwischen Spielen + leere Warteschlange + freie Plätze #}
-        {% if (not spiel or spiel.status.value == 'BEENDET')
+        {% if darfVerwalten
+            and (not spiel or spiel.status.value == 'BEENDET')
             and tisch.warteschlange.count == 0
             and tisch.aktiveSpieler.count < 4 %}
         <div class="flex items-center justify-between">
@@ -76,8 +107,8 @@
         </div>
         {% endif %}
 
-        {# Regelwerk — nur zwischen Spielen änderbar #}
-        {% if not spiel or spiel.status.value == 'BEENDET' %}
+        {# Regelwerk — nur zwischen Spielen änderbar, nur für Berechtigte #}
+        {% if darfVerwalten and (not spiel or spiel.status.value == 'BEENDET') %}
             {% set rw = tisch.regelEinstellungen %}
             <div class="border-t border-tisch-700 pt-3">
                 <p class="text-tisch-300 text-xs font-medium mb-2 uppercase tracking-wider">Regelwerk</p>
@@ -167,7 +198,7 @@
                     </button>
                 </form>
             </div>
-        {% else %}
+        {% elseif darfVerwalten %}
             <p class="text-tisch-500 text-xs text-center">Regelwerk nur zwischen Spielen änderbar</p>
         {% endif %}
 

@@ -28,6 +28,11 @@
                         {{ form_widget(erstellenForm.zugangsmodus, {attr: {class: 'form-input'}}) }}
                         {{ form_errors(erstellenForm.zugangsmodus) }}
                     </div>
+                    <div>
+                        {{ form_label(erstellenForm.steuerungsModus, null, {label_attr: {class: 'form-label'}}) }}
+                        {{ form_widget(erstellenForm.steuerungsModus, {attr: {class: 'form-input'}}) }}
+                        {{ form_errors(erstellenForm.steuerungsModus) }}
+                    </div>
                     <button type="submit" class="btn-primary w-full text-sm">
                         Tisch erstellen
                     </button>

@@ -12,6 +12,7 @@ use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Entity\User;
+use App\Enum\TischSteuerungsModus;
 use App\Enum\ZugangsListenTyp;
 use App\Enum\ZugangsModusTyp;
 use App\Infrastructure\Mercure\LobbyMercurePublisher;
@@ -33,8 +34,12 @@ final class TischBeitrittsService
         private readonly BotNamenProvider $botNamenProvider,
     ) {}
 
-    public function erstelleTisch(User $ersteller, string $name, ZugangsModusTyp $zugangsmodus): Tisch
-    {
+    public function erstelleTisch(
+        User $ersteller,
+        string $name,
+        ZugangsModusTyp $zugangsmodus,
+        TischSteuerungsModus $steuerungsModus = TischSteuerungsModus::ALLE,
+    ): Tisch {
         if ($this->tischSpielerRepo->findAktiveMitgliedschaft($ersteller) !== null) {
             throw TischZugangVerweigertException::weilAnAnderemTisch();
         }
@@ -43,6 +48,7 @@ final class TischBeitrittsService
         $tisch->setName($name);
         $tisch->setErsteller($ersteller);
         $tisch->setZugangsmodus($zugangsmodus);
+        $tisch->setSteuerungsModus($steuerungsModus);
 
         $this->em->persist($tisch);
 
@@ -194,6 +200,20 @@ final class TischBeitrittsService
         $tisch->setRegelEinstellungen($regelwerk);
         $this->em->flush();
         $this->mercurePublisher->lobbyAktualisiert();
+    }
+
+    /**
+     * Legt fest, wer die Tisch-Einstellungen ändern darf. Nur der Ersteller.
+     * @throws \DomainException wenn der Nutzer nicht der Ersteller ist
+     */
+    public function steuerungsModusSetzen(Tisch $tisch, User $user, TischSteuerungsModus $modus): void
+    {
+        if ($tisch->getErsteller()->getId() != $user->getId()) {
+            throw new \DomainException('Nur der Tischersteller kann festlegen, wer den Tisch steuern darf.');
+        }
+
+        $tisch->setSteuerungsModus($modus);
+        $this->em->flush();
     }
 
     /** Setzt autoStart des Tisches und aktualisiert naechsterSpielstartAm entsprechend. */

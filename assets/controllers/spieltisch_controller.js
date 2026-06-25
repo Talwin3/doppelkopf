@@ -140,6 +140,16 @@ export default class extends Controller {
     if (ok) this.#einstellungenGespeichert(form, 'Auto-Start geändert.')
   }
 
+  async steuerungModus(event) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const ok = await this.#postForm(form, 'Steuerung konnte nicht geändert werden.')
+    if (ok) {
+      toast('Steuerung geändert.')
+      window.location.reload()
+    }
+  }
+
   soundUmschalten() {
     const aktiv = this.sound.toggle()
     this._soundToggleAktualisieren(aktiv)

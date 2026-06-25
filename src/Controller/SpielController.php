@@ -27,6 +27,7 @@ use App\Repository\GespielteKarteRepository;
 use App\Repository\SpielAnsageRepository;
 use App\Repository\SpielRepository;
 use App\Repository\SpielTeilnehmerRepository;
+use App\Security\Voter\TischAktionVoter;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -289,6 +290,10 @@ class SpielController extends AbstractController
             return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
         }
 
+        if (!$this->isGranted(TischAktionVoter::VERWALTEN, $tisch)) {
+            return new JsonResponse(['fehler' => 'Du darfst die Einstellungen dieses Tisches nicht ändern.'], Response::HTTP_FORBIDDEN);
+        }
+
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
@@ -307,6 +312,10 @@ class SpielController extends AbstractController
             return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
         }
 
+        if (!$this->isGranted(TischAktionVoter::VERWALTEN, $tisch)) {
+            return new JsonResponse(['fehler' => 'Du darfst das Regelwerk dieses Tisches nicht ändern.'], Response::HTTP_FORBIDDEN);
+        }
+
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
         if ($spiel !== null) {
             return new JsonResponse(['fehler' => 'Regelwerk kann nur zwischen Spielen geändert werden.'], Response::HTTP_CONFLICT);
@@ -314,18 +323,6 @@ class SpielController extends AbstractController
 
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
-
-        // Sicherstellen dass User ein aktiver Spieler am Tisch ist
-        $istAktiv = false;
-        foreach ($tisch->getAktiveSpieler() as $ts) {
-            if ($ts->getUser()?->getId() == $user->getId()) {
-                $istAktiv = true;
-                break;
-            }
-        }
-        if (!$istAktiv) {
-            return new JsonResponse(['fehler' => 'Nur aktive Spieler können das Regelwerk ändern.'], Response::HTTP_FORBIDDEN);
-        }
 
         $alleVarianten = ['SOLO_BUBEN', 'SOLO_DAMEN', 'SOLO_FLEISCHLOS', 'SOLO_KARO', 'SOLO_HERZ', 'SOLO_PIK', 'SOLO_KREUZ'];
         $soliEingabe   = $request->request->all()['soli_erlaubt'] ?? [];
@@ -365,11 +362,38 @@ class SpielController extends AbstractController
         return new JsonResponse(['moechteVerlassen' => $neuerWert]);
     }
 
+    #[Route('/{id}/steuerung-modus', name: 'app_steuerung_modus', methods: ['POST'])]
+    public function steuerungModus(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('steuerung_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $modus = \App\Enum\TischSteuerungsModus::tryFrom((string) $request->request->get('modus', ''));
+        if ($modus === null) {
+            return new JsonResponse(['fehler' => 'Ungültiger Modus.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+
+        try {
+            $this->beitrittsService->steuerungsModusSetzen($tisch, $user, $modus);
+            return new JsonResponse(['ok' => true, 'modus' => $modus->value]);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+        }
+    }
+
     #[Route('/{id}/auto-start-toggle', name: 'app_auto_start_toggle', methods: ['POST'])]
     public function autoStartToggle(Tisch $tisch, Request $request): JsonResponse
     {
         if (!$this->isCsrfTokenValid('auto_start_' . $tisch->getId(), $request->request->get('_token'))) {
             return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->isGranted(TischAktionVoter::VERWALTEN, $tisch)) {
+            return new JsonResponse(['fehler' => 'Du darfst die Einstellungen dieses Tisches nicht ändern.'], Response::HTTP_FORBIDDEN);
         }
 
         /** @var \App\Entity\User $user */

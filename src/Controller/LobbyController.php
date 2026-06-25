@@ -75,6 +75,7 @@ class LobbyController extends AbstractController
                     $user,
                     $daten['name'],
                     $daten['zugangsmodus'],
+                    $daten['steuerungsModus'],
                 );
 
                 $this->addFlash('success', 'Tisch „' . $tisch->getName() . '" wurde erstellt.');

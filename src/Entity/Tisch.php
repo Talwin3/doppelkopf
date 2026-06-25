@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Enum\TischStatus;
+use App\Enum\TischSteuerungsModus;
 use App\Enum\ZugangsModusTyp;
 use App\Repository\TischRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -39,6 +40,14 @@ class Tisch
 
     #[ORM\Column(options: ['default' => true])]
     private bool $autoStart = true;
+
+    /**
+     * Wer die Tisch-Einstellungen ändern darf. Neue Tische: Default aus
+     * {@see TischSteuerungsModus::default()}; bestehende Tische behalten via
+     * Spalten-Default ALLE das bisherige Verhalten.
+     */
+    #[ORM\Column(length: 20, enumType: TischSteuerungsModus::class, options: ['default' => 'ALLE'])]
+    private TischSteuerungsModus $steuerungsModus = TischSteuerungsModus::ALLE;
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $naechsterSpielstartAm = null;
@@ -188,6 +197,9 @@ class Tisch
 
     public function isAutoStart(): bool { return $this->autoStart; }
     public function setAutoStart(bool $autoStart): static { $this->autoStart = $autoStart; return $this; }
+
+    public function getSteuerungsModus(): TischSteuerungsModus { return $this->steuerungsModus; }
+    public function setSteuerungsModus(TischSteuerungsModus $modus): static { $this->steuerungsModus = $modus; return $this; }
 
     public function getNaechsterSpielstartAm(): ?\DateTimeImmutable { return $this->naechsterSpielstartAm; }
     public function setNaechsterSpielstartAm(?\DateTimeImmutable $am): static { $this->naechsterSpielstartAm = $am; return $this; }

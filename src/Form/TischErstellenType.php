@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Form;
 
+use App\Enum\TischSteuerungsModus;
 use App\Enum\ZugangsModusTyp;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\EnumType;
@@ -38,6 +39,12 @@ class TischErstellenType extends AbstractType
                     ZugangsModusTyp::OFFEN  => 'Offen (jeder kann beitreten)',
                     ZugangsModusTyp::PRIVAT => 'Privat (nur Gästeliste)',
                 },
+            ])
+            ->add('steuerungsModus', EnumType::class, [
+                'class'        => TischSteuerungsModus::class,
+                'label'        => 'Wer darf die Einstellungen ändern?',
+                'data'         => TischSteuerungsModus::default(),
+                'choice_label' => fn(TischSteuerungsModus $m) => $m->label(),
             ])
         ;
     }
