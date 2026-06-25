@@ -50,22 +50,41 @@ final class AvatarService
         });
     }
 
+    /**
+     * Liefert die validierte Style-Instanz. Da {@see Style::fromJson()} die JSON-
+     * Schema-Validierung ausführt (~350 ms) und jeder Avatar in einem eigenen
+     * Request mit eigenem Stil gerendert wird, würde der reine Prozess-Cache nie
+     * greifen. Deshalb wird die *validierte* Style-Instanz serialisiert im Cache
+     * gehalten: Deserialisieren ruft den Konstruktor (und damit die Validierung)
+     * nicht erneut auf (~1 ms statt ~350 ms). Cache-Key enthält die Datei-mtime,
+     * damit ein Update des dicebear/styles-Pakets automatisch neu validiert.
+     */
     private function style(AvatarStil $stil): Style
     {
-        return $this->styleCache[$stil->value] ??= Style::fromJson(
-            $this->styleJson($stil),
-        );
-    }
-
-    private function styleJson(AvatarStil $stil): string
-    {
-        $pfad = $this->projectDir . '/vendor/dicebear/styles/src/' . $stil->value . '.json';
-        $json = @file_get_contents($pfad);
-
-        if ($json === false) {
-            throw new \RuntimeException(sprintf('Avatar-Stil "%s" nicht gefunden (%s).', $stil->value, $pfad));
+        if (isset($this->styleCache[$stil->value])) {
+            return $this->styleCache[$stil->value];
         }
 
-        return $json;
+        $pfad    = $this->stilPfad($stil);
+        $version = @filemtime($pfad) ?: 0;
+        $key     = 'avatar_style_' . $stil->value . '_' . $version;
+
+        $style = $this->cache->get($key, function (ItemInterface $item) use ($pfad): Style {
+            $item->expiresAfter(2592000); // 30 Tage
+
+            $json = @file_get_contents($pfad);
+            if ($json === false) {
+                throw new \RuntimeException(sprintf('Avatar-Stil-Datei nicht gefunden (%s).', $pfad));
+            }
+
+            return Style::fromJson($json);
+        });
+
+        return $this->styleCache[$stil->value] = $style;
+    }
+
+    private function stilPfad(AvatarStil $stil): string
+    {
+        return $this->projectDir . '/vendor/dicebear/styles/src/' . $stil->value . '.json';
     }
 }
