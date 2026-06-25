@@ -115,6 +115,21 @@
         @apply ring-2 ring-yellow-400 rounded-lg;
     }
 
+    /* Dialoge (natives <dialog>): zentriert, ohne Default-Rahmen, sanftes Einblenden */
+    .dialog {
+        @apply m-auto;
+    }
+    .dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+    }
+    .dialog[open] {
+        animation: dialog-auf 0.15s ease-out;
+    }
+    @keyframes dialog-auf {
+        from { opacity: 0; transform: translateY(8px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
     /* Replay-Steuerung */
     .replay-btn {
         @apply inline-flex items-center justify-center w-10 h-10 rounded-lg

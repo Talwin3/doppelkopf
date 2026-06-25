@@ -3,7 +3,7 @@ import { SoundEngine } from '../sound_engine.js'
 import { toast } from '../toast.js'
 
 export default class extends Controller {
-  static targets = ['zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle']
+  static targets = ['zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle', 'abrechnungDialog']
   static values = {
     mercureUrl: String,
     topic: String,
@@ -65,6 +65,11 @@ export default class extends Controller {
 
       // Zustands-Sounds (nach DOM-Update)
       this._spieleZustandsSound(daten)
+
+      // Abrechnung nach Spielende automatisch als Dialog öffnen.
+      if (daten.typ === 'SPIEL_BEENDET' && this.hasAbrechnungDialogTarget) {
+        this.abrechnungDialogTarget.showModal()
+      }
 
       if (daten.typ === 'STICH_ABGESCHLOSSEN') {
         this._stichAbschlussGezeigtAm = Date.now()

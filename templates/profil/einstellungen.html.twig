@@ -205,7 +205,12 @@
                 Konto löschen ▼
             </summary>
             <form method="post" action="{{ path('app_profil_konto_loeschen') }}" class="mt-4 space-y-4"
-                  onsubmit="return confirm('Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden.')">
+                  data-controller="confirm"
+                  data-action="submit->confirm#abfragen"
+                  data-confirm-title-value="Konto löschen?"
+                  data-confirm-text-value="Diese Aktion kann nicht rückgängig gemacht werden."
+                  data-confirm-bestaetigen-value="Konto löschen"
+                  data-confirm-gefahr-value="true">
                 <input type="hidden" name="_token" value="{{ csrf_token('konto_loeschen') }}">
                 <div>
                     <label class="form-label">
