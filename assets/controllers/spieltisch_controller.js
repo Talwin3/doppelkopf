@@ -29,6 +29,8 @@ export default class extends Controller {
       this.eventSource = new EventSource(url.toString())
       this.eventSource.onmessage = (event) => {
         const daten = JSON.parse(event.data)
+        // Chat läuft über dasselbe Topic, betrifft aber den Spielzustand nicht.
+        if (daten.typ === 'CHAT_NACHRICHT') return
         this.aktualisieren(daten)
       }
       this.eventSource.onerror = () => {}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Mercure;
 
+use App\Entity\ChatNachricht;
 use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Infrastructure\Logger\MercureLogger;
@@ -73,6 +74,33 @@ final class SpielMercurePublisher
     public function tischZustandAktualisiert(Spiel $spiel): void
     {
         $this->publizieren($spiel, 'TISCH_ZUSTAND');
+    }
+
+    /**
+     * Veröffentlicht eine Chat-Nachricht auf dem tischbezogenen Topic. Läuft über
+     * denselben Kanal wie die Spiel-Events; Clients unterscheiden anhand von `typ`.
+     */
+    public function chatNachricht(ChatNachricht $nachricht): void
+    {
+        $topic   = $this->topicFuerTisch($nachricht->getTisch());
+        $payload = [
+            'typ'        => 'CHAT_NACHRICHT',
+            'id'         => (string) $nachricht->getId(),
+            'absender'   => $nachricht->getAbsenderName(),
+            'absenderId' => (string) ($nachricht->getAbsender()?->getId() ?? ''),
+            'text'       => $nachricht->getText(),
+            'zeit'       => $nachricht->getErstelltAm()->format('H:i'),
+        ];
+
+        try {
+            $this->hub->publish(new Update(
+                $topic,
+                json_encode($payload, JSON_THROW_ON_ERROR),
+            ));
+            $this->logger->updateVeroeffentlicht($topic, 'CHAT_NACHRICHT');
+        } catch (\Throwable $e) {
+            $this->logger->veroeffentlichungFehlgeschlagen($topic, $e->getMessage());
+        }
     }
 
     /** @param array<string, mixed> $extra */

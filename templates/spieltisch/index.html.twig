@@ -64,5 +64,10 @@
         meinTischSpieler: meinTischSpieler,
     } %}
 
+    {# ── Tisch-Chat ──────────────────────────────────────────────────── #}
+    {% if meinTischSpieler is not null %}
+        {% include 'spieltisch/_chat.html.twig' %}
+    {% endif %}
+
 </div>
 {% endblock %}

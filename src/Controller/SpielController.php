@@ -54,6 +54,7 @@ class SpielController extends AbstractController
         private readonly ArmutService $armutService,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly StichStatistik $stichStatistik,
+        private readonly \App\Application\Doppelkopf\ChatService $chatService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -106,6 +107,8 @@ class SpielController extends AbstractController
             // Tischbezogenes Topic: bleibt über Spielgrenzen hinweg stabil, damit der
             // Client auch den Auto-Start des nächsten Spiels nach dem Punktestand mitbekommt.
             'mercureTopic'           => $this->mercurePublisher->topicFuerTisch($tisch),
+            'chatVerlauf'            => $this->chatService->verlauf($tisch),
+            'meinUserId'             => (string) $user->getId(),
         ]);
     }
 
