@@ -106,24 +106,28 @@
     </section>
 
     {# ── Avatar ───────────────────────────────────────────────────────── #}
-    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6"
+             data-controller="avatar-auswahl"
+             data-avatar-auswahl-seed-value="{{ user.avatarSeed }}">
         <div class="flex items-start gap-4 mb-4">
             <img src="{{ avatar_url(user, 96) }}" alt="Dein Avatar"
+                 data-avatar-auswahl-target="bigPreview"
                  class="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 ring-2 ring-gray-200 dark:ring-gray-600 shrink-0">
             <div class="flex-1">
                 <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Avatar</h2>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    Wähle einen Stil und würfle so lange, bis dir das Bild gefällt.
+                    Wähle einen Stil und würfle so lange, bis dir ein Vorschlag gefällt.
+                    Die Auswahl wird erst mit „Speichern“ übernommen.
                 </p>
-                <form method="post" action="{{ path('app_profil_avatar_wuerfeln') }}" class="mt-2">
-                    <input type="hidden" name="_token" value="{{ csrf_token('avatar_wuerfeln') }}">
-                    <button type="submit" class="btn-secondary text-xs">🎲 Neu würfeln</button>
-                </form>
+                <button type="button" class="btn-secondary text-xs mt-2"
+                        data-action="avatar-auswahl#wuerfeln">🎲 Neu würfeln</button>
             </div>
         </div>
 
         <form method="post" action="{{ path('app_profil_avatar') }}">
             <input type="hidden" name="_token" value="{{ csrf_token('avatar') }}">
+            <input type="hidden" name="avatar_seed" value="{{ user.avatarSeed }}"
+                   data-avatar-auswahl-target="seedInput">
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {% for stil in avatarStile %}
                     {% set aktiv = user.avatarStil.value == stil.value %}
@@ -132,8 +136,13 @@
                                      ? 'border-tisch-500 bg-tisch-50 dark:bg-tisch-900/20'
                                      : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40' }}">
                         <input type="radio" name="avatar_stil" value="{{ stil.value }}" {{ aktiv ? 'checked' : '' }}
+                               data-avatar-auswahl-target="radio"
+                               data-action="avatar-auswahl#waehleStil"
                                class="sr-only peer">
                         <img src="{{ avatar_url_roh(stil.value, user.avatarSeed, 96) }}" alt="{{ stil.label }}"
+                             data-avatar-auswahl-target="thumb"
+                             data-stil="{{ stil.value }}"
+                             data-url-template="{{ avatar_url_roh(stil.value, '__SEED__', 96) }}"
                              class="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 peer-checked:ring-2 peer-checked:ring-tisch-500">
                         <span class="text-xs font-medium text-center text-gray-700 dark:text-gray-300 leading-tight">{{ stil.label }}</span>
                     </label>

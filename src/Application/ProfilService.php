@@ -99,21 +99,25 @@ final class ProfilService
         $this->em->flush();
     }
 
-    public function avatarStilAendern(User $user, string $wert): void
+    /**
+     * Speichert die Avatar-Auswahl: Stil und der zuvor (clientseitig) gewürfelte
+     * Seed. Erst dieser Aufruf persistiert – das Würfeln selbst erzeugt nur
+     * Vorschläge im Browser. Ungültige Werte werden ignoriert (alter Wert bleibt).
+     */
+    public function avatarAendern(User $user, string $stilWert, string $seed): void
     {
-        $stil = \App\Enum\AvatarStil::tryFrom($wert);
+        $stil = \App\Enum\AvatarStil::tryFrom($stilWert);
         if ($stil === null) {
-            return; // unbekannten Wert ignorieren
+            return; // unbekannten Stil ignorieren
         }
 
         $user->setAvatarStil($stil->value);
-        $this->em->flush();
-    }
 
-    /** Würfelt einen neuen, stabilen Seed → neuer Avatar bei gleichem Stil. */
-    public function avatarNeuWuerfeln(User $user): void
-    {
-        $user->setAvatarSeed(bin2hex(random_bytes(8)));
+        // Seed nur übernehmen, wenn er dem erwarteten Format entspricht.
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $seed) === 1) {
+            $user->setAvatarSeed($seed);
+        }
+
         $this->em->flush();
     }
 

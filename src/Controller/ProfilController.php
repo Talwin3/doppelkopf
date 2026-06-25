@@ -223,25 +223,12 @@ class ProfilController extends AbstractController
 
         /** @var User $user */
         $user = $this->getUser();
-        $this->profilService->avatarStilAendern($user, (string) $request->request->get('avatar_stil', ''));
+        $this->profilService->avatarAendern(
+            $user,
+            (string) $request->request->get('avatar_stil', ''),
+            (string) $request->request->get('avatar_seed', ''),
+        );
         $this->addFlash('success', 'Avatar gespeichert.');
-
-        return $this->redirectToRoute('app_profil_einstellungen');
-    }
-
-    #[Route('/einstellungen/avatar/wuerfeln', name: 'app_profil_avatar_wuerfeln', methods: ['POST'])]
-    #[IsGranted('ROLE_USER')]
-    public function avatarWuerfeln(Request $request): Response
-    {
-        if (!$this->isCsrfTokenValid('avatar_wuerfeln', $request->request->get('_token'))) {
-            $this->addFlash('error', 'Ungültige Anfrage.');
-            return $this->redirectToRoute('app_profil_einstellungen');
-        }
-
-        /** @var User $user */
-        $user = $this->getUser();
-        $this->profilService->avatarNeuWuerfeln($user);
-        $this->addFlash('success', 'Neuer Avatar gewürfelt.');
 
         return $this->redirectToRoute('app_profil_einstellungen');
     }
