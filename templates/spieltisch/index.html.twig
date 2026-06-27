@@ -9,12 +9,14 @@
         {% set meinSitzplatz = ts.sitzplatz %}
     {% endif %}
 {% endfor %}
+{% set phase = spiel ? spiel.status.value : 'WARTEN' %}
 <div class="bg-tisch-900 rounded-2xl shadow-2xl min-h-[calc(100vh-12rem)] p-4 flex flex-col"
      data-controller="spieltisch"
      data-spieltisch-mercure-url-value="{{ mercureTopic ? mercurePublicUrl : '' }}"
      data-spieltisch-topic-value="{{ mercureTopic ?: '' }}"
      data-spieltisch-zustand-url-value="{{ path('app_spieltisch_zustand', {id: tisch.id}) }}"
-     data-spieltisch-mein-sitzplatz-value="{{ meinSitzplatz }}">
+     data-spieltisch-mein-sitzplatz-value="{{ meinSitzplatz }}"
+     data-spieltisch-phase-value="{{ phase }}">
 
     {# ── Kopfzeile ───────────────────────────────────────────────────── #}
     <div class="flex items-center justify-between mb-4">
@@ -45,10 +47,46 @@
         {% endif %}
     </div>
 
-    {# ── Spielzustand (via Mercure aktualisiert) ─────────────────────── #}
+    {# ── Spielzustand (Tisch-Kulisse, via Mercure aktualisiert) ──────── #}
     <div data-spieltisch-target="zustand" class="flex-1 flex flex-col">
-        {% include 'spieltisch/_spielzustand.html.twig' %}
+        {% include 'spieltisch/_tisch_bereich.html.twig' %}
     </div>
+
+    {# ── Persistente Overlay-Dialoge ─────────────────────────────────────
+       Liegen bewusst AUSSERHALB des #zustand-Containers, damit der innerHTML-
+       Austausch beim nächsten Mercure-Event sie nicht zerstört. Der spieltisch-
+       Controller spiegelt nur ihren Inhalt (#…Inhalt) und öffnet/schließt sie. #}
+
+    {# Abrechnung des letzten Spiels #}
+    <dialog data-spieltisch-target="abrechnungDialog"
+            data-action="click->spieltisch#abrechnungBackdrop"
+            class="dialog backdrop:bg-black/60 bg-transparent p-0 border-0 w-[92vw] max-w-md">
+        <div class="bg-tisch-800 rounded-2xl border border-tisch-600 shadow-2xl p-5 text-left">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">Abrechnung</h2>
+                <button type="button" class="text-tisch-300 hover:text-white text-2xl leading-none"
+                        data-action="spieltisch#abrechnungSchliessen" aria-label="Schließen">&times;</button>
+            </div>
+            <div data-spieltisch-target="abrechnungInhalt">
+                {% include 'spieltisch/_abrechnung_inhalt.html.twig' %}
+            </div>
+        </div>
+    </dialog>
+
+    {# Vorbehaltsrunde — Pflichtphase: kein Schließen per ESC/Backdrop #}
+    <dialog data-spieltisch-target="vorbehaltDialog"
+            data-action="cancel->spieltisch#dialogSchliessenVerhindern"
+            class="dialog backdrop:bg-black/60 bg-transparent p-0 border-0 w-[92vw] max-w-md">
+        <div class="bg-tisch-800 rounded-2xl border border-tisch-600 shadow-2xl p-5 text-left">
+            <div class="mb-4 text-center">
+                <h2 class="text-lg font-bold text-white">Vorbehaltsrunde</h2>
+                <p class="text-tisch-300 text-xs mt-1">Jeder Spieler deklariert reihum seinen Vorbehalt.</p>
+            </div>
+            <div data-spieltisch-target="vorbehaltInhalt">
+                {% if phase == 'VORBEHALT' %}{% include 'spieltisch/_vorbehalt_inhalt.html.twig' %}{% endif %}
+            </div>
+        </div>
+    </dialog>
 
     {# ── Tisch-Einstellungen (nur für aktive Spieler, unterhalb des Spielfelds) #}
     {% set meinTischSpieler = null %}

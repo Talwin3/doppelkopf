@@ -3,12 +3,16 @@ import { SoundEngine } from '../sound_engine.js'
 import { toast } from '../toast.js'
 
 export default class extends Controller {
-  static targets = ['zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle', 'abrechnungDialog']
+  static targets = [
+    'zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle',
+    'abrechnungDialog', 'abrechnungInhalt', 'vorbehaltDialog', 'vorbehaltInhalt',
+  ]
   static values = {
     mercureUrl: String,
     topic: String,
     zustandUrl: String,
     meinSitzplatz: Number,
+    phase: String,
   }
 
   connect() {
@@ -21,6 +25,11 @@ export default class extends Controller {
     this._stichAbschlussGezeigtAm = null
 
     this._soundToggleAktualisieren()
+
+    // Vorbehalts-Dialog beim Laden mitten in der Vorbehaltsrunde direkt öffnen.
+    if (this.phaseValue === 'VORBEHALT' && this.hasVorbehaltDialogTarget && !this.vorbehaltDialogTarget.open) {
+      this.vorbehaltDialogTarget.showModal()
+    }
 
     if (this.mercureUrlValue && this.topicValue) {
       const url = new URL(this.mercureUrlValue)
@@ -60,16 +69,12 @@ export default class extends Controller {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       })
       if (response.ok) {
-        this.zustandTarget.innerHTML = await response.text()
+        const phase = this._verteileZustand(await response.text())
+        this._dialogeSteuern(phase, daten)
       }
 
       // Zustands-Sounds (nach DOM-Update)
       this._spieleZustandsSound(daten)
-
-      // Abrechnung nach Spielende automatisch als Dialog öffnen.
-      if (daten.typ === 'SPIEL_BEENDET' && this.hasAbrechnungDialogTarget) {
-        this.abrechnungDialogTarget.showModal()
-      }
 
       if (daten.typ === 'STICH_ABGESCHLOSSEN') {
         this._stichAbschlussGezeigtAm = Date.now()
@@ -79,6 +84,82 @@ export default class extends Controller {
       // des nächsten Spiels (KARTEN_AUSGETEILT) an und der Zustand wird neu geladen.
     } catch {
       // Nächstes Event versucht es erneut
+    }
+  }
+
+  // ── Zustands-Verteilung & Dialoge ──────────────────────────────────────
+
+  /**
+   * Verteilt die Antwort der Zustands-Route auf Tisch-Kulisse (#zustand) und die
+   * Inhalte der persistenten Overlay-Dialoge. Die <dialog>-Elemente selbst werden
+   * NICHT angefasst – nur ihr Inhalt –, damit ein offener Dialog beim Reload nicht
+   * geschlossen wird. Gibt die aktuelle Phase zurück.
+   */
+  _verteileZustand(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const root = doc.querySelector('[data-zustand-root]')
+    if (!root) {
+      // Fallback: ganze Antwort als Kulisse einsetzen.
+      this.zustandTarget.innerHTML = html
+      return ''
+    }
+
+    const inhalt = (bereich) => root.querySelector(`template[data-bereich="${bereich}"]`)?.innerHTML ?? ''
+
+    this.zustandTarget.innerHTML = inhalt('tisch')
+    if (this.hasVorbehaltInhaltTarget) this.vorbehaltInhaltTarget.innerHTML = inhalt('vorbehalt')
+    if (this.hasAbrechnungInhaltTarget) this.abrechnungInhaltTarget.innerHTML = inhalt('abrechnung')
+
+    return root.dataset.phase ?? ''
+  }
+
+  /** Öffnet/schließt Vorbehalts- und Abrechnungs-Dialog passend zur Phase/zum Event. */
+  _dialogeSteuern(phase, daten) {
+    this.phaseValue = phase
+
+    // Vorbehalts-Dialog folgt der Phase.
+    if (phase === 'VORBEHALT') {
+      if (this.hasVorbehaltDialogTarget && !this.vorbehaltDialogTarget.open) {
+        this._abrechnungSchliessen() // keine zwei gestapelten Modals
+        this.vorbehaltDialogTarget.showModal()
+      }
+    } else if (this.hasVorbehaltDialogTarget && this.vorbehaltDialogTarget.open) {
+      this.vorbehaltDialogTarget.close()
+    }
+
+    // Abrechnung nur beim Live-Event SPIEL_BEENDET automatisch öffnen; sie bleibt
+    // dann offen (auch über den Reload des nächsten Spiels), bis der Nutzer sie
+    // schließt oder die nächste Vorbehaltsrunde beginnt.
+    if (daten.typ === 'SPIEL_BEENDET' && this.hasAbrechnungDialogTarget
+        && this.abrechnungInhaltTarget?.innerHTML.trim()) {
+      if (!this.abrechnungDialogTarget.open) this.abrechnungDialogTarget.showModal()
+    }
+  }
+
+  // ── Dialog-Aktionen ────────────────────────────────────────────────────
+
+  abrechnungOeffnen() {
+    if (this.hasAbrechnungDialogTarget && !this.abrechnungDialogTarget.open) {
+      this.abrechnungDialogTarget.showModal()
+    }
+  }
+
+  abrechnungSchliessen() {
+    this._abrechnungSchliessen()
+  }
+
+  abrechnungBackdrop(event) {
+    if (event.target === this.abrechnungDialogTarget) this._abrechnungSchliessen()
+  }
+
+  /** Verhindert das Schließen per ESC (cancel-Event) – für Pflicht-Dialoge. */
+  dialogSchliessenVerhindern(event) {
+    event.preventDefault()
+  }
+
+  _abrechnungSchliessen() {
+    if (this.hasAbrechnungDialogTarget && this.abrechnungDialogTarget.open) {
+      this.abrechnungDialogTarget.close()
     }
   }
 

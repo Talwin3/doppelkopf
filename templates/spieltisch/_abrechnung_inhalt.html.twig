@@ -1,0 +1,24 @@
+{# Dynamischer Inhalt des Abrechnungs-Dialogs (in #abrechnungInhalt injiziert).
+   Die Dialog-Hülle (header, Schließen-Button) liegt persistent in index.html.twig. #}
+{% import 'spieltisch/_wertung_macros.html.twig' as wertung %}
+
+{% if letztesSpiel %}
+    {# Versteckte Sound-Targets für gewonnen/verloren (vom spieltisch-Controller bei SPIEL_BEENDET genutzt) #}
+    {% for t in letztesSpiel.teilnehmer %}
+        {% if t.user and t.user.id == app.user.id %}
+            {% if t.gewonnen %}
+                <span class="hidden" data-spieltisch-target="spielGewonnen"></span>
+            {% elseif t.gewonnen is same as(false) %}
+                <span class="hidden" data-spieltisch-target="spielVerloren"></span>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+
+    {{ wertung.spieler_deltas(letztesSpiel) }}
+    {{ wertung.wertung_aufstellung(letztesSpiel) }}
+
+    <div class="mt-5 flex justify-end gap-2">
+        <a href="{{ path('app_lobby') }}" class="btn-secondary text-sm">Zur Lobby</a>
+        <button type="button" class="btn-primary text-sm" data-action="spieltisch#abrechnungSchliessen">Schließen</button>
+    </div>
+{% endif %}

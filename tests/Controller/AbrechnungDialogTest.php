@@ -76,9 +76,23 @@ final class AbrechnungDialogTest extends WebTestCase
         $client->request('GET', '/spieltisch/' . $tischId);
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorExists('[data-controller="dialog"]');
+        // Persistenter Abrechnungs-Dialog (außerhalb des reload-baren #zustand,
+        // vom spieltisch-Controller bei SPIEL_BEENDET geöffnet).
         self::assertSelectorExists('dialog[data-spieltisch-target="abrechnungDialog"]');
+        self::assertSelectorExists('dialog[data-spieltisch-target="abrechnungDialog"] [data-spieltisch-target="abrechnungInhalt"]');
         // Die Abrechnungsinhalte sind im Dialog vorhanden.
-        self::assertSelectorTextContains('dialog[data-dialog-target="dialog"]', 'Abrechnung');
+        self::assertSelectorTextContains('dialog[data-spieltisch-target="abrechnungDialog"]', 'Abrechnung');
+
+        // Die Zustands-Route (AJAX) liefert den Wrapper mit Phase + Sektionen,
+        // auf den der spieltisch-Controller zum Verteilen angewiesen ist.
+        $client->request('GET', '/spieltisch/' . $tischId . '/zustand', server: ['HTTP_X_Requested_With' => 'XMLHttpRequest']);
+        self::assertResponseIsSuccessful();
+        $html = (string) $client->getResponse()->getContent();
+        self::assertStringContainsString('data-zustand-root', $html);
+        self::assertStringContainsString('data-phase="WARTEN"', $html);
+        self::assertStringContainsString('template data-bereich="tisch"', $html);
+        self::assertStringContainsString('template data-bereich="abrechnung"', $html);
+        // Die Abrechnung gehört in die Dialog-Sektion, NICHT in die Tisch-Kulisse.
+        self::assertStringContainsString('Spielwert', $html);
     }
 }
