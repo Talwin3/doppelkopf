@@ -30,6 +30,7 @@ final class SpielAbschlussService
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly LobbyMercurePublisher $lobbyPublisher,
         private readonly SystemEinstellungService $einstellungService,
+        private readonly TischProtokollService $protokoll,
     ) {}
 
     public function abschliessen(Spiel $spiel): void
@@ -115,7 +116,62 @@ final class SpielAbschlussService
 
         $this->mercurePublisher->spielBeendet($spiel);
 
+        $this->protokolliereErgebnis($spiel, $wertung);
+
         $this->nachSpielAbrechnungDurchfuehren($spiel->getTisch());
+    }
+
+    /**
+     * Schreibt das Spielergebnis (Sieger, Augen, Spielwert, Gewinner) und etwaige
+     * Sonderpunkte (Doppelkopf/Karlchen/Fuchs gefangen) ins Event-Log.
+     *
+     * @param array{augen: array<string, int>, sieger: string, positionen: list<array{label: string, team: string, punkte: int}>, spielwert: int} $wertung
+     */
+    private function protokolliereErgebnis(Spiel $spiel, array $wertung): void
+    {
+        $sieger    = $wertung['sieger'];
+        $verlierer = $sieger === Team::RE->value ? Team::KONTRA->value : Team::RE->value;
+
+        $augenSieger    = $wertung['augen'][$sieger] ?? 0;
+        $augenVerlierer = $wertung['augen'][$verlierer] ?? 0;
+
+        $siegerNamen = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if ($t->getTeam()?->value === $sieger) {
+                $siegerNamen[] = $t->getAnzeigeName();
+            }
+        }
+
+        $this->protokoll->ereignis($spiel->getTisch(), sprintf(
+            'Spiel beendet: %s gewinnt %d:%d Augen (Spielwert %d) – %s.',
+            $this->teamLabel($sieger),
+            $augenSieger,
+            $augenVerlierer,
+            $wertung['spielwert'],
+            $siegerNamen === [] ? '–' : implode(', ', $siegerNamen),
+        ));
+
+        // Sonderpunkte als eigene Zeile, der erzielenden Partei zugeordnet.
+        $besonderheiten = [];
+        foreach ($wertung['positionen'] as $p) {
+            foreach (['Doppelkopf', 'Karlchen', 'Fuchs gefangen'] as $praefix) {
+                if (str_starts_with($p['label'], $praefix)) {
+                    $besonderheiten[] = sprintf('%s (%s)', $p['label'], $this->teamLabel($p['team']));
+                    break;
+                }
+            }
+        }
+        if ($besonderheiten !== []) {
+            $this->protokoll->ereignis(
+                $spiel->getTisch(),
+                'Besonderheiten: ' . implode(', ', $besonderheiten) . '.',
+            );
+        }
+    }
+
+    private function teamLabel(string $team): string
+    {
+        return $team === Team::RE->value ? 'Re' : 'Contra';
     }
 
     /**
@@ -190,6 +246,10 @@ final class SpielAbschlussService
             // Mensch aus Queue auf Bot-Platz setzen
             $mensch->setSitzplatz($freigesetzterPlatz);
             $mensch->setPositionInWarteschlange(null);
+            $this->protokoll->ereignis(
+                $tisch,
+                sprintf('%s rückt aus der Warteschlange nach und übernimmt einen Bot-Platz.', $mensch->getAnzeigeName()),
+            );
 
             // Queue-Positionen neu nummerieren
             $verbleibende = array_values(array_filter(
@@ -269,5 +329,9 @@ final class SpielAbschlussService
         }
 
         $this->em->flush();
+        $this->protokoll->ereignis(
+            $tisch,
+            sprintf('%s rückt aus der Warteschlange an den Tisch.', $naechster->getAnzeigeName()),
+        );
     }
 }

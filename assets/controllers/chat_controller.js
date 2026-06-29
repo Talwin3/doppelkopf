@@ -68,6 +68,11 @@ export default class extends Controller {
   anhaengen(daten) {
     if (this.hasLeerTarget) this.leerTarget.remove()
 
+    if (daten.system) {
+      this.anhaengenSystem(daten)
+      return
+    }
+
     const eigen = this.meinUserIdValue !== '' && daten.absenderId === this.meinUserIdValue
 
     const zeile = document.createElement('div')
@@ -94,6 +99,28 @@ export default class extends Controller {
     bubble.appendChild(zeit)
 
     zeile.appendChild(bubble)
+    this.messagesTarget.appendChild(zeile)
+    this.scrollToBottom()
+  }
+
+  anhaengenSystem(daten) {
+    const zeile = document.createElement('div')
+    zeile.className = 'flex justify-center'
+
+    const p = document.createElement('p')
+    p.className = 'max-w-[90%] text-center text-[11px] italic text-tisch-400 leading-snug px-2 py-0.5'
+
+    const text = document.createElement('span')
+    text.className = 'break-words'
+    text.textContent = daten.text
+    p.appendChild(text)
+
+    const zeit = document.createElement('span')
+    zeit.className = 'text-tisch-500 not-italic'
+    zeit.textContent = ` · ${daten.zeit}`
+    p.appendChild(zeit)
+
+    zeile.appendChild(p)
     this.messagesTarget.appendChild(zeile)
     this.scrollToBottom()
   }

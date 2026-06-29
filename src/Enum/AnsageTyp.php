@@ -14,4 +14,18 @@ enum AnsageTyp: string
     case SCHWARZ    = 'SCHWARZ';
     case HOCHZEIT   = 'HOCHZEIT';
     case SOLO       = 'SOLO';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::RE         => 'Re',
+            self::CONTRA     => 'Contra',
+            self::KEINE_NEUN => 'keine 90',
+            self::KEINE_SECHS => 'keine 60',
+            self::KEINE_DREI => 'keine 30',
+            self::SCHWARZ    => 'schwarz',
+            self::HOCHZEIT   => 'Hochzeit',
+            self::SOLO       => 'Solo',
+        };
+    }
 }

@@ -11,6 +11,7 @@ use App\Domain\Doppelkopf\Regel\Solo\DamenSoloTrumpfOrdnung;
 use App\Domain\Doppelkopf\Regel\Solo\FarbSoloTrumpfOrdnung;
 use App\Domain\Doppelkopf\Regel\Solo\FleischlosSoloTrumpfOrdnung;
 use App\Entity\Spiel;
+use App\Entity\SpielTeilnehmer;
 use App\Enum\Kartenfarbe;
 use App\Enum\SpielVariante;
 
@@ -111,6 +112,36 @@ final class TrumpfOrdnungFactory
             && $this->einSpielerHaeltBeide($spiel, $f . '_NEUN_1', $f . '_NEUN_2');
 
         return ['schweinchen' => $schweinchen, 'superschweinchen' => $superschweinchen];
+    }
+
+    /**
+     * Ermittelt den Spieler, der das (Super-)Schweinchen hält — sofern die Regel aktiv
+     * ist und ein Spieler beide Trumpf-Asse auf der Starthand hat. Für das Event-Log.
+     *
+     * @return array{teilnehmer: ?SpielTeilnehmer, super: bool}
+     */
+    public function schweinchenHalter(Spiel $spiel): array
+    {
+        $status = $this->schweinchenStatus($spiel);
+        if (!$status['schweinchen']) {
+            return ['teilnehmer' => null, 'super' => false];
+        }
+
+        $variante = $spiel->getVariante() ?? SpielVariante::NORMALSPIEL;
+        $farbe    = $this->trumpffarbe($variante);
+        if ($farbe === null) {
+            return ['teilnehmer' => null, 'super' => false];
+        }
+
+        $f = $farbe->value;
+        foreach ($spiel->getTeilnehmer() as $teilnehmer) {
+            $ids = $teilnehmer->getStartkartenIds();
+            if (in_array($f . '_ASS_1', $ids, true) && in_array($f . '_ASS_2', $ids, true)) {
+                return ['teilnehmer' => $teilnehmer, 'super' => $status['superschweinchen']];
+            }
+        }
+
+        return ['teilnehmer' => null, 'super' => false];
     }
 
     /** Prüft, ob ein einzelner Spieler beide genannten Karten in der Starthand hält. */

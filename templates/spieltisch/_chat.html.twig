@@ -18,16 +18,25 @@
         <div data-chat-target="messages"
              class="h-48 overflow-y-auto space-y-1.5 rounded-lg bg-tisch-900/60 p-3 text-sm">
             {% for n in chatVerlauf %}
-                {% set eigen = meinUserId != '' and n.absender and (n.absender.id ~ '') == meinUserId %}
-                <div class="flex flex-col {{ eigen ? 'items-end' : 'items-start' }}">
-                    <div class="max-w-[85%] rounded-lg px-2.5 py-1.5 {{ eigen ? 'bg-tisch-600 text-white' : 'bg-tisch-700 text-tisch-100' }}">
-                        {% if not eigen %}
-                            <p class="text-[11px] font-semibold text-tisch-300 leading-tight">{{ n.absenderName }}</p>
-                        {% endif %}
-                        <p class="whitespace-pre-wrap break-words leading-snug">{{ n.text }}</p>
-                        <p class="text-[10px] text-tisch-400 text-right leading-none mt-0.5">{{ n.erstelltAm|date('H:i') }}</p>
+                {% if n.istSystem %}
+                    <div class="flex justify-center">
+                        <p class="max-w-[90%] text-center text-[11px] italic text-tisch-400 leading-snug px-2 py-0.5">
+                            <span class="break-words">{{ n.text }}</span>
+                            <span class="text-tisch-500 not-italic">· {{ n.erstelltAm|date('H:i') }}</span>
+                        </p>
                     </div>
-                </div>
+                {% else %}
+                    {% set eigen = meinUserId != '' and n.absender and (n.absender.id ~ '') == meinUserId %}
+                    <div class="flex flex-col {{ eigen ? 'items-end' : 'items-start' }}">
+                        <div class="max-w-[85%] rounded-lg px-2.5 py-1.5 {{ eigen ? 'bg-tisch-600 text-white' : 'bg-tisch-700 text-tisch-100' }}">
+                            {% if not eigen %}
+                                <p class="text-[11px] font-semibold text-tisch-300 leading-tight">{{ n.absenderName }}</p>
+                            {% endif %}
+                            <p class="whitespace-pre-wrap break-words leading-snug">{{ n.text }}</p>
+                            <p class="text-[10px] text-tisch-400 text-right leading-none mt-0.5">{{ n.erstelltAm|date('H:i') }}</p>
+                        </div>
+                    </div>
+                {% endif %}
             {% else %}
                 <p class="text-tisch-400 text-xs text-center py-4" data-chat-target="leer">
                     Noch keine Nachrichten. Schreib etwas!

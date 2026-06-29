@@ -32,6 +32,7 @@ final class TischBeitrittsService
         private readonly SpielMercurePublisher $spielPublisher,
         private readonly SpielRepository $spielRepo,
         private readonly BotNamenProvider $botNamenProvider,
+        private readonly TischProtokollService $protokoll,
     ) {}
 
     public function erstelleTisch(
@@ -118,6 +119,10 @@ final class TischBeitrittsService
 
         $this->mercurePublisher->lobbyAktualisiert();
 
+        $this->protokoll->ereignis($tisch, $tischSpieler->getSitzplatz() !== null
+            ? sprintf('%s setzt sich an den Tisch.', $tischSpieler->getAnzeigeName())
+            : sprintf('%s wartet in der Warteschlange.', $tischSpieler->getAnzeigeName()));
+
         return $tischSpieler;
     }
 
@@ -136,12 +141,18 @@ final class TischBeitrittsService
         }
 
         $freigegebenerPlatz = $tischSpieler->getSitzplatz();
+        $verlasserName      = $tischSpieler->getAnzeigeName();
 
         $this->em->remove($tischSpieler);
         // Auch aus der In-Memory-Collection lösen, damit hatMenschAmTisch() unten
         // den korrekten Stand sieht (em->remove allein leert die Collection nicht).
         $tisch->getSpieler()->removeElement($tischSpieler);
         $this->em->flush();
+
+        // Nur protokollieren, wenn noch jemand am Tisch ist, der es lesen kann.
+        if ($tisch->hatMenschAmTisch()) {
+            $this->protokoll->ereignis($tisch, sprintf('%s verlässt den Tisch.', $verlasserName));
+        }
 
         if ($freigegebenerPlatz !== null) {
             $this->warteschlangeNachruecken($tisch, $freigegebenerPlatz);
@@ -177,6 +188,13 @@ final class TischBeitrittsService
         $tischSpieler->setMoechteNachSpielVerlassen($neuerWert);
         $this->em->flush();
 
+        $this->protokoll->ereignis(
+            $tisch,
+            $neuerWert
+                ? sprintf('%s verlässt den Tisch nach diesem Spiel.', $tischSpieler->getAnzeigeName())
+                : sprintf('%s bleibt doch am Tisch.', $tischSpieler->getAnzeigeName()),
+        );
+
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
         if ($spiel !== null) {
             $this->spielPublisher->tischZustandAktualisiert($spiel);
@@ -200,6 +218,11 @@ final class TischBeitrittsService
         $tisch->setRegelEinstellungen($regelwerk);
         $this->em->flush();
         $this->mercurePublisher->lobbyAktualisiert();
+
+        $this->protokoll->ereignis(
+            $tisch,
+            sprintf('%s hat das Regelwerk geändert.', $tischSpieler->getAnzeigeName()),
+        );
     }
 
     /**
@@ -292,6 +315,10 @@ final class TischBeitrittsService
         if ($anzahl > 0) {
             $this->em->flush();
             $this->mercurePublisher->lobbyAktualisiert();
+
+            $this->protokoll->ereignis($tisch, $anzahl === 1
+                ? '1 Bot wurde hinzugefügt.'
+                : sprintf('%d Bots wurden hinzugefügt.', $anzahl));
         }
 
         return $anzahl;
@@ -317,5 +344,9 @@ final class TischBeitrittsService
         }
 
         $this->em->flush();
+        $this->protokoll->ereignis(
+            $tisch,
+            sprintf('%s rückt aus der Warteschlange an den Tisch.', $naechster->getAnzeigeName()),
+        );
     }
 }

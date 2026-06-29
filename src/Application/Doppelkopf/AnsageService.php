@@ -46,6 +46,7 @@ final class AnsageService
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielAnsageRepository $ansageRepo,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly TischProtokollService $protokoll,
     ) {}
 
     public function machen(Spiel $spiel, User $user, AnsageTyp $typ): void
@@ -104,6 +105,9 @@ final class AnsageService
             }
         }
 
+        // Spieler handelt selbst → evtl. laufende Bot-Vertretung beenden.
+        $this->protokoll->spielerZurueck($teilnehmer);
+
         $ansage = new SpielAnsage();
         $ansage->setSpiel($spiel);
         $ansage->setSitzplatz($teilnehmer->getSitzplatz());
@@ -115,6 +119,10 @@ final class AnsageService
         $this->em->flush();
 
         $this->mercurePublisher->ansageGemacht($spiel);
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s sagt %s an.', $teilnehmer->getAnzeigeName(), $typ->label()),
+        );
     }
 
     /**

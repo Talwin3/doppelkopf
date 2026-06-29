@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\ChatNachrichtTyp;
 use App\Repository\ChatNachrichtRepository;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
@@ -26,6 +27,10 @@ class ChatNachricht
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Tisch $tisch;
 
+    /** Spieler-Nachricht oder automatisches System-Ereignis (Event-Log). */
+    #[ORM\Column(length: 10, enumType: ChatNachrichtTyp::class, options: ['default' => 'SPIELER'])]
+    private ChatNachrichtTyp $typ = ChatNachrichtTyp::SPIELER;
+
     /** Null, wenn der Nutzer später gelöscht wurde (Name bleibt über absenderName erhalten). */
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
@@ -47,6 +52,10 @@ class ChatNachricht
     }
 
     public function getId(): Uuid { return $this->id; }
+
+    public function getTyp(): ChatNachrichtTyp { return $this->typ; }
+    public function setTyp(ChatNachrichtTyp $typ): static { $this->typ = $typ; return $this; }
+    public function istSystem(): bool { return $this->typ === ChatNachrichtTyp::SYSTEM; }
 
     public function getTisch(): Tisch { return $this->tisch; }
     public function setTisch(Tisch $tisch): static { $this->tisch = $tisch; return $this; }

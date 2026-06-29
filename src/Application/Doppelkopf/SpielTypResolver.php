@@ -31,6 +31,8 @@ final class SpielTypResolver
         private readonly EntityManagerInterface $em,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly ArmutService $armutService,
+        private readonly TischProtokollService $protokoll,
+        private readonly \App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory $trumpfOrdnungFactory,
     ) {}
 
     /**
@@ -88,6 +90,10 @@ final class SpielTypResolver
             ?? throw new \LogicException('Solo-Deklaration ohne Variante.');
 
         $spiel->setVariante($variante);
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s spielt ein %s.', $solist->getAnzeigeName(), $variante->label()),
+        );
 
         foreach ($alleTeilnehmer as $t) {
             $t->setTeam($t === $solist ? Team::RE : Team::KONTRA);
@@ -109,6 +115,10 @@ final class SpielTypResolver
     private function aufloesenAlsHochzeit(Spiel $spiel, SpielTeilnehmer $hochzeitspieler, array $alleTeilnehmer): void
     {
         $spiel->setVariante(SpielVariante::HOCHZEIT);
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s spielt eine Hochzeit – der Partner wird im ersten Fremdstich bestimmt.', $hochzeitspieler->getAnzeigeName()),
+        );
 
         // Hochzeit: RE = Spieler mit beiden Kreuz-Damen + erster Stich-Gewinner (später)
         // Beim Start ist nur der Hochzeitsspieler RE, Partner offen
@@ -142,5 +152,15 @@ final class SpielTypResolver
 
         $this->em->flush();
         $this->mercurePublisher->spielGestartet($spiel);
+
+        $schwein = $this->trumpfOrdnungFactory->schweinchenHalter($spiel);
+        if ($schwein['teilnehmer'] !== null) {
+            $this->protokoll->schweinchen($schwein['teilnehmer'], $schwein['super']);
+        }
+
+        $vorhand = $spiel->getTeilnehmerBySitzplatz($spiel->getAktuellerSpielerSitzplatz());
+        if ($vorhand !== null) {
+            $this->protokoll->ereignis($spiel->getTisch(), sprintf('%s kommt raus.', $vorhand->getAnzeigeName()));
+        }
     }
 }

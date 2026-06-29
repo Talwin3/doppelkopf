@@ -35,6 +35,7 @@ final class KarteAusspielenService
         private readonly PunkteZaehler $punkteZaehler,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly SpielAbschlussService $abschlussService,
+        private readonly TischProtokollService $protokoll,
     ) {}
 
     public function spielen(Spiel $spiel, User $user, string $karteId): void
@@ -51,6 +52,9 @@ final class KarteAusspielenService
         if ($teilnehmer->getSitzplatz() !== $spiel->getAktuellerSpielerSitzplatz()) {
             throw new UngueltigerZugException('Du bist nicht an der Reihe.');
         }
+
+        // Spieler handelt selbst → evtl. laufende Bot-Vertretung beenden.
+        $this->protokoll->spielerZurueck($teilnehmer);
 
         $this->spielenMitTeilnehmer($spiel, $teilnehmer, $karteId);
     }
@@ -159,11 +163,13 @@ final class KarteAusspielenService
         $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
 
         // Hochzeit: erster Stich den ein KONTRA-Spieler gewinnt → wird RE-Partner
+        $hochzeitPartnerName = null;
         if ($spiel->getVariante() === SpielVariante::HOCHZEIT && !$spiel->isHochzeitAufgeloest()) {
             $gewinner = $spiel->getTeilnehmerBySitzplatz($gewinnerSitzplatz);
             if ($gewinner?->getTeam() === Team::KONTRA) {
                 $gewinner->setTeam(Team::RE);
                 $spiel->setHochzeitAufgeloest(true);
+                $hochzeitPartnerName = $gewinner->getAnzeigeName();
             }
         }
 
@@ -187,6 +193,13 @@ final class KarteAusspielenService
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
             $this->em->flush();
             $this->mercurePublisher->stichAbgeschlossen($spiel, $gewinnerSitzplatz, $gespielterSitzplatz);
+        }
+
+        if ($hochzeitPartnerName !== null) {
+            $this->protokoll->ereignis(
+                $spiel->getTisch(),
+                sprintf('%s wird Partner – die Hochzeit ist geklärt.', $hochzeitPartnerName),
+            );
         }
     }
 

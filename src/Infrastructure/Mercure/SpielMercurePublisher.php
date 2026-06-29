@@ -86,6 +86,7 @@ final class SpielMercurePublisher
         $payload = [
             'typ'        => 'CHAT_NACHRICHT',
             'id'         => (string) $nachricht->getId(),
+            'system'     => $nachricht->istSystem(),
             'absender'   => $nachricht->getAbsenderName(),
             'absenderId' => (string) ($nachricht->getAbsender()?->getId() ?? ''),
             'text'       => $nachricht->getText(),

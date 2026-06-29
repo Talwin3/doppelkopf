@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
@@ -23,6 +24,8 @@ final class ArmutService
         private readonly SpielTeilnehmerRepository $teilnehmerRepo,
         private readonly SpielStartService $spielStartService,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly TischProtokollService $protokoll,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
     ) {}
 
     /**
@@ -49,6 +52,11 @@ final class ArmutService
 
         $this->em->flush();
         $this->mercurePublisher->armutAnfrage($spiel);
+
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s zeigt Armut an und sucht einen Partner.', $armutSpieler->getAnzeigeName()),
+        );
     }
 
     /**
@@ -73,6 +81,9 @@ final class ArmutService
             throw new \DomainException('Der Armut-Spieler kann nicht selbst annehmen.');
         }
 
+        // Spieler handelt selbst → evtl. laufende Bot-Vertretung beenden.
+        $this->protokoll->spielerZurueck($teilnehmer);
+
         $teilnehmer->setArmutAntwort($annehmen);
 
         if ($annehmen) {
@@ -82,6 +93,7 @@ final class ArmutService
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
             $this->em->flush();
             $this->mercurePublisher->armutAngenommen($spiel);
+            $this->protokollArmutAngenommen($spiel, $teilnehmer);
             return;
         }
 
@@ -126,6 +138,7 @@ final class ArmutService
             $spiel->setAktuellerZugBegannAm(new \DateTimeImmutable());
             $this->em->flush();
             $this->mercurePublisher->armutAngenommen($spiel);
+            $this->protokollArmutAngenommen($spiel, $teilnehmer);
             $this->botKartenTauschen($spiel, $teilnehmer);
             return;
         }
@@ -157,6 +170,9 @@ final class ArmutService
         if ($annehmer === null || $annehmer->getSitzplatz() !== $spiel->getArmutAnnehmerSitzplatz()) {
             throw new \DomainException('Nur der Annehmer kann Karten zurückgeben.');
         }
+
+        // Spieler handelt selbst → evtl. laufende Bot-Vertretung beenden.
+        $this->protokoll->spielerZurueck($annehmer);
 
         $this->tauschDurchfuehren($spiel, $annehmer, $zurueckKartenIds);
     }
@@ -221,6 +237,19 @@ final class ArmutService
 
         $this->em->flush();
         $this->mercurePublisher->spielGestartet($spiel);
+
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s gibt %d Karten zurück – die Armut ist geklärt.', $annehmer->getAnzeigeName(), $erwartet),
+        );
+        $schwein = $this->trumpfOrdnungFactory->schweinchenHalter($spiel);
+        if ($schwein['teilnehmer'] !== null) {
+            $this->protokoll->schweinchen($schwein['teilnehmer'], $schwein['super']);
+        }
+        $vorhand = $spiel->getTeilnehmerBySitzplatz($spiel->getAktuellerSpielerSitzplatz());
+        if ($vorhand !== null) {
+            $this->protokoll->ereignis($spiel->getTisch(), sprintf('%s kommt raus.', $vorhand->getAnzeigeName()));
+        }
     }
 
     private function botKartenTauschen(Spiel $spiel, SpielTeilnehmer $annehmer): void
@@ -284,9 +313,24 @@ final class ArmutService
 
         $this->em->flush();
         $this->mercurePublisher->armutAbgelehnt($spiel);
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            'Niemand nimmt die Armut an – es wird neu gegeben.',
+        );
 
         // Neues Spiel starten
         $this->spielStartService->starten($spiel->getTisch());
+    }
+
+    /** „X nimmt die Armut von Y an." */
+    private function protokollArmutAngenommen(Spiel $spiel, SpielTeilnehmer $annehmer): void
+    {
+        $armutSpieler = $spiel->getTeilnehmerBySitzplatz($spiel->getArmutSpielerSitzplatz());
+        $text = $armutSpieler !== null
+            ? sprintf('%s nimmt die Armut von %s an.', $annehmer->getAnzeigeName(), $armutSpieler->getAnzeigeName())
+            : sprintf('%s nimmt die Armut an.', $annehmer->getAnzeigeName());
+
+        $this->protokoll->ereignis($spiel->getTisch(), $text);
     }
 
     /**

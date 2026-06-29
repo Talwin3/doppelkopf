@@ -7,6 +7,7 @@ namespace App\Command;
 use App\Application\Doppelkopf\BotZugService;
 use App\Application\Doppelkopf\SpielAbschlussService;
 use App\Application\Doppelkopf\SpielStartService;
+use App\Application\Doppelkopf\TischProtokollService;
 use App\Application\SystemEinstellungService;
 use App\Entity\Tisch;
 use App\Enum\SpielStatus;
@@ -46,6 +47,7 @@ class BotZugBerechnenCommand extends Command
         private readonly SpielStartService $spielStartService,
         private readonly SpielAbschlussService $abschlussService,
         private readonly SystemEinstellungService $einstellungService,
+        private readonly TischProtokollService $protokoll,
         private readonly EntityManagerInterface $em,
         private readonly ManagerRegistry $doctrine,
         private readonly BotApiLogger $logger,
@@ -135,6 +137,12 @@ class BotZugBerechnenCommand extends Command
             ));
 
             try {
+                // Menschlicher Spieler reagiert nicht → Übernahme einmalig protokollieren.
+                // Nur in Phasen, in denen der Bot tatsächlich für den Sitz handelt
+                // (ARMUT_TAUSCH wird vom Annehmer selbst erledigt, dort übernimmt kein Bot).
+                if (!$istBot && $spiel->getStatus() !== SpielStatus::ARMUT_TAUSCH) {
+                    $this->protokoll->botUebernimmt($teilnehmer);
+                }
                 $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz);
             } catch (\Throwable $e) {
                 $output->writeln(sprintf('  <error>Bot-Zug Fehler: %s</error>', $e->getMessage()));

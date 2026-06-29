@@ -68,6 +68,15 @@ class SpielTeilnehmer
     #[ORM\Column(nullable: true)]
     private ?bool $armutAntwort = null;
 
+    /**
+     * True, solange dieser (menschliche) Spieler nach einem Zug-Timeout von einem
+     * Bot vertreten wird. Verhindert, dass die Übernahme bei jedem Folgezug erneut
+     * ins Event-Log geschrieben wird; wird zurückgesetzt, sobald der Spieler wieder
+     * selbst handelt.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $vonBotVertreten = false;
+
     #[ORM\Column(nullable: true)]
     private ?bool $gewonnen = null;
 
@@ -132,6 +141,9 @@ class SpielTeilnehmer
 
     public function getPunkteDelta(): ?int { return $this->punkteDelta; }
     public function setPunkteDelta(?int $delta): static { $this->punkteDelta = $delta; return $this; }
+
+    public function isVonBotVertreten(): bool { return $this->vonBotVertreten; }
+    public function setVonBotVertreten(bool $vertreten): static { $this->vonBotVertreten = $vertreten; return $this; }
 
     /** Aktuelle Hand: Startkarten minus bereits gespielte. */
     public function aktuelleHand(array $gespielteKartenIds): array

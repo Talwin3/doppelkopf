@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Application\Doppelkopf;
 
 use App\Application\Doppelkopf\BotZugService;
+use App\Application\Doppelkopf\ChatService;
 use App\Application\Doppelkopf\SpielAbschlussService;
 use App\Application\Doppelkopf\SpielStartService;
 use App\Entity\Spiel;
@@ -95,5 +96,14 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         self::assertArrayHasKey('augen', $w);
         self::assertArrayHasKey('sieger', $w);
         self::assertSame(240, $w['augen']['RE'] + $w['augen']['KONTRA'], 'Augensumme aller Stiche = 240');
+
+        // Das Spielende muss als System-Event im Tisch-Chat protokolliert sein.
+        $chat = static::getContainer()->get(ChatService::class);
+        $systemTexte = array_map(
+            static fn($n) => $n->getText(),
+            array_filter($chat->verlauf($gespeichert->getTisch(), 200), static fn($n) => $n->istSystem()),
+        );
+        $ergebnisZeilen = array_filter($systemTexte, static fn(string $t) => str_starts_with($t, 'Spiel beendet:'));
+        self::assertCount(1, $ergebnisZeilen, 'Genau eine Spielergebnis-Zeile im Event-Log');
     }
 }

@@ -22,6 +22,7 @@ final class VorbehaltService
         private readonly SpielTypResolver $typResolver,
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly SpiellogikLogger $logger,
+        private readonly TischProtokollService $protokoll,
     ) {}
 
     /**
@@ -52,6 +53,9 @@ final class VorbehaltService
         // Validierung
         $this->validieren($teilnehmer->getSitzplatz(), $spiel, $typ, $soloVariante);
 
+        // Spieler handelt selbst → evtl. laufende Bot-Vertretung beenden.
+        $this->protokoll->spielerZurueck($teilnehmer);
+
         $teilnehmer->setVorbehaltDeklariert(true);
         $teilnehmer->setVorbehaltTyp($typ);
         $teilnehmer->setVorbehaltSoloVariante($soloVariante);
@@ -61,6 +65,8 @@ final class VorbehaltService
             $teilnehmer->getAnzeigeName(),
             'VORBEHALT:' . $typ->value . ($soloVariante ? ':' . $soloVariante->value : ''),
         );
+
+        $this->protokollVorbehalt($spiel, $teilnehmer->getAnzeigeName(), $typ);
 
         // Prüfe ob alle deklariert haben
         $alleTeilnehmer = $spiel->getTeilnehmer()->toArray();
@@ -119,6 +125,8 @@ final class VorbehaltService
         $teilnehmer->setVorbehaltTyp($typ);
         $teilnehmer->setVorbehaltSoloVariante($variante);
 
+        $this->protokollVorbehalt($spiel, $teilnehmer->getAnzeigeName(), $typ);
+
         $alleTeilnehmer = $spiel->getTeilnehmer()->toArray();
         $allDeklariert  = count(array_filter($alleTeilnehmer, fn($t) => $t->isVorbehaltDeklariert())) === 4;
 
@@ -166,6 +174,19 @@ final class VorbehaltService
         }
 
         return $optionen;
+    }
+
+    /**
+     * Protokolliert die Vorbehalts-Entscheidung. Die konkrete Art (Solo/Hochzeit/Armut)
+     * bleibt bis zur Auflösung verdeckt — angekündigt wird nur „gesund" vs. „Vorbehalt".
+     */
+    private function protokollVorbehalt(Spiel $spiel, string $name, VorbehaltTyp $typ): void
+    {
+        $text = $typ === VorbehaltTyp::GESUND
+            ? sprintf('%s ist gesund.', $name)
+            : sprintf('%s meldet einen Vorbehalt.', $name);
+
+        $this->protokoll->ereignis($spiel->getTisch(), $text);
     }
 
     private function validieren(int $sitzplatz, Spiel $spiel, VorbehaltTyp $typ, ?SpielVariante $soloVariante): void

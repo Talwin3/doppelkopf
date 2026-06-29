@@ -15,4 +15,19 @@ enum SpielVariante: string
     case SOLO_HERZ      = 'SOLO_HERZ';
     case SOLO_PIK       = 'SOLO_PIK';
     case SOLO_KREUZ     = 'SOLO_KREUZ';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::NORMALSPIEL    => 'Normalspiel',
+            self::HOCHZEIT       => 'Hochzeit',
+            self::SOLO_BUBEN     => 'Buben-Solo',
+            self::SOLO_DAMEN     => 'Damen-Solo',
+            self::SOLO_FLEISCHLOS => 'Fleischlos-Solo',
+            self::SOLO_KARO      => 'Karo-Solo',
+            self::SOLO_HERZ      => 'Herz-Solo',
+            self::SOLO_PIK       => 'Pik-Solo',
+            self::SOLO_KREUZ     => 'Kreuz-Solo',
+        };
+    }
 }
