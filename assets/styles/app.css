@@ -142,3 +142,12 @@
     }
 }
 
+
+/* Inline-Emojis im Chat (self-hosted OpenMoji-SVGs) */
+.chat-emoji {
+    display: inline-block;
+    width: 1.25em;
+    height: 1.25em;
+    vertical-align: -0.25em;
+    margin: 0 0.05em;
+}

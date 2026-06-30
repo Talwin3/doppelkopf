@@ -5,7 +5,8 @@
          data-chat-topic-value="{{ mercureTopic ?: '' }}"
          data-chat-send-url-value="{{ path('app_chat_senden', {id: tisch.id}) }}"
          data-chat-csrf-value="{{ csrf_token('chat_' ~ tisch.id) }}"
-         data-chat-mein-user-id-value="{{ meinUserId }}">
+         data-chat-mein-user-id-value="{{ meinUserId }}"
+         data-chat-emoji-map-value="{{ emoji_map_json() }}">
 
     <button type="button"
             class="w-full flex items-center justify-between px-4 py-2 text-tisch-200 hover:text-white text-sm font-medium"
@@ -32,7 +33,7 @@
                             {% if not eigen %}
                                 <p class="text-[11px] font-semibold text-tisch-300 leading-tight">{{ n.absenderName }}</p>
                             {% endif %}
-                            <p class="whitespace-pre-wrap break-words leading-snug">{{ n.text }}</p>
+                            <p class="whitespace-pre-wrap break-words leading-snug">{{ n.text|emoji }}</p>
                             <p class="text-[10px] text-tisch-400 text-right leading-none mt-0.5">{{ n.erstelltAm|date('H:i') }}</p>
                         </div>
                     </div>
@@ -57,14 +58,35 @@
             </div>
         {% endif %}
 
-        <form class="flex gap-2 mt-2" data-action="submit->chat#senden">
-            <input type="text" name="text" maxlength="500" autocomplete="off"
-                   placeholder="Nachricht…"
-                   data-chat-target="input"
-                   class="flex-1 rounded-lg bg-tisch-900 border border-tisch-600 text-white text-sm px-3 py-1.5 placeholder-tisch-500 focus:outline-none focus:ring-2 focus:ring-tisch-500">
-            <button type="submit" class="rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-sm font-medium px-4">
-                Senden
-            </button>
-        </form>
+        <div class="relative">
+            <div data-chat-target="emojiPanel"
+                 class="hidden absolute bottom-full right-0 mb-2 z-10 w-64 rounded-lg bg-tisch-800 border border-tisch-600 shadow-lg p-2 grid grid-cols-8 gap-1">
+                {% for e in emoji_katalog() %}
+                    <button type="button"
+                            data-action="chat#emojiEinfuegen"
+                            data-chat-emoji-param="{{ e.unicode }}"
+                            title="{{ e.name }}"
+                            class="rounded p-1 hover:bg-tisch-700 transition-colors">
+                        <img src="{{ e.url }}" alt="{{ e.name }}" class="w-6 h-6 block" draggable="false">
+                    </button>
+                {% endfor %}
+            </div>
+
+            <form class="flex gap-2 mt-2" data-action="submit->chat#senden">
+                <input type="text" name="text" maxlength="500" autocomplete="off"
+                       placeholder="Nachricht…"
+                       data-chat-target="input"
+                       class="flex-1 rounded-lg bg-tisch-900 border border-tisch-600 text-white text-sm px-3 py-1.5 placeholder-tisch-500 focus:outline-none focus:ring-2 focus:ring-tisch-500">
+                <button type="button"
+                        data-action="chat#pickerUmschalten"
+                        aria-label="Emoji einfügen"
+                        class="rounded-lg bg-tisch-700 hover:bg-tisch-600 text-white text-base px-3 leading-none">
+                    😊
+                </button>
+                <button type="submit" class="rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-sm font-medium px-4">
+                    Senden
+                </button>
+            </form>
+        </div>
     </div>
 </section>

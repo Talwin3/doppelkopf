@@ -8,17 +8,27 @@ import { toast } from '../toast.js'
  * textContent gesetzt → kein XSS.
  */
 export default class extends Controller {
-  static targets = ['messages', 'input', 'body', 'toggleIcon', 'leer']
+  static targets = ['messages', 'input', 'body', 'toggleIcon', 'leer', 'emojiPanel']
   static values = {
     mercureUrl: String,
     topic: String,
     sendUrl: String,
     csrf: String,
     meinUserId: String,
+    emojiMap: Object,
   }
 
   connect() {
     this.scrollToBottom()
+    this.emojiRegex = this.baueEmojiRegex()
+
+    // Picker schließen, wenn außerhalb geklickt wird.
+    this.ausserhalbKlick = (e) => {
+      if (this.hasEmojiPanelTarget && !this.element.contains(e.target)) {
+        this.emojiPanelTarget.classList.add('hidden')
+      }
+    }
+    document.addEventListener('click', this.ausserhalbKlick)
 
     if (this.mercureUrlValue && this.topicValue) {
       const url = new URL(this.mercureUrlValue)
@@ -35,6 +45,19 @@ export default class extends Controller {
 
   disconnect() {
     this.eventSource?.close()
+    document.removeEventListener('click', this.ausserhalbKlick)
+  }
+
+  pickerUmschalten() {
+    if (this.hasEmojiPanelTarget) this.emojiPanelTarget.classList.toggle('hidden')
+  }
+
+  // Emoji aus dem Picker an die aktuelle Eingabe anhängen (Feld behält Fokus).
+  emojiEinfuegen(event) {
+    const emoji = event.params.emoji
+    if (emoji == null) return
+    this.inputTarget.value += emoji
+    this.inputTarget.focus()
   }
 
   umschalten() {
@@ -98,7 +121,7 @@ export default class extends Controller {
 
     const text = document.createElement('p')
     text.className = 'whitespace-pre-wrap break-words leading-snug'
-    text.textContent = daten.text
+    text.appendChild(this.renderText(daten.text))
     bubble.appendChild(text)
 
     const zeit = document.createElement('p')
@@ -131,6 +154,42 @@ export default class extends Controller {
     zeile.appendChild(p)
     this.messagesTarget.appendChild(zeile)
     this.scrollToBottom()
+  }
+
+  // Regex aus den bekannten Emoji-Sequenzen (längste zuerst, damit z. B.
+  // Kartenfarben mit Variations-Selektor vollständig matchen).
+  baueEmojiRegex() {
+    const keys = Object.keys(this.emojiMapValue ?? {})
+    if (keys.length === 0) return null
+    keys.sort((a, b) => b.length - a.length)
+    const escaped = keys.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    return new RegExp('(' + escaped.join('|') + ')', 'gu')
+  }
+
+  // Wandelt Nachrichtentext in einen DocumentFragment: bekannte Emojis werden
+  // durch <img> ersetzt, alles andere bleibt Textknoten (XSS-sicher).
+  renderText(str) {
+    const fragment = document.createDocumentFragment()
+    if (!this.emojiRegex) {
+      fragment.appendChild(document.createTextNode(str))
+      return fragment
+    }
+
+    for (const teil of str.split(this.emojiRegex)) {
+      if (teil === '') continue
+      const url = this.emojiMapValue[teil]
+      if (url) {
+        const img = document.createElement('img')
+        img.className = 'chat-emoji'
+        img.src = url
+        img.alt = teil
+        img.draggable = false
+        fragment.appendChild(img)
+      } else {
+        fragment.appendChild(document.createTextNode(teil))
+      }
+    }
+    return fragment
   }
 
   scrollToBottom() {
