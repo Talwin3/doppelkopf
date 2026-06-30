@@ -80,6 +80,7 @@ class ProfilController extends AbstractController
             'cooldownBis'      => $cooldownBis,
             'kartendecks'      => Kartendeck::cases(),
             'avatarStile'      => AvatarStil::cases(),
+            'maxChatPhrasen'   => \App\Application\ChatPhrasenService::MAX_PERSOENLICH,
         ]);
     }
 
@@ -229,6 +230,25 @@ class ProfilController extends AbstractController
             (string) $request->request->get('avatar_seed', ''),
         );
         $this->addFlash('success', 'Avatar gespeichert.');
+
+        return $this->redirectToRoute('app_profil_einstellungen');
+    }
+
+    // ── Schnell-Chatnachrichten ───────────────────────────────────────────
+
+    #[Route('/einstellungen/chat-phrasen', name: 'app_profil_chat_phrasen', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function chatPhrasenAendern(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('chat_phrasen', $request->request->get('_token'))) {
+            $this->addFlash('error', 'Ungültige Anfrage.');
+            return $this->redirectToRoute('app_profil_einstellungen');
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $this->profilService->chatPhrasenAendern($user, (string) $request->request->get('phrasen', ''));
+        $this->addFlash('success', 'Schnellnachrichten gespeichert.');
 
         return $this->redirectToRoute('app_profil_einstellungen');
     }

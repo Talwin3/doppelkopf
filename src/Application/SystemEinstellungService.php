@@ -21,6 +21,7 @@ final class SystemEinstellungService
         'pause_zwischen_spielen_sekunden' => '5',
         'disconnect_timeout_sekunden'     => '30',
         'bot_avatar_stil'                 => 'bottts',
+        'chat_schnellnachrichten'         => "Gut gespielt!\nGlückwunsch!\nSchönes Spiel!\nViel Glück!\nTut mir leid!\nGute Nacht!",
     ];
 
     public function __construct(
@@ -76,6 +77,7 @@ final class SystemEinstellungService
                     'pause_zwischen_spielen_sekunden' => 'Wartezeit in Sekunden zwischen zwei Spielen (Auto-Start)',
                     'disconnect_timeout_sekunden'     => 'Sekunden bis nach einem Disconnect ein Bot übernimmt',
                     'bot_avatar_stil'                 => 'Avatar-Stil für Bots (z. B. bottts, avataaars, lorelei)',
+                    'chat_schnellnachrichten'         => 'Vordefinierte Schnell-Chatnachrichten (eine pro Zeile), die allen Spielern zur Auswahl stehen',
                 ];
 
                 $einstellung = new SystemEinstellung(

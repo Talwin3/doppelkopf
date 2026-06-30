@@ -34,9 +34,14 @@
             <tr>
                 <td class="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">{{ einstellung.schluessel }}</td>
                 <td class="px-6 py-4">
-                    <form method="post" action="{{ path('app_admin_einstellung_speichern', {schluessel: einstellung.schluessel}) }}" class="flex items-center gap-2">
+                    <form method="post" action="{{ path('app_admin_einstellung_speichern', {schluessel: einstellung.schluessel}) }}"
+                          class="{{ einstellung.schluessel == 'chat_schnellnachrichten' ? 'flex flex-col items-start gap-2' : 'flex items-center gap-2' }}">
                         <input type="hidden" name="_token" value="{{ csrf_token('einstellung_' ~ einstellung.schluessel) }}">
-                        {% if einstellung.schluessel == 'bot_avatar_stil' %}
+                        {% if einstellung.schluessel == 'chat_schnellnachrichten' %}
+                            <textarea name="wert" rows="6"
+                                      class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded px-2 py-1 text-sm w-72 focus:ring-1 focus:ring-tisch-500 focus:border-tisch-500"
+                                      placeholder="Eine Nachricht pro Zeile">{{ einstellung.wert }}</textarea>
+                        {% elseif einstellung.schluessel == 'bot_avatar_stil' %}
                             <img src="{{ avatar_url_roh(einstellung.wert, 'Hans', 64) }}" alt="Vorschau"
                                  class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
                             <select name="wert"

@@ -22,6 +22,7 @@ final class ProfilService
         private readonly UserPasswordHasherInterface $hasher,
         private readonly UserRepository $userRepo,
         private readonly TischSpielerRepository $tischSpielerRepo,
+        private readonly ChatPhrasenService $chatPhrasenService,
     ) {}
 
     /**
@@ -122,6 +123,17 @@ final class ProfilService
     }
 
     /**
+     * Speichert die persönlichen Schnell-Chatnachrichten. Erwartet rohen
+     * Textarea-Inhalt (eine Phrase pro Zeile); Bereinigung/Begrenzung
+     * übernimmt der ChatPhrasenService.
+     */
+    public function chatPhrasenAendern(User $user, string $roh): void
+    {
+        $user->setChatPhrasen($this->chatPhrasenService->parseListe($roh));
+        $this->em->flush();
+    }
+
+    /**
      * Erstellt ein DSGVO-Datenpaket (Art. 20) als Array.
      * @return array<string, mixed>
      */
@@ -135,6 +147,7 @@ final class ProfilService
             'mitglied_seit'    => $user->getErstelltAm()->format(\DateTimeInterface::ATOM),
             'letzter_login'    => $user->getLetzterLoginAm()?->format(\DateTimeInterface::ATOM),
             'benutzername_zuletzt_geaendert' => $user->getNutzernameGeaendertAm()?->format(\DateTimeInterface::ATOM),
+            'chat_schnellnachrichten' => $user->getChatPhrasen(),
         ];
     }
 

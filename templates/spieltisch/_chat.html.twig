@@ -44,6 +44,19 @@
             {% endfor %}
         </div>
 
+        {% if chatPhrasen is not empty %}
+            <div class="flex flex-wrap gap-1.5 mt-2">
+                {% for p in chatPhrasen %}
+                    <button type="button"
+                            data-action="chat#einfuegen"
+                            data-chat-phrase-param="{{ p }}"
+                            class="rounded-full bg-tisch-700 hover:bg-tisch-600 text-tisch-100 text-xs px-2.5 py-1 leading-none transition-colors">
+                        {{ p }}
+                    </button>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         <form class="flex gap-2 mt-2" data-action="submit->chat#senden">
             <input type="text" name="text" maxlength="500" autocomplete="off"
                    placeholder="Nachricht…"

@@ -65,6 +65,14 @@ export default class extends Controller {
     }
   }
 
+  // Schnell-Chatnachricht: füllt das Eingabefeld (Nutzer kann editieren + senden).
+  einfuegen(event) {
+    const phrase = event.params.phrase
+    if (phrase == null) return
+    this.inputTarget.value = phrase
+    this.inputTarget.focus()
+  }
+
   anhaengen(daten) {
     if (this.hasLeerTarget) this.leerTarget.remove()
 

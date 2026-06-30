@@ -88,6 +88,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(options: ['default' => true])]
     private bool $profilOeffentlich = true;
 
+    /**
+     * Persönliche, im Profil gepflegte Schnell-Chatnachrichten (Vorlagen).
+     * @var string[]
+     */
+    #[ORM\Column(type: 'json')]
+    private array $chatPhrasen = [];
+
     #[ORM\Column]
     private \DateTimeImmutable $erstelltAm;
 
@@ -249,6 +256,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function isProfilOeffentlich(): bool { return $this->profilOeffentlich; }
     public function setProfilOeffentlich(bool $oeffentlich): static { $this->profilOeffentlich = $oeffentlich; return $this; }
+
+    /** @return string[] */
+    public function getChatPhrasen(): array { return $this->chatPhrasen; }
+
+    /** @param string[] $phrasen */
+    public function setChatPhrasen(array $phrasen): static { $this->chatPhrasen = array_values($phrasen); return $this; }
 
     public function getErstelltAm(): \DateTimeImmutable
     {

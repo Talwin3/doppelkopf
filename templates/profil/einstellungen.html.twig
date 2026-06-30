@@ -181,6 +181,23 @@
         </form>
     </section>
 
+    {# ── Schnell-Chatnachrichten ──────────────────────────────────────── #}
+    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Schnell-Chatnachrichten</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Eigene Vorlagen, die dir am Spieltisch per Klick ins Chat-Eingabefeld gesetzt werden –
+            zusätzlich zu den allgemeinen Vorlagen. Eine Nachricht pro Zeile (max. {{ maxChatPhrasen }}).
+        </p>
+
+        <form method="post" action="{{ path('app_profil_chat_phrasen') }}" class="space-y-4">
+            <input type="hidden" name="_token" value="{{ csrf_token('chat_phrasen') }}">
+            <textarea name="phrasen" rows="6"
+                      class="form-input font-normal w-full"
+                      placeholder="Gut gespielt!&#10;Na sowas …&#10;Bis zum nächsten Mal!">{{ user.chatPhrasen|join('\n') }}</textarea>
+            <button type="submit" class="btn-primary">Speichern</button>
+        </form>
+    </section>
+
     {# ── Meine Daten (DSGVO Art. 20) ──────────────────────────────────── #}
     <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
         <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Meine Daten exportieren</h2>
