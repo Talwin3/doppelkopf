@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
+use App\Domain\Doppelkopf\Service\ArmutHeuristik;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
@@ -26,6 +27,7 @@ final class ArmutService
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly TischProtokollService $protokoll,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
+        private readonly ArmutHeuristik $armutHeuristik,
     ) {}
 
     /**
@@ -119,16 +121,13 @@ final class ArmutService
             return;
         }
 
-        // Bot-Logik: annehmen wenn der Bot ≥5 Trümpfe hat (hat genug eigene Stärke)
-        $ordnung = new NormalspielTrumpfOrdnung();
-        $trumpfAnzahl = 0;
-        foreach ($teilnehmer->getStartkartenIds() as $id) {
-            if ($ordnung->istTrumpf(Karte::vonId($id))) {
-                $trumpfAnzahl++;
-            }
-        }
-
-        $annehmen = $trumpfAnzahl >= 5;
+        // Bot-Logik (stärkeabhängig): annehmen wenn die eigene Hand stark genug ist.
+        $ordnung  = new NormalspielTrumpfOrdnung();
+        $annehmen = $this->armutHeuristik->willAnnehmen(
+            $teilnehmer->getBotStaerke(),
+            $teilnehmer->aktuelleHand([]),
+            $ordnung,
+        );
         $teilnehmer->setArmutAntwort($annehmen);
 
         if ($annehmen) {
@@ -254,48 +253,15 @@ final class ArmutService
 
     private function botKartenTauschen(Spiel $spiel, SpielTeilnehmer $annehmer): void
     {
-        $trumpfIds = $spiel->getArmutTauschKartenIds();
-        $erwartet = count($trumpfIds);
+        $erwartet = count($spiel->getArmutTauschKartenIds());
+        $ordnung  = new NormalspielTrumpfOrdnung();
 
-        // Bot-Strategie: schwächste Nicht-Trumpf-Karten zurückgeben
-        $ordnung = new NormalspielTrumpfOrdnung();
-        $annehmerIds = $annehmer->getStartkartenIds();
-
-        $nichtTrumpf = [];
-        foreach ($annehmerIds as $id) {
-            $karte = Karte::vonId($id);
-            if (!$ordnung->istTrumpf($karte)) {
-                $nichtTrumpf[] = ['id' => $id, 'augen' => $karte->augen()];
-            }
-        }
-
-        usort($nichtTrumpf, fn($a, $b) => $a['augen'] <=> $b['augen']);
-
-        $zurueck = [];
-        foreach ($nichtTrumpf as $item) {
-            if (count($zurueck) >= $erwartet) {
-                break;
-            }
-            $zurueck[] = $item['id'];
-        }
-
-        // Falls nicht genug Nicht-Trümpfe: schwächste Trümpfe zurückgeben
-        if (count($zurueck) < $erwartet) {
-            $trumpfKarten = [];
-            foreach ($annehmerIds as $id) {
-                $karte = Karte::vonId($id);
-                if ($ordnung->istTrumpf($karte) && !in_array($id, $zurueck, true)) {
-                    $trumpfKarten[] = ['id' => $id, 'rang' => $ordnung->trumpfRang($karte)];
-                }
-            }
-            usort($trumpfKarten, fn($a, $b) => $a['rang'] <=> $b['rang']);
-            foreach ($trumpfKarten as $item) {
-                if (count($zurueck) >= $erwartet) {
-                    break;
-                }
-                $zurueck[] = $item['id'];
-            }
-        }
+        $zurueck = $this->armutHeuristik->kartenZurueckgeben(
+            $annehmer->getBotStaerke(),
+            $annehmer->aktuelleHand([]),
+            $erwartet,
+            $ordnung,
+        );
 
         $this->tauschDurchfuehren($spiel, $annehmer, $zurueck);
     }
