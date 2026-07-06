@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\BotStaerke;
 use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
 use App\Enum\SpielVariante;
@@ -52,6 +53,10 @@ class SpielTeilnehmer
     /** Zufälliger Anzeigename für Bot-Teilnehmer (null bei menschlichen Spielern). */
     #[ORM\Column(length: 50, nullable: true)]
     private ?string $botName = null;
+
+    /** Spielstärke des Bots (nur relevant wenn istBot); bei Menschen bedeutungslos. */
+    #[ORM\Column(length: 20, enumType: BotStaerke::class, options: ['default' => 'anfaenger'])]
+    private BotStaerke $botStaerke = BotStaerke::ANFAENGER;
 
     /** Hat dieser Spieler seinen Vorbehalt bereits deklariert? */
     #[ORM\Column(options: ['default' => false])]
@@ -113,6 +118,9 @@ class SpielTeilnehmer
 
     public function getBotName(): ?string { return $this->botName; }
     public function setBotName(?string $botName): static { $this->botName = $botName; return $this; }
+
+    public function getBotStaerke(): BotStaerke { return $this->botStaerke; }
+    public function setBotStaerke(BotStaerke $botStaerke): static { $this->botStaerke = $botStaerke; return $this; }
 
     /**
      * Öffentlicher Anzeigename: bei Menschen der Username, bei Bots der

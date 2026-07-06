@@ -72,6 +72,7 @@ final class SpielStartService
                 $teilnehmer->setStartkartenIds(array_map(fn($k) => $k->id(), $hand));
                 $teilnehmer->setIstBot($tischSpieler->isIstBot());
                 $teilnehmer->setBotName($tischSpieler->getBotName());
+                $teilnehmer->setBotStaerke($tischSpieler->getBotStaerke());
                 // team bleibt null bis SpielTypResolver läuft
 
                 $this->em->persist($teilnehmer);

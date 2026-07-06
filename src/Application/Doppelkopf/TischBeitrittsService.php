@@ -12,6 +12,7 @@ use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Entity\User;
+use App\Enum\BotStaerke;
 use App\Enum\TischSteuerungsModus;
 use App\Enum\ZugangsListenTyp;
 use App\Enum\ZugangsModusTyp;
@@ -308,6 +309,7 @@ final class TischBeitrittsService
             $bot->setSitzplatz($platz);
             $bot->setIstBot(true);
             $bot->setBotName($name);
+            $bot->setBotStaerke(BotStaerke::default());
             $this->em->persist($bot);
             $anzahl++;
         }

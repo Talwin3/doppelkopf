@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\BotStaerke;
 use App\Repository\TischSpielerRepository;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
@@ -48,6 +49,10 @@ class TischSpieler
     /** Zufälliger Anzeigename für Bot-Platzhalter (null bei menschlichen Spielern). */
     #[ORM\Column(length: 50, nullable: true)]
     private ?string $botName = null;
+
+    /** Spielstärke des Bots (nur relevant wenn istBot); bei Menschen bedeutungslos. */
+    #[ORM\Column(length: 20, enumType: BotStaerke::class, options: ['default' => 'anfaenger'])]
+    private BotStaerke $botStaerke = BotStaerke::ANFAENGER;
 
     /** Spieler hat gewünscht, nach dem laufenden Spiel den Tisch zu verlassen. */
     #[ORM\Column(options: ['default' => false])]
@@ -139,6 +144,18 @@ class TischSpieler
     public function setBotName(?string $botName): static
     {
         $this->botName = $botName;
+
+        return $this;
+    }
+
+    public function getBotStaerke(): BotStaerke
+    {
+        return $this->botStaerke;
+    }
+
+    public function setBotStaerke(BotStaerke $botStaerke): static
+    {
+        $this->botStaerke = $botStaerke;
 
         return $this;
     }
