@@ -158,4 +158,54 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         self::assertSame(SpielStatus::BEENDET, $gespeichert->getStatus(), 'Fortgeschrittenes Bot-Spiel sollte beendet sein');
         self::assertCount(48, $karteRepo->findBy(['spiel' => $gespeichert]), 'Alle 48 Karten sollten gespielt sein');
     }
+
+    /**
+     * Volles Spiel mit vier PROFI-Bots (PIMC). Prüft, dass die Monte-Carlo-Strategie
+     * über den kompletten DB-Pfad (Determinisierung, Handgrößen, Rollouts) ein
+     * gültiges Spiel zu Ende bringt.
+     */
+    public function testKomplettesProfiBotSpiel(): void
+    {
+        $host  = $this->neuerUser('voll_profi_host');
+        $tisch = $this->beitritt->erstelleTisch($host, 'Profi-Spiel', ZugangsModusTyp::OFFEN);
+        $tischId = $tisch->getId();
+        $hostId  = $host->getId();
+
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+        self::assertSame(3, $this->beitritt->botsAuffuellen($tisch, $host, \App\Enum\BotStaerke::PROFI));
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+
+        $start = static::getContainer()->get(SpielStartService::class);
+        $spiel = $start->starten($tisch);
+        $spielId = $spiel->getId();
+
+        foreach ($spiel->getTeilnehmer() as $t) {
+            $t->setBotStaerke(\App\Enum\BotStaerke::PROFI);
+        }
+        $this->em->flush();
+
+        $botZug    = static::getContainer()->get(BotZugService::class);
+        $abschluss = static::getContainer()->get(SpielAbschlussService::class);
+
+        for ($i = 0; $i < 400; $i++) {
+            $this->em->refresh($spiel);
+            if ($spiel->getStatus() === SpielStatus::BEENDET) {
+                break;
+            }
+            if ($spiel->getAbschlussFaelligAm() !== null) {
+                $abschluss->abschliessen($spiel);
+                continue;
+            }
+            $botZug->spielenFuerSitzplatz($spiel, $spiel->getAktuellerSpielerSitzplatz());
+        }
+
+        $this->em->clear();
+        $spielRepo = static::getContainer()->get(SpielRepository::class);
+        $karteRepo = static::getContainer()->get(GespielteKarteRepository::class);
+
+        $gespeichert = $spielRepo->find($spielId);
+        self::assertInstanceOf(Spiel::class, $gespeichert);
+        self::assertSame(SpielStatus::BEENDET, $gespeichert->getStatus(), 'Profi-Bot-Spiel sollte beendet sein');
+        self::assertCount(48, $karteRepo->findBy(['spiel' => $gespeichert]), 'Alle 48 Karten sollten gespielt sein');
+    }
 }

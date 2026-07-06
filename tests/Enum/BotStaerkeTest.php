@@ -34,22 +34,15 @@ final class BotStaerkeTest extends TestCase
         }
     }
 
-    public function testImplementierteStufen(): void
+    public function testAlleStufenImplementiert(): void
     {
-        self::assertTrue(BotStaerke::ANFAENGER->implementiert());
-        self::assertTrue(BotStaerke::FORTGESCHRITTEN->implementiert());
-        self::assertFalse(BotStaerke::PROFI->implementiert());
+        foreach (BotStaerke::cases() as $s) {
+            self::assertTrue($s->implementiert(), $s->value . ' sollte implementiert sein');
+        }
     }
 
-    public function testVerfuegbareEnthaeltNurImplementierteStufen(): void
+    public function testVerfuegbareEnthaeltAlleStufen(): void
     {
-        $verfuegbar = BotStaerke::verfuegbare();
-
-        self::assertContains(BotStaerke::ANFAENGER, $verfuegbar);
-        self::assertContains(BotStaerke::FORTGESCHRITTEN, $verfuegbar);
-        self::assertNotContains(BotStaerke::PROFI, $verfuegbar);
-        foreach ($verfuegbar as $s) {
-            self::assertTrue($s->implementiert());
-        }
+        self::assertSame(BotStaerke::cases(), BotStaerke::verfuegbare());
     }
 }
