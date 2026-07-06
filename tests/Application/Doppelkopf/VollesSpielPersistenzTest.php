@@ -106,4 +106,56 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         $ergebnisZeilen = array_filter($systemTexte, static fn(string $t) => str_starts_with($t, 'Spiel beendet:'));
         self::assertCount(1, $ergebnisZeilen, 'Genau eine Spielergebnis-Zeile im Event-Log');
     }
+
+    /**
+     * Wie oben, aber alle vier Sitze spielen mit der FORTGESCHRITTEN-Strategie
+     * (Kartengedächtnis). Prüft den DB-Rekonstruktionspfad über ein volles Spiel:
+     * Universum aus Starthänden, Verlauf/Void-Erkennung, keine Ausnahme, Spiel beendet.
+     */
+    public function testKomplettesFortgeschrittenesBotSpiel(): void
+    {
+        $host  = $this->neuerUser('voll_fortg_host');
+        $tisch = $this->beitritt->erstelleTisch($host, 'Fortg-Spiel', ZugangsModusTyp::OFFEN);
+        $tischId = $tisch->getId();
+        $hostId  = $host->getId();
+
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+        self::assertSame(3, $this->beitritt->botsAuffuellen($tisch, $host, \App\Enum\BotStaerke::FORTGESCHRITTEN));
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+
+        $start = static::getContainer()->get(SpielStartService::class);
+        $spiel = $start->starten($tisch);
+        $spielId = $spiel->getId();
+
+        // Auch den Host-Sitz auf FORTGESCHRITTEN setzen, damit jeder Zug über die
+        // fortgeschrittene Strategie läuft.
+        foreach ($spiel->getTeilnehmer() as $t) {
+            $t->setBotStaerke(\App\Enum\BotStaerke::FORTGESCHRITTEN);
+        }
+        $this->em->flush();
+
+        $botZug    = static::getContainer()->get(BotZugService::class);
+        $abschluss = static::getContainer()->get(SpielAbschlussService::class);
+
+        for ($i = 0; $i < 400; $i++) {
+            $this->em->refresh($spiel);
+            if ($spiel->getStatus() === SpielStatus::BEENDET) {
+                break;
+            }
+            if ($spiel->getAbschlussFaelligAm() !== null) {
+                $abschluss->abschliessen($spiel);
+                continue;
+            }
+            $botZug->spielenFuerSitzplatz($spiel, $spiel->getAktuellerSpielerSitzplatz());
+        }
+
+        $this->em->clear();
+        $spielRepo = static::getContainer()->get(SpielRepository::class);
+        $karteRepo = static::getContainer()->get(GespielteKarteRepository::class);
+
+        $gespeichert = $spielRepo->find($spielId);
+        self::assertInstanceOf(Spiel::class, $gespeichert);
+        self::assertSame(SpielStatus::BEENDET, $gespeichert->getStatus(), 'Fortgeschrittenes Bot-Spiel sollte beendet sein');
+        self::assertCount(48, $karteRepo->findBy(['spiel' => $gespeichert]), 'Alle 48 Karten sollten gespielt sein');
+    }
 }

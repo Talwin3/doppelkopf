@@ -34,10 +34,10 @@ final class BotStaerkeTest extends TestCase
         }
     }
 
-    public function testNurAnfaengerIstAktuellImplementiert(): void
+    public function testImplementierteStufen(): void
     {
         self::assertTrue(BotStaerke::ANFAENGER->implementiert());
-        self::assertFalse(BotStaerke::FORTGESCHRITTEN->implementiert());
+        self::assertTrue(BotStaerke::FORTGESCHRITTEN->implementiert());
         self::assertFalse(BotStaerke::PROFI->implementiert());
     }
 
@@ -46,6 +46,7 @@ final class BotStaerkeTest extends TestCase
         $verfuegbar = BotStaerke::verfuegbare();
 
         self::assertContains(BotStaerke::ANFAENGER, $verfuegbar);
+        self::assertContains(BotStaerke::FORTGESCHRITTEN, $verfuegbar);
         self::assertNotContains(BotStaerke::PROFI, $verfuegbar);
         foreach ($verfuegbar as $s) {
             self::assertTrue($s->implementiert());

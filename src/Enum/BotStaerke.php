@@ -42,8 +42,8 @@ enum BotStaerke: string
     public function implementiert(): bool
     {
         return match ($this) {
-            self::ANFAENGER => true,
-            default         => false, // FORTGESCHRITTEN/PROFI: in Arbeit (Phase 3/4)
+            self::ANFAENGER, self::FORTGESCHRITTEN => true,
+            default                                => false, // PROFI: in Arbeit (Phase 4)
         };
     }
 
