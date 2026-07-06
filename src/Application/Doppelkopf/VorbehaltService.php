@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
+use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
+use App\Domain\Doppelkopf\Service\VorbehaltHeuristik;
+use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
 use App\Entity\User;
 use App\Enum\SpielStatus;
@@ -16,6 +19,14 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class VorbehaltService
 {
+    /** Farbsoli, die der Bot automatisch erwägen darf (rein trumpfzahlbasiert bewertbar). */
+    private const AUTO_SOLO_VARIANTEN = [
+        SpielVariante::SOLO_KARO,
+        SpielVariante::SOLO_HERZ,
+        SpielVariante::SOLO_PIK,
+        SpielVariante::SOLO_KREUZ,
+    ];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SpielTeilnehmerRepository $teilnehmerRepo,
@@ -23,6 +34,8 @@ final class VorbehaltService
         private readonly SpielMercurePublisher $mercurePublisher,
         private readonly SpiellogikLogger $logger,
         private readonly TischProtokollService $protokoll,
+        private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
+        private readonly VorbehaltHeuristik $vorbehaltHeuristik,
     ) {}
 
     /**
@@ -108,18 +121,18 @@ final class VorbehaltService
             return;
         }
 
-        // Bot-Logik: Hochzeit > Armut > Gesund
-        $typ = VorbehaltTyp::GESUND;
-        $variante = null;
-
-        if ($teilnehmer->anzahlKreuzDamen() === 2) {
-            $typ = VorbehaltTyp::HOCHZEIT;
-        } else {
-            $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
-            if (!empty($regelwerk['armut']) && ArmutService::trumpfAnzahl($teilnehmer) <= 3) {
-                $typ = VorbehaltTyp::ARMUT;
-            }
-        }
+        // Bot-Logik (stärkegesteuert): Hochzeit > Solo > Armut > Gesund.
+        $regelwerk    = $spiel->getTisch()->getRegelEinstellungen();
+        $hand         = $teilnehmer->aktuelleHand([]);
+        $entscheidung = $this->vorbehaltHeuristik->entscheide(
+            $teilnehmer->getBotStaerke(),
+            $hand,
+            !empty($regelwerk['armut']),
+            ArmutService::trumpfAnzahl($teilnehmer),
+            $this->soloTrumpfAnzahl($spiel, $hand, $regelwerk),
+        );
+        $typ      = $entscheidung->typ;
+        $variante = $entscheidung->soloVariante;
 
         $teilnehmer->setVorbehaltDeklariert(true);
         $teilnehmer->setVorbehaltTyp($typ);
@@ -187,6 +200,33 @@ final class VorbehaltService
             : sprintf('%s meldet einen Vorbehalt.', $name);
 
         $this->protokoll->ereignis($spiel->getTisch(), $text);
+    }
+
+    /**
+     * Zählt für jedes am Tisch erlaubte Farbsolo, wie viele Handkarten in dieser Variante
+     * Trumpf wären – Grundlage der Bot-Solo-Entscheidung.
+     *
+     * @param Karte[]             $hand
+     * @param array<string, mixed> $regelwerk
+     * @return array<string, int> Varianten-Wert → Trumpfzahl
+     */
+    private function soloTrumpfAnzahl(Spiel $spiel, array $hand, array $regelwerk): array
+    {
+        $erlaubt = $regelwerk['soli_erlaubt'] ?? [];
+        if (empty($erlaubt)) {
+            return [];
+        }
+
+        $ergebnis = [];
+        foreach (self::AUTO_SOLO_VARIANTEN as $variante) {
+            if (!in_array($variante->value, $erlaubt, true)) {
+                continue;
+            }
+            $ordnung = $this->trumpfOrdnungFactory->fuerVariante($spiel, $variante);
+            $ergebnis[$variante->value] = count(array_filter($hand, fn(Karte $k) => $ordnung->istTrumpf($k)));
+        }
+
+        return $ergebnis;
     }
 
     private function validieren(int $sitzplatz, Spiel $spiel, VorbehaltTyp $typ, ?SpielVariante $soloVariante): void
