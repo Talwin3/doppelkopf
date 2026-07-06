@@ -24,6 +24,7 @@ final class HeuristikStrategie implements BotStrategie
         private readonly BotHeuristik $botHeuristik,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
+        private readonly OeffentlicheTeams $oeffentlicheTeams,
     ) {}
 
     public function staerke(): BotStaerke
@@ -41,11 +42,8 @@ final class HeuristikStrategie implements BotStrategie
             $stich[$gk->getSitzplatz()] = $gk->alsKarte();
         }
 
-        // Teams aller vier Sitzplätze (null bei noch ungelöster Hochzeit).
-        $teams = [];
-        for ($sitz = 1; $sitz <= 4; $sitz++) {
-            $teams[$sitz] = $spiel->getTeilnehmerBySitzplatz($sitz)?->getTeam();
-        }
+        // Nur öffentlich bekannte Teams (kein Ausnutzen verdeckter Partnerschaft).
+        $teams = $this->oeffentlicheTeams->ermitteln($spiel, $teilnehmer->getSitzplatz());
 
         return $this->botHeuristik->entscheide($erlaubte, $stich, $teilnehmer->getTeam(), $teams, $ordnung);
     }

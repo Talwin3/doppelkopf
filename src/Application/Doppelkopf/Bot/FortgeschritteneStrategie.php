@@ -26,6 +26,7 @@ final class FortgeschritteneStrategie implements BotStrategie
         private readonly FortgeschritteneHeuristik $heuristik,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
+        private readonly OeffentlicheTeams $oeffentlicheTeams,
     ) {}
 
     public function staerke(): BotStaerke
@@ -67,11 +68,8 @@ final class FortgeschritteneStrategie implements BotStrategie
         $eigeneHand  = $teilnehmer->aktuelleHand($gespielteIds);
         $gedaechtnis = SpielGedaechtnis::ausHistorie($ereignisse, array_values($universum), $eigeneHand, $ordnung);
 
-        // Teams aller vier Sitzplätze (null bei noch ungelöster Hochzeit).
-        $teams = [];
-        for ($sitz = 1; $sitz <= 4; $sitz++) {
-            $teams[$sitz] = $spiel->getTeilnehmerBySitzplatz($sitz)?->getTeam();
-        }
+        // Nur öffentlich bekannte Teams (kein Ausnutzen verdeckter Partnerschaft).
+        $teams = $this->oeffentlicheTeams->ermitteln($spiel, $teilnehmer->getSitzplatz());
 
         return $this->heuristik->entscheide(
             $erlaubte,
