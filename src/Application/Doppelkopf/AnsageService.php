@@ -126,6 +126,61 @@ final class AnsageService
     }
 
     /**
+     * Bot-Variante für Re/Contra: prüft die Regeln (Team, Timing, Dopplung) und macht
+     * die Ansage, sofern zulässig. Gibt true zurück, wenn angesagt wurde.
+     */
+    public function machenAlsBot(Spiel $spiel, int $sitzplatz, AnsageTyp $typ): bool
+    {
+        if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
+            return false;
+        }
+        if ($typ !== AnsageTyp::RE && $typ !== AnsageTyp::CONTRA) {
+            return false; // Bots machen aktuell nur Re/Contra
+        }
+
+        $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
+        if ($teilnehmer === null) {
+            return false;
+        }
+
+        $team = $teilnehmer->getTeam();
+        if ($team === null
+            || ($typ === AnsageTyp::RE && $team !== Team::RE)
+            || ($typ === AnsageTyp::CONTRA && $team !== Team::KONTRA)
+        ) {
+            return false;
+        }
+
+        if ($this->ansageRepo->hatBereitsAngesagt($spiel, $sitzplatz, $typ)) {
+            return false;
+        }
+
+        $gespielteIds     = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $sitzplatz);
+        $verbleibenKarten = count($teilnehmer->getStartkartenIds()) - count($gespielteIds);
+        if ($verbleibenKarten < (self::TIMING[$typ->value] ?? 0)) {
+            return false; // zu spät
+        }
+
+        $ansage = new SpielAnsage();
+        $ansage->setSpiel($spiel);
+        $ansage->setSitzplatz($sitzplatz);
+        $ansage->setAnsageTyp($typ);
+        $ansage->setStichNrBeiAnsage($spiel->getAktuellerStichNr());
+        $ansage->setKartenNochInHand($verbleibenKarten);
+
+        $this->em->persist($ansage);
+        $this->em->flush();
+
+        $this->mercurePublisher->ansageGemacht($spiel);
+        $this->protokoll->ereignis(
+            $spiel->getTisch(),
+            sprintf('%s sagt %s an.', $teilnehmer->getAnzeigeName(), $typ->label()),
+        );
+
+        return true;
+    }
+
+    /**
      * Welche Ansagen kann dieser Spieler aktuell noch machen?
      * @return AnsageTyp[]
      */

@@ -208,4 +208,55 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         self::assertSame(SpielStatus::BEENDET, $gespeichert->getStatus(), 'Profi-Bot-Spiel sollte beendet sein');
         self::assertCount(48, $karteRepo->findBy(['spiel' => $gespeichert]), 'Alle 48 Karten sollten gespielt sein');
     }
+
+    /**
+     * End-to-End-Nachweis des Bot-Ansagepfads: ein RE-Bot kann zu Spielbeginn "Re"
+     * ansagen, und die Ansage wird persistiert.
+     */
+    public function testBotKannReAnsagen(): void
+    {
+        $host  = $this->neuerUser('ansage_host');
+        $tisch = $this->beitritt->erstelleTisch($host, 'Ansage-Spiel', ZugangsModusTyp::OFFEN);
+        $tischId = $tisch->getId();
+        $hostId  = $host->getId();
+
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+        self::assertSame(3, $this->beitritt->botsAuffuellen($tisch, $host)); // Anfänger → keine Auto-Ansage
+        [$tisch, $host] = $this->frischLaden($tischId, $hostId);
+
+        $spiel   = static::getContainer()->get(SpielStartService::class)->starten($tisch);
+        $spielId = $spiel->getId();
+        $botZug  = static::getContainer()->get(BotZugService::class);
+
+        // Vorbehaltsrunde durchspielen, bis das Spiel läuft (Teams stehen dann fest).
+        for ($i = 0; $i < 20; $i++) {
+            $this->em->refresh($spiel);
+            if ($spiel->getStatus() === SpielStatus::LAUFEND) {
+                break;
+            }
+            $botZug->spielenFuerSitzplatz($spiel, $spiel->getAktuellerSpielerSitzplatz());
+        }
+        self::assertSame(SpielStatus::LAUFEND, $spiel->getStatus());
+
+        // Einen RE-Sitz finden und "Re" ansagen lassen.
+        $reSitz = null;
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if ($t->getTeam() === \App\Enum\Team::RE) {
+                $reSitz = $t->getSitzplatz();
+                break;
+            }
+        }
+        self::assertNotNull($reSitz, 'Es sollte einen RE-Spieler geben');
+
+        $ansageService = static::getContainer()->get(\App\Application\Doppelkopf\AnsageService::class);
+        self::assertTrue($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+
+        $ansageRepo = static::getContainer()->get(\App\Repository\SpielAnsageRepository::class);
+        self::assertTrue($ansageRepo->hatBereitsAngesagt($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+
+        // Nicht zweimal dieselbe Ansage.
+        self::assertFalse($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+
+        self::assertNotNull($spielId);
+    }
 }

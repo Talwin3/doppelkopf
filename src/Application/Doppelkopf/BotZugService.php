@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
+use App\Application\Doppelkopf\Bot\BotAnsage;
 use App\Application\Doppelkopf\Bot\BotStrategieProvider;
 use App\Entity\Spiel;
 use App\Enum\BotStaerke;
@@ -18,6 +19,7 @@ final class BotZugService
         private readonly VorbehaltService $vorbehaltService,
         private readonly ArmutService $armutService,
         private readonly BotStrategieProvider $strategieProvider,
+        private readonly BotAnsage $botAnsage,
         private readonly LoggerInterface $logger,
         #[Autowire('%env(BOT_API_URL)%')]
         private readonly string $botApiUrl,
@@ -54,6 +56,12 @@ final class BotZugService
         $erlaubte = $this->karteAusspielenService->erlaubteKarten($spiel, $teilnehmer);
         if (empty($erlaubte)) {
             return;
+        }
+
+        // Vor dem Zug ggf. Re/Contra ansagen – nur für echte Bots, nicht bei
+        // Disconnect-Übernahme eines Menschen (keine bindende Ansage für Abwesende).
+        if ($teilnehmer->isIstBot()) {
+            $this->botAnsage->pruefen($spiel, $teilnehmer);
         }
 
         $staerke = $staerkeOverride ?? $teilnehmer->getBotStaerke();
