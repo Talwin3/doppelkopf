@@ -6,6 +6,7 @@ namespace App\Application\Doppelkopf;
 
 use App\Application\Doppelkopf\Bot\BotStrategieProvider;
 use App\Entity\Spiel;
+use App\Enum\BotStaerke;
 use App\Enum\SpielStatus;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -24,7 +25,11 @@ final class BotZugService
         private readonly string $botApiToken,
     ) {}
 
-    public function spielenFuerSitzplatz(Spiel $spiel, int $sitzplatz): void
+    /**
+     * @param ?BotStaerke $staerkeOverride Erzwingt eine Spielstärke für die Kartenwahl (z. B. bei
+     *                                     Disconnect-Übernahme eines Menschen); null = Stärke des Teilnehmers.
+     */
+    public function spielenFuerSitzplatz(Spiel $spiel, int $sitzplatz, ?BotStaerke $staerkeOverride = null): void
     {
         if ($spiel->getStatus() === SpielStatus::VORBEHALT) {
             $this->vorbehaltService->deklarierenAlsBot($spiel, $sitzplatz);
@@ -51,9 +56,11 @@ final class BotZugService
             return;
         }
 
+        $staerke = $staerkeOverride ?? $teilnehmer->getBotStaerke();
+
         $gewaehlt = $this->botApiKarteWaehlen($spiel, $sitzplatz, $erlaubte)
             ?? $this->strategieProvider
-                ->fuer($teilnehmer->getBotStaerke())
+                ->fuer($staerke)
                 ->waehleKarte($spiel, $teilnehmer, $erlaubte)
                 ->id();
 

@@ -10,6 +10,7 @@ use App\Application\Doppelkopf\SpielStartService;
 use App\Application\Doppelkopf\TischProtokollService;
 use App\Application\SystemEinstellungService;
 use App\Entity\Tisch;
+use App\Enum\BotStaerke;
 use App\Enum\SpielStatus;
 use App\Infrastructure\Logger\BotApiLogger;
 use App\Repository\SpielRepository;
@@ -143,7 +144,12 @@ class BotZugBerechnenCommand extends Command
                 if (!$istBot && $spiel->getStatus() !== SpielStatus::ARMUT_TAUSCH) {
                     $this->protokoll->botUebernimmt($teilnehmer);
                 }
-                $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz);
+
+                // Bei Disconnect-Übernahme eines Menschen die admin-konfigurierte Stärke nutzen;
+                // ein echter Bot spielt mit seiner eigenen Stärke (Override null).
+                $override = $istBot ? null : BotStaerke::vonWert($this->einstellungService->get('bot_disconnect_staerke'));
+
+                $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz, $override);
             } catch (\Throwable $e) {
                 $output->writeln(sprintf('  <error>Bot-Zug Fehler: %s</error>', $e->getMessage()));
                 if (!$this->em->isOpen()) {

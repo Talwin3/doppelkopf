@@ -34,6 +34,30 @@ enum BotStaerke: string
         return ($wert !== null ? self::tryFrom($wert) : null) ?? self::default();
     }
 
+    /**
+     * Ist für diese Stufe bereits eine eigene Strategie implementiert? Noch nicht
+     * fertige Stufen werden weder am Tisch noch in der Admin angeboten (und fallen
+     * im Provider auf {@see self::default()} zurück).
+     */
+    public function implementiert(): bool
+    {
+        return match ($this) {
+            self::ANFAENGER => true,
+            default         => false, // FORTGESCHRITTEN/PROFI: in Arbeit (Phase 3/4)
+        };
+    }
+
+    /**
+     * Alle tatsächlich anwählbaren Stufen (implementiert). Steuert die Auswahl
+     * am Tisch und in der Administration.
+     *
+     * @return self[]
+     */
+    public static function verfuegbare(): array
+    {
+        return array_values(array_filter(self::cases(), fn(self $s) => $s->implementiert()));
+    }
+
     public function label(): string
     {
         return match ($this) {

@@ -111,6 +111,7 @@ class SpielController extends AbstractController
             'chatVerlauf'            => $this->chatService->verlauf($tisch),
             'chatPhrasen'            => $this->chatPhrasenService->fuerUser($user),
             'meinUserId'             => (string) $user->getId(),
+            'botStaerken'            => \App\Enum\BotStaerke::verfuegbare(),
         ]);
     }
 
@@ -302,8 +303,10 @@ class SpielController extends AbstractController
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
+        $staerke = \App\Enum\BotStaerke::vonWert($request->request->getString('staerke') ?: null);
+
         try {
-            $anzahl = $this->beitrittsService->botsAuffuellen($tisch, $user);
+            $anzahl = $this->beitrittsService->botsAuffuellen($tisch, $user, $staerke);
             return new JsonResponse(['ok' => true, 'anzahl' => $anzahl]);
         } catch (\DomainException $e) {
             return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);

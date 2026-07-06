@@ -90,15 +90,24 @@
             and (not spiel or spiel.status.value == 'BEENDET')
             and tisch.warteschlange.count == 0
             and tisch.aktiveSpieler.count < 4 %}
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-3">
             <div>
                 <p class="text-white text-sm font-medium">Mit Bots auffüllen</p>
                 <p class="text-tisch-400 text-xs">{{ 4 - tisch.aktiveSpieler.count }} freie Plätze mit Bots besetzen</p>
             </div>
             <form method="post"
                   action="{{ path('app_bots_auffuellen', {id: tisch.id}) }}"
-                  data-action="submit->spieltisch#botsAuffuellen">
+                  data-action="submit->spieltisch#botsAuffuellen"
+                  class="flex items-center gap-2">
                 <input type="hidden" name="_token" value="{{ csrf_token('bots_' ~ tisch.id) }}">
+                {% if botStaerken|default([])|length > 1 %}
+                    <select name="staerke"
+                            class="rounded-lg text-xs bg-tisch-700 text-tisch-100 border border-tisch-600 px-2 py-1 focus:ring-1 focus:ring-tisch-400">
+                        {% for s in botStaerken %}
+                            <option value="{{ s.value }}" title="{{ s.beschreibung }}">{{ s.label }}</option>
+                        {% endfor %}
+                    </select>
+                {% endif %}
                 <button type="submit"
                         class="px-3 py-1 rounded-lg text-xs font-medium bg-tisch-600 text-tisch-200 hover:bg-tisch-500 transition-colors">
                     Bots hinzufügen

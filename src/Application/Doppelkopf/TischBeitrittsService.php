@@ -265,10 +265,14 @@ final class TischBeitrittsService
     /**
      * Füllt freie Sitzplätze mit Bots auf. Nur wenn keine Warteschlange und kein laufendes Spiel.
      *
+     * @param ?BotStaerke $staerke Gewünschte Spielstärke der Bots (null = Systemdefault). Nicht
+     *                             implementierte Stufen fallen auf den Default zurück.
      * @return int Anzahl hinzugefügter Bots
      */
-    public function botsAuffuellen(Tisch $tisch, User $user): int
+    public function botsAuffuellen(Tisch $tisch, User $user, ?BotStaerke $staerke = null): int
     {
+        $staerke = ($staerke !== null && $staerke->implementiert()) ? $staerke : BotStaerke::default();
+
         $tischSpieler = $this->tischSpielerRepo->findByTischAndUser($tisch, $user);
         if ($tischSpieler === null || !$tischSpieler->istAktiv()) {
             throw new \DomainException('Nur aktive Spieler können Bots hinzufügen.');
@@ -309,7 +313,7 @@ final class TischBeitrittsService
             $bot->setSitzplatz($platz);
             $bot->setIstBot(true);
             $bot->setBotName($name);
-            $bot->setBotStaerke(BotStaerke::default());
+            $bot->setBotStaerke($staerke);
             $this->em->persist($bot);
             $anzahl++;
         }

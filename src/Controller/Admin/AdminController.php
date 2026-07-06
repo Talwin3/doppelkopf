@@ -56,6 +56,7 @@ class AdminController extends AbstractController
         return $this->render('admin/einstellungen.html.twig', [
             'einstellungen' => $this->einstellungRepo->findAlle(),
             'avatarStile'   => \App\Enum\AvatarStil::cases(),
+            'botStaerken'   => \App\Enum\BotStaerke::verfuegbare(),
         ]);
     }
 

@@ -33,4 +33,22 @@ final class BotStaerkeTest extends TestCase
             self::assertNotSame('', $staerke->beschreibung());
         }
     }
+
+    public function testNurAnfaengerIstAktuellImplementiert(): void
+    {
+        self::assertTrue(BotStaerke::ANFAENGER->implementiert());
+        self::assertFalse(BotStaerke::FORTGESCHRITTEN->implementiert());
+        self::assertFalse(BotStaerke::PROFI->implementiert());
+    }
+
+    public function testVerfuegbareEnthaeltNurImplementierteStufen(): void
+    {
+        $verfuegbar = BotStaerke::verfuegbare();
+
+        self::assertContains(BotStaerke::ANFAENGER, $verfuegbar);
+        self::assertNotContains(BotStaerke::PROFI, $verfuegbar);
+        foreach ($verfuegbar as $s) {
+            self::assertTrue($s->implementiert());
+        }
+    }
 }
