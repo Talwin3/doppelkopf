@@ -57,7 +57,7 @@ final class SpielTypResolver
         }
 
         // 2. Armut-Deklarationen prüfen
-        $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+        $regelwerk = $spiel->getRegelEinstellungen();
         if (!empty($regelwerk['armut'])) {
             $arme = array_filter($teilnehmer, fn(SpielTeilnehmer $t)
                 => $t->getVorbehaltTyp() === VorbehaltTyp::ARMUT);
@@ -99,7 +99,7 @@ final class SpielTypResolver
             $t->setTeam($t === $solist ? Team::RE : Team::KONTRA);
         }
 
-        $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+        $regelwerk = $spiel->getRegelEinstellungen();
         $solistKommtRaus = $regelwerk['solist_kommt_raus'] ?? true;
 
         if ($solistKommtRaus) {

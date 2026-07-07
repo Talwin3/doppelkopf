@@ -442,7 +442,7 @@ class SpielController extends AbstractController
         }
 
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
-        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
         return $this->stichStatistik->gewonneneStiche($vollstaendige, $ordnung, $zweiteDulleSticht);
     }

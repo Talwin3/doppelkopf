@@ -159,7 +159,7 @@ final class KarteAusspielenService
         }
 
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
-        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
         $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
 
         // Hochzeit: erster Stich den ein KONTRA-Spieler gewinnt → wird RE-Partner
@@ -174,7 +174,7 @@ final class KarteAusspielenService
         }
 
         $naechsterStich = $spiel->getAktuellerStichNr() + 1;
-        $maxStiche      = $spiel->getTisch()->getRegelEinstellung('ohne_neuner') ? 10 : 12;
+        $maxStiche      = $spiel->getRegelEinstellung('ohne_neuner') ? 10 : 12;
 
         if ($naechsterStich > $maxStiche) {
             // Letzter Stich: Endstich wie jeden anderen Stich kurz anzeigen und den

@@ -20,9 +20,24 @@ class Spiel
     #[ORM\Column(type: 'uuid', unique: true)]
     private Uuid $id;
 
+    /**
+     * Der Tisch, an dem das Spiel läuft. Wird beim Löschen des Tischs auf null gesetzt
+     * (SET NULL statt CASCADE), damit beendete Spiele als Replay erhalten bleiben.
+     * Das für die Auswertung nötige Regelwerk liegt zusätzlich als Snapshot im Spiel.
+     */
     #[ORM\ManyToOne(targetEntity: Tisch::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private Tisch $tisch;
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?Tisch $tisch = null;
+
+    /**
+     * Kopie der Regel-Einstellungen des Tischs zum Zeitpunkt des Spielstarts.
+     * Macht das Spiel unabhängig vom Tisch (Replay nach Tisch-Löschung, spätere
+     * Regeländerungen am Tisch verfälschen abgeschlossene Spiele nicht).
+     *
+     * @var array<string, mixed>|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $regelEinstellungenSnapshot = null;
 
     /** Null während der Vorbehaltsrunde (wird durch SpielTypResolver gesetzt). */
     #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
@@ -99,8 +114,35 @@ class Spiel
 
     public function getId(): Uuid { return $this->id; }
 
-    public function getTisch(): Tisch { return $this->tisch; }
-    public function setTisch(Tisch $tisch): static { $this->tisch = $tisch; return $this; }
+    public function getTisch(): ?Tisch { return $this->tisch; }
+    public function setTisch(?Tisch $tisch): static { $this->tisch = $tisch; return $this; }
+
+    /**
+     * Zentrale Quelle für das Regelwerk eines Spiels: bevorzugt den beim Start
+     * gezogenen Snapshot; fällt für Altspiele ohne Snapshot auf den Tisch zurück
+     * (bzw. leeres Array, falls der Tisch bereits gelöscht wurde).
+     *
+     * @return array<string, mixed>
+     */
+    public function getRegelEinstellungen(): array
+    {
+        return $this->regelEinstellungenSnapshot
+            ?? $this->tisch?->getRegelEinstellungen()
+            ?? [];
+    }
+
+    public function getRegelEinstellung(string $schluessel, mixed $default = null): mixed
+    {
+        return $this->getRegelEinstellungen()[$schluessel] ?? $default;
+    }
+
+    /** @param array<string, mixed> $einstellungen */
+    public function setRegelEinstellungenSnapshot(array $einstellungen): static
+    {
+        $this->regelEinstellungenSnapshot = $einstellungen;
+
+        return $this;
+    }
 
     public function getVariante(): ?SpielVariante { return $this->variante; }
     public function setVariante(?SpielVariante $variante): static { $this->variante = $variante; return $this; }

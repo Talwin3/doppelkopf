@@ -51,6 +51,9 @@ final class SpielStartService
             // Spiel startet in VORBEHALT-Phase; Teams werden durch SpielTypResolver nach Deklaration gesetzt
             $spiel = new Spiel();
             $spiel->setTisch($tisch);
+            // Regelwerk einfrieren: macht das Spiel unabhängig vom Tisch (Replay
+            // nach Tisch-Löschung, spätere Regeländerungen am Tisch).
+            $spiel->setRegelEinstellungenSnapshot($tisch->getRegelEinstellungen());
             $spiel->setStatus(SpielStatus::VORBEHALT);
             $spiel->setAktuellerSpielerSitzplatz(1); // Sitzplatz 1 = Vorhand, deklariert zuerst
             $spiel->setAktuellerStichNr(1);

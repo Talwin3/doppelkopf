@@ -13,7 +13,8 @@ use Symfony\Component\Uid\Uuid;
 
 /**
  * Testet den Lösch-Pfad des Tisch-Workers (app:bot:spielzuge --einmalig):
- *  - menschenloser Tisch ohne laufendes Spiel wird gelöscht, Kind-Entitäten per ON-DELETE-CASCADE mit
+ *  - menschenloser Tisch ohne laufendes Spiel wird gelöscht, Tisch-Sitzplätze per ON-DELETE-CASCADE mit
+ *  - beendete Spiele bleiben als Replay erhalten (tisch_id wird per ON DELETE SET NULL entkoppelt)
  *  - menschenloser Tisch MIT laufendem Spiel bleibt erhalten (Bots spielen durch)
  *
  * Ergänzt {@see \App\Tests\Application\Doppelkopf\TischLifecycleTest}, der nur die Markierung prüft.
@@ -44,9 +45,17 @@ final class BotWorkerCleanupTest extends DoppelkopfIntegrationTestCase
             $this->tischRepo->find($tischId),
             'Der Worker muss den menschenlosen Tisch ohne laufendes Spiel löschen',
         );
+        // Das beendete Spiel muss als Replay erhalten bleiben, aber vom gelöschten
+        // Tisch entkoppelt sein (ON DELETE SET NULL statt CASCADE).
+        $this->em->clear();
+        $ueberlebendesSpiel = $this->em->getRepository(Spiel::class)->find($spielId);
+        self::assertNotNull(
+            $ueberlebendesSpiel,
+            'Das beendete Spiel muss als Replay erhalten bleiben (kein CASCADE mehr)',
+        );
         self::assertNull(
-            $this->em->getRepository(Spiel::class)->find($spielId),
-            'Das Kind-Spiel muss per ON DELETE CASCADE mitgelöscht werden',
+            $ueberlebendesSpiel->getTisch(),
+            'Der Tisch-Bezug des Spiels muss per ON DELETE SET NULL gelöst werden',
         );
         self::assertSame(
             0,

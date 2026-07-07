@@ -40,7 +40,7 @@ final class ReplayService
     public function baueDaten(Spiel $spiel, User $betrachter): array
     {
         $ordnung           = $this->ordnungFactory->fuerSpiel($spiel);
-        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
         // Karten nach Stich gruppieren, innerhalb des Stichs nach Spielposition.
         /** @var array<int, array<int, \App\Entity\GespielteKarte>> $proStich */

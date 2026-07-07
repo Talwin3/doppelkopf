@@ -80,7 +80,7 @@ final class SpielAbschlussService
         }
 
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
-        $zweiteDulleSticht = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
         $wertung = $this->wertungsRechner->berechne(
             $stiche,
@@ -185,11 +185,75 @@ final class SpielAbschlussService
     {
         $this->vorgemerkteEntfernen($tisch);
         $this->botsErsetzten($tisch);
+        $this->rotationVorbereiten($tisch);
         $this->menschenlosePruefen($tisch);
         $this->autoStartVorbereiten($tisch);
 
         $this->em->flush();
         $this->lobbyPublisher->lobbyAktualisiert();
+    }
+
+    /**
+     * Rückt die Vorhand für das nächste Spiel weiter, indem die Sitzplätze rotieren
+     * (der bisherige Platz 2 wird neuer Platz 1). Weil das Frontend relativ zum
+     * eigenen Sitzplatz zeichnet, bleibt die Tisch-Ansicht für jeden Spieler stabil –
+     * es wechselt nur, wer herauskommt.
+     *
+     * Bei besetzter Warteschlange (>4 Mitspielende) rotiert zusätzlich der bisherige
+     * Vorhand-Spieler (Platz 1) hinten in die Warteschlange und der erste Wartende
+     * rückt auf Platz 4 nach – so kommt reihum jeder an den Tisch und heraus.
+     *
+     * Läuft nur bei genau 4 besetzten Plätzen; sonst startet ohnehin kein Spiel.
+     */
+    private function rotationVorbereiten(Tisch $tisch): void
+    {
+        $besetzt = [];
+        foreach ($tisch->getAktiveSpieler() as $ts) {
+            $besetzt[$ts->getSitzplatz()] = $ts;
+        }
+        if (count($besetzt) !== 4) {
+            return;
+        }
+        ksort($besetzt);
+
+        $warteschlange = $tisch->getWarteschlange()->toArray();
+        usort($warteschlange, fn(TischSpieler $a, TischSpieler $b)
+            => $a->getPositionInWarteschlange() <=> $b->getPositionInWarteschlange());
+
+        if ($warteschlange !== []) {
+            // Vorhand-Spieler raus in die Warteschlange, erster Wartender rein.
+            $reinkommend = array_shift($warteschlange);
+            $rausgehend  = $besetzt[1];
+            $neueReihe   = [$besetzt[2], $besetzt[3], $besetzt[4], $reinkommend];
+            $neueQueue   = array_merge($warteschlange, [$rausgehend]);
+
+            $this->protokoll->ereignis($tisch, sprintf(
+                '%s rotiert an den Tisch, %s setzt aus.',
+                $reinkommend->getAnzeigeName(),
+                $rausgehend->getAnzeigeName(),
+            ));
+        } else {
+            // Reine Vorhand-Rotation unter den vier Sitzenden.
+            $neueReihe = [$besetzt[2], $besetzt[3], $besetzt[4], $besetzt[1]];
+            $neueQueue = [];
+        }
+
+        // Zweiphasig zuweisen: erst alle Sitze freimachen (null kollidiert nicht mit
+        // dem UNIQUE(tisch, sitzplatz)-Constraint), dann neu setzen.
+        foreach ($besetzt as $ts) {
+            $ts->setSitzplatz(null);
+        }
+        $this->em->flush();
+
+        foreach ($neueReihe as $i => $ts) {
+            $ts->setSitzplatz($i + 1);
+            $ts->setPositionInWarteschlange(null);
+        }
+        foreach ($neueQueue as $i => $ts) {
+            $ts->setSitzplatz(null);
+            $ts->setPositionInWarteschlange($i + 1);
+        }
+        $this->em->flush();
     }
 
     /** Entfernt alle aktiven Spieler, die moechteNachSpielVerlassen=true gesetzt haben. */

@@ -101,7 +101,7 @@ final class TrumpfOrdnungFactory
             return ['schweinchen' => false, 'superschweinchen' => false];
         }
 
-        $regel = $spiel->getTisch()->getRegelEinstellungen();
+        $regel = $spiel->getRegelEinstellungen();
         $f     = $farbe->value;
 
         $schweinchen = !empty($regel['schweinchen'])

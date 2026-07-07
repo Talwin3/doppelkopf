@@ -84,7 +84,7 @@ final class ProfiStrategie implements BotStrategie
         }
 
         $bekannteTeams = $this->oeffentlicheTeams->ermitteln($spiel, $eigenerSitz);
-        $zweiteDulle   = (bool) ($spiel->getTisch()->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
+        $zweiteDulle   = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
         return $this->heuristik->entscheide(
             $erlaubte,

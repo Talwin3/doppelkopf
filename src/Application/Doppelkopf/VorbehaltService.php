@@ -122,7 +122,7 @@ final class VorbehaltService
         }
 
         // Bot-Logik (stärkegesteuert): Hochzeit > Solo > Armut > Gesund.
-        $regelwerk    = $spiel->getTisch()->getRegelEinstellungen();
+        $regelwerk    = $spiel->getRegelEinstellungen();
         $hand         = $teilnehmer->aktuelleHand([]);
         $entscheidung = $this->vorbehaltHeuristik->entscheide(
             $teilnehmer->getBotStaerke(),
@@ -175,7 +175,7 @@ final class VorbehaltService
         }
 
         // Armut: ≤3 Trümpfe + Regel aktiv
-        $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+        $regelwerk = $spiel->getRegelEinstellungen();
         if (!empty($regelwerk['armut']) && ArmutService::trumpfAnzahl($teilnehmer) <= 3) {
             $optionen[] = VorbehaltTyp::ARMUT;
         }
@@ -235,7 +235,7 @@ final class VorbehaltService
             if ($soloVariante === null) {
                 throw new \DomainException('Solo-Deklaration erfordert eine Spielvariante.');
             }
-            $regelwerk   = $spiel->getTisch()->getRegelEinstellungen();
+            $regelwerk   = $spiel->getRegelEinstellungen();
             $soliErlaubt = $regelwerk['soli_erlaubt'] ?? [];
             if (!in_array($soloVariante->value, $soliErlaubt, true)) {
                 throw new \DomainException("Solo-Variante '{$soloVariante->value}' ist an diesem Tisch nicht erlaubt.");
@@ -250,7 +250,7 @@ final class VorbehaltService
         }
 
         if ($typ === VorbehaltTyp::ARMUT) {
-            $regelwerk = $spiel->getTisch()->getRegelEinstellungen();
+            $regelwerk = $spiel->getRegelEinstellungen();
             if (empty($regelwerk['armut'])) {
                 throw new \DomainException('Armut ist an diesem Tisch nicht aktiviert.');
             }
