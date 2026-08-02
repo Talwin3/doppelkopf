@@ -1,7 +1,411 @@
 {% extends 'base.html.twig' %}
+
 {% block title %}Doppelkopf-Regeln – Doppelkopf Online{% endblock %}
+
+{#
+   Beschreibt die Regeln so, wie diese Plattform sie umsetzt (DDV-nah).
+   Bei Regeländerungen im Code hier mitpflegen – vor allem:
+   Trumpfreihenfolge (TrumpfOrdnungFactory), Ansage-Timing (AnsageService::TIMING),
+   Abrechnung (WertungsRechner) und die Tisch-Optionen (Tisch::$regelEinstellungen).
+#}
+
+{% macro abschnitt(id, titel) %}
+    <h2 id="{{ id }}" class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 scroll-mt-24">{{ titel }}</h2>
+{% endmacro %}
+
+{% import _self as r %}
+
 {% block body %}
-<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Doppelkopf-Regeln</h1>
-{# TODO: Vollständige Regelseite #}
-<p class="text-gray-500 dark:text-gray-400">Regelseite – wird in Phase 1 ausgearbeitet.</p>
+<div class="max-w-3xl">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Doppelkopf-Regeln</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-8">
+        Gespielt wird nach den Regeln des Deutschen Doppelkopf-Verbands. Diese Seite beschreibt,
+        wie das Spiel hier umgesetzt ist – inklusive der Sonderregeln, die sich an jedem Tisch
+        einzeln zuschalten lassen.
+    </p>
+
+    <nav class="mb-10 rounded-lg bg-gray-50 dark:bg-gray-800 px-5 py-4">
+        <p class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Auf dieser Seite</p>
+        <ol class="text-sm text-gray-700 dark:text-gray-300 space-y-1 list-decimal list-inside marker:text-gray-400 dark:marker:text-gray-500">
+            {% for eintrag in [
+                {id: 'ziel',         text: 'Ziel des Spiels'},
+                {id: 'blatt',        text: 'Das Blatt und die Augen'},
+                {id: 'trumpf',       text: 'Trumpf und Fehlfarben'},
+                {id: 'ablauf',       text: 'Spielablauf und Bedienpflicht'},
+                {id: 'parteien',     text: 'Re und Kontra'},
+                {id: 'vorbehalte',   text: 'Vorbehalte: Hochzeit, Armut, Solo'},
+                {id: 'ansagen',      text: 'Ansagen'},
+                {id: 'abrechnung',   text: 'Die Abrechnung'},
+                {id: 'sonderregeln', text: 'Sonderregeln am Tisch'}
+            ] %}
+                <li>
+                    <a href="#{{ eintrag.id }}"
+                       class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 hover:underline">{{ eintrag.text }}</a>
+                </li>
+            {% endfor %}
+        </ol>
+    </nav>
+
+    {# ── 1. Ziel ──────────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('ziel', '1. Ziel des Spiels') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-3">
+            Doppelkopf spielen vier Personen in zwei Parteien zu je zwei Spielern – <strong>Re</strong> gegen
+            <strong>Kontra</strong>. Wer mit wem spielt, steht zu Beginn nicht fest und ergibt sich aus den Karten:
+            Die beiden Spieler mit einer Kreuz-Dame bilden gemeinsam die Re-Partei.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300">
+            Im Spiel sind insgesamt <strong>240 Augen</strong> zu holen. Re gewinnt mit <strong>121 Augen</strong>,
+            Kontra genügen bereits <strong>120</strong>. Bei Gleichstand gewinnt also Kontra.
+        </p>
+    </section>
+
+    {# ── 2. Blatt ─────────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('blatt', '2. Das Blatt und die Augen') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Gespielt wird mit <strong>48 Karten</strong>: Neun, Zehn, Bube, Dame, König und Ass in den vier Farben
+            Kreuz, Pik, Herz und Karo – <em>jede Karte doppelt</em>, daher der Name. Jeder erhält 12 Karten,
+            gespielt werden 12 Stiche.
+        </p>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                <thead class="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Karte</th>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Augen</th>
+                        <th scope="col" class="py-2 font-semibold">im Spiel (je 8 Karten)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    {% for zeile in [
+                        {karte: 'Ass',   augen: 11, gesamt: 88},
+                        {karte: 'Zehn',  augen: 10, gesamt: 80},
+                        {karte: 'König', augen: 4,  gesamt: 32},
+                        {karte: 'Dame',  augen: 3,  gesamt: 24},
+                        {karte: 'Bube',  augen: 2,  gesamt: 16},
+                        {karte: 'Neun',  augen: 0,  gesamt: 0}
+                    ] %}
+                        <tr>
+                            <td class="py-2 pr-4">{{ zeile.karte }}</td>
+                            <td class="py-2 pr-4 tabular-nums">{{ zeile.augen }}</td>
+                            <td class="py-2 tabular-nums text-gray-500 dark:text-gray-400">{{ zeile.gesamt }}</td>
+                        </tr>
+                    {% endfor %}
+                    <tr class="font-semibold">
+                        <td class="py-2 pr-4">Summe</td>
+                        <td class="py-2 pr-4"></td>
+                        <td class="py-2 tabular-nums">240</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    {# ── 3. Trumpf ────────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('trumpf', '3. Trumpf und Fehlfarben') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Im Normalspiel sind <strong>26 der 48 Karten Trumpf</strong>: beide Herz-Zehnen, alle Damen, alle Buben
+            und alle übrigen Karo-Karten. Von oben nach unten gilt:
+        </p>
+
+        <ol class="text-gray-700 dark:text-gray-300 space-y-2 list-decimal list-outside pl-5 mb-4">
+            <li><strong>Herz-Zehn</strong> („Dulle“) – die höchste Karte des Spiels</li>
+            <li><strong>Damen</strong>: Kreuz &gt; Pik &gt; Herz &gt; Karo</li>
+            <li><strong>Buben</strong>: Kreuz &gt; Pik &gt; Herz &gt; Karo</li>
+            <li><strong>Karo</strong>: Ass &gt; Zehn &gt; König &gt; Neun</li>
+        </ol>
+
+        <p class="text-gray-700 dark:text-gray-300 mb-2">
+            Alles andere sind <strong>Fehlfarben</strong> – Kreuz, Pik und Herz. Innerhalb einer Fehlfarbe gilt:
+            <strong>Ass &gt; Zehn &gt; König &gt; Neun</strong>. Damen und Buben gehören nie zur Fehlfarbe, sie sind
+            immer Trumpf; und die Herz-Zehn ist als Dulle ebenfalls Trumpf, nicht Herz.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300">
+            Treffen zwei identische Karten im selben Stich aufeinander, gewinnt die <strong>zuerst gespielte</strong>.
+            Für die beiden Dullen lässt sich das am Tisch umstellen (siehe
+            <a href="#sonderregeln" class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 underline">Sonderregeln</a>).
+        </p>
+    </section>
+
+    {# ── 4. Ablauf ────────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('ablauf', '4. Spielablauf und Bedienpflicht') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-3">
+            Die Vorhand spielt die erste Karte aus, danach geht es reihum. Wer den Stich gewinnt, spielt zum
+            nächsten an. Nach jedem Spiel rückt die Vorhand einen Platz weiter.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300 mb-3">
+            Es besteht <strong>Bedienpflicht</strong>:
+        </p>
+        <ul class="text-gray-700 dark:text-gray-300 space-y-1 list-disc list-outside pl-5 mb-3">
+            <li>Wird <strong>Trumpf</strong> angespielt, musst du Trumpf zugeben, sofern du welchen hast.</li>
+            <li>Wird eine <strong>Fehlfarbe</strong> angespielt, musst du dieselbe Fehlfarbe bedienen, sofern du sie hast.</li>
+            <li>Kannst du nicht bedienen, bist du frei: abwerfen oder stechen, wie du magst.</li>
+        </ul>
+        <p class="text-gray-700 dark:text-gray-300">
+            Den Stich gewinnt der <strong>höchste Trumpf</strong>. Ist kein Trumpf im Stich, gewinnt die höchste
+            Karte der angespielten Farbe. Die Augen des Stichs gehen auf das Konto der Partei des Gewinners.
+        </p>
+    </section>
+
+    {# ── 5. Parteien ──────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('parteien', '5. Re und Kontra') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-3">
+            Wer eine <strong>Kreuz-Dame</strong> hat, gehört zu Re; die beiden anderen bilden Kontra. Weil niemand
+            die Karten der Mitspieler kennt, ist die eigene Partei zwar bekannt, der Partner aber zunächst nicht –
+            er verrät sich erst im Spielverlauf, etwa durch eine Ansage oder durch das Ausspielen der Kreuz-Dame.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300">
+            Die Anzeige am Tisch blendet die Zugehörigkeit deshalb erst ein, sobald sie tatsächlich bekannt ist.
+            Zwei Sonderfälle regeln die Partnerschaft anders: die <strong>Hochzeit</strong> und das <strong>Solo</strong>.
+        </p>
+    </section>
+
+    {# ── 6. Vorbehalte ────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('vorbehalte', '6. Vorbehalte: Hochzeit, Armut, Solo') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Vor dem ersten Stich erklärt jeder reihum, ob er <strong>gesund</strong> ist oder einen
+            <strong>Vorbehalt</strong> anmeldet. Melden mehrere etwas an, entscheidet die Reihenfolge
+            <strong>Solo vor Armut vor Hochzeit</strong>. Sind alle gesund, wird ein Normalspiel gespielt.
+        </p>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Hochzeit</h3>
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Wer <strong>beide Kreuz-Damen</strong> auf der Hand hat, hätte sonst keinen Partner. Er meldet eine
+            Hochzeit an und sucht sich einen: <strong>Partner wird, wer den ersten Stich gewinnt, den nicht der
+            Hochzeitsspieler selbst macht.</strong> Bis dahin spielt der Hochzeitsspieler allein gegen drei.
+            Gewinnt er alle Stiche, bleibt es dabei – dann ist es faktisch ein Solo.
+        </p>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Armut</h3>
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Wer <strong>höchstens drei Trümpfe</strong> hat, kann Armut anmelden – sofern die Regel am Tisch aktiv ist.
+            Die Mitspieler werden reihum gefragt, ob jemand die Armut annimmt. Wer annimmt, bekommt <em>alle</em>
+            Trümpfe des Armut-Spielers und gibt ihm dafür ebenso viele Karten seiner Wahl zurück. Die beiden bilden
+            dann gemeinsam die Re-Partei. Nimmt niemand an, wird neu gegeben.
+        </p>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Solo</h3>
+        <p class="text-gray-700 dark:text-gray-300 mb-3">
+            Beim Solo spielt einer allein gegen die drei anderen – er ist Re, die übrigen sind Kontra. Welche
+            Varianten erlaubt sind, legt der Tisch fest:
+        </p>
+
+        <div class="overflow-x-auto mb-3">
+            <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                <thead class="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Solo</th>
+                        <th scope="col" class="py-2 font-semibold">Trumpf</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    {% for zeile in [
+                        {name: 'Karo-Solo',       trumpf: 'wie im Normalspiel – Dulle, Damen, Buben, Karo'},
+                        {name: 'Herz-Solo',       trumpf: 'Dulle, Damen, Buben und Herz'},
+                        {name: 'Pik-Solo',        trumpf: 'Dulle, Damen, Buben und Pik'},
+                        {name: 'Kreuz-Solo',      trumpf: 'Dulle, Damen, Buben und Kreuz'},
+                        {name: 'Damen-Solo',      trumpf: 'nur die acht Damen – keine Dulle, keine Buben'},
+                        {name: 'Buben-Solo',      trumpf: 'nur die acht Buben – keine Dulle, keine Damen'},
+                        {name: 'Fleischlos-Solo', trumpf: 'gar kein Trumpf; in jeder Farbe gilt Ass > Zehn > König > Dame > Bube > Neun'}
+                    ] %}
+                        <tr>
+                            <td class="py-2 pr-4 font-medium whitespace-nowrap align-top">{{ zeile.name }}</td>
+                            <td class="py-2 align-top">{{ zeile.trumpf }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-gray-700 dark:text-gray-300">
+            Auch im Fleischlos-Solo gilt das normale Ziel: Der Solist braucht <strong>121 Augen</strong>, er muss
+            also Stiche machen – es ist kein Nullspiel.
+        </p>
+    </section>
+
+    {# ── 7. Ansagen ───────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('ansagen', '7. Ansagen') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Wer sein Blatt für stark hält, kann den Spielwert erhöhen. <strong>Re</strong> sagt nur an, wer zur
+            Re-Partei gehört, <strong>Contra</strong> nur, wer zu Kontra gehört – die Ansage verrät damit die eigene
+            Zugehörigkeit. Jede Ansage muss rechtzeitig fallen: Maßgeblich ist, wie viele Karten du dabei noch auf
+            der Hand hast.
+        </p>
+
+        <div class="overflow-x-auto mb-4">
+            <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                <thead class="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Ansage</th>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Bedeutung</th>
+                        <th scope="col" class="py-2 pr-4 font-semibold">noch auf der Hand</th>
+                        <th scope="col" class="py-2 font-semibold">Wert</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    {% for zeile in [
+                        {name: 'Re / Contra', bedeutung: 'die eigene Partei gewinnt',    karten: 'mind. 11', wert: '+2'},
+                        {name: 'keine 90',    bedeutung: 'Gegner bleibt unter 90 Augen', karten: 'mind. 10', wert: '+1'},
+                        {name: 'keine 60',    bedeutung: 'Gegner bleibt unter 60 Augen', karten: 'mind. 9',  wert: '+1'},
+                        {name: 'keine 30',    bedeutung: 'Gegner bleibt unter 30 Augen', karten: 'mind. 8',  wert: '+1'},
+                        {name: 'schwarz',     bedeutung: 'Gegner bekommt keinen Stich',  karten: 'mind. 7',  wert: '+1'}
+                    ] %}
+                        <tr>
+                            <td class="py-2 pr-4 font-medium whitespace-nowrap align-top">{{ zeile.name }}</td>
+                            <td class="py-2 pr-4 align-top">{{ zeile.bedeutung }}</td>
+                            <td class="py-2 pr-4 whitespace-nowrap tabular-nums align-top">{{ zeile.karten }}</td>
+                            <td class="py-2 tabular-nums align-top">{{ zeile.wert }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-gray-700 dark:text-gray-300">
+            Die Absagen bauen aufeinander auf: <strong>keine 90</strong> setzt ein vorheriges Re oder Contra der
+            eigenen Partei voraus, <strong>keine 60</strong> ein vorheriges „keine 90“ und so weiter bis
+            <strong>schwarz</strong>. Am Tisch sind immer nur die Schaltflächen aktiv, die gerade zulässig sind.
+        </p>
+    </section>
+
+    {# ── 8. Abrechnung ────────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('abrechnung', '8. Die Abrechnung') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Nach dem letzten Stich werden die Augen gezählt und die Punkte zusammengestellt. Die vollständige
+            Aufstellung siehst du am Tisch im Abrechnungs-Dialog, Position für Position.
+        </p>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Grundpunkte für die Gewinnerpartei</h3>
+        <ul class="text-gray-700 dark:text-gray-300 space-y-1 list-disc list-outside pl-5 mb-4">
+            <li><strong>Gewonnen</strong> – 1 Punkt</li>
+            <li><strong>Gegen die Alten</strong> – 1 Punkt, wenn Kontra gewinnt (nur im Normalspiel)</li>
+            <li><strong>keine 90 / keine 60 / keine 30</strong> – je 1 Punkt, wenn der Verlierer darunter bleibt</li>
+            <li><strong>Schwarz</strong> – 1 Punkt, wenn der Verlierer keinen einzigen Stich bekommt</li>
+        </ul>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Sonderpunkte</h3>
+        <p class="text-gray-700 dark:text-gray-300 mb-2">
+            Sie gehen an die Partei, die sie erzielt hat – auch wenn sie das Spiel verliert. Im Solo entfallen sie:
+        </p>
+        <ul class="text-gray-700 dark:text-gray-300 space-y-1 list-disc list-outside pl-5 mb-4">
+            <li><strong>Fuchs gefangen</strong> – 1 Punkt für jedes gegnerische Karo-Ass, das du im Stich erbeutest</li>
+            <li><strong>Doppelkopf</strong> – 1 Punkt für jeden Stich mit 40 Augen oder mehr</li>
+            <li><strong>Karlchen</strong> – 1 Punkt, wenn der Kreuz-Bube den letzten Stich gewinnt</li>
+        </ul>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Punkte aus Ansagen</h3>
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Re und Contra bringen je 2 Punkte, jede Absage 1 Punkt. Wichtig: Diese Punkte gehen
+            <strong>immer an die Gewinnerpartei</strong> – auch dann, wenn die ansagende Partei am Ende verliert.
+            Eine gewagte Ansage kann sich also gegen einen selbst richten.
+        </p>
+
+        <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Vom Spielwert zum Punktekonto</h3>
+        <p class="text-gray-700 dark:text-gray-300">
+            Der <strong>Spielwert</strong> ist die Summe der Gewinnerpunkte abzüglich der Verliererpunkte. Jeder
+            Gewinner bekommt ihn gutgeschrieben, jeder Verlierer abgezogen. Beim Solo steht einer gegen drei:
+            Der Solist erhält bzw. verliert den <strong>dreifachen</strong> Spielwert, die drei Gegenspieler je den
+            einfachen.
+        </p>
+    </section>
+
+    {# ── 9. Sonderregeln ──────────────────────────────────────────────── #}
+    <section class="mb-10">
+        {{ r.abschnitt('sonderregeln', '9. Sonderregeln am Tisch') }}
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+            Jeder Tisch stellt sein Regelwerk selbst zusammen – änderbar zwischen zwei Spielen, nie mittendrin.
+            Welche Regeln gerade gelten, steht in den Tisch-Einstellungen.
+        </p>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                <thead class="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Regel</th>
+                        <th scope="col" class="py-2 pr-4 font-semibold">Wirkung</th>
+                        <th scope="col" class="py-2 font-semibold">Standard</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    {% for zeile in [
+                        {
+                            name: 'Erlaubte Soli',
+                            wirkung: 'Auswahl, welche der sieben Solo-Varianten angemeldet werden dürfen.',
+                            standard: 'alle sieben'
+                        },
+                        {
+                            name: 'Solist kommt raus',
+                            wirkung: 'Der Solist spielt die erste Karte aus. Sonst bleibt die reguläre Vorhand am Zug.',
+                            standard: 'an'
+                        },
+                        {
+                            name: 'Armut',
+                            wirkung: 'Erlaubt den Vorbehalt „Armut“ bei höchstens drei Trümpfen.',
+                            standard: 'aus'
+                        },
+                        {
+                            name: 'Schweinchen',
+                            wirkung: 'Wer beide Trumpf-Asse auf der Hand hat, spielt sie als höchste Trümpfe – noch über der Dulle.',
+                            standard: 'aus'
+                        },
+                        {
+                            name: 'Superschweinchen',
+                            wirkung: 'Zusätzlich zum Schweinchen: Auch beide Trumpf-Neuner auf einer Hand steigen an die Spitze.',
+                            standard: 'aus'
+                        },
+                        {
+                            name: 'Ohne Neuner',
+                            wirkung: 'Die acht Neuner fliegen raus – 40 Karten, je 10 auf der Hand, 10 Stiche. Da Neuner 0 Augen zählen, bleibt es bei 240 Augen.',
+                            standard: 'aus'
+                        },
+                        {
+                            name: 'Zweite Dulle sticht',
+                            wirkung: 'Treffen beide Herz-Zehnen im selben Stich aufeinander, gewinnt die zweite statt der ersten.',
+                            standard: 'aus'
+                        }
+                    ] %}
+                        <tr>
+                            <td class="py-2 pr-4 font-medium whitespace-nowrap align-top">{{ zeile.name }}</td>
+                            <td class="py-2 pr-4 align-top">{{ zeile.wirkung }}</td>
+                            <td class="py-2 align-top whitespace-nowrap text-gray-500 dark:text-gray-400">{{ zeile.standard }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-gray-700 dark:text-gray-300 mt-4 text-sm">
+            Schweinchen und Superschweinchen gelten nur, wenn die beiden Asse bzw. Neuner tatsächlich zusammen auf
+            einer Starthand liegen – und nur in Spielarten mit Trumpffarbe. Buben-, Damen- und Fleischlos-Solo haben
+            keine, dort gibt es also auch kein Schweinchen.
+        </p>
+    </section>
+
+    <div class="rounded-lg bg-gray-50 dark:bg-gray-800 px-5 py-4">
+        {# Die Regelseite ist öffentlich – Gäste dürfen nicht in die Lobby, die ROLE_USER verlangt. #}
+        <p class="text-gray-700 dark:text-gray-300">
+            {% if app.user %}
+                Alles klar? Dann
+                <a href="{{ path('app_lobby') }}"
+                   class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 font-medium underline">such dir einen Tisch</a>
+                – oder üb erst einmal in Ruhe gegen Bots.
+            {% else %}
+                Alles klar? Zum Mitspielen brauchst du nur ein kostenloses Konto –
+                <a href="{{ path('app_registrieren') }}"
+                   class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 font-medium underline">jetzt registrieren</a>
+                oder
+                <a href="{{ path('app_login') }}"
+                   class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 font-medium underline">anmelden</a>.
+            {% endif %}
+        </p>
+    </div>
+</div>
 {% endblock %}
