@@ -23,13 +23,13 @@ class TischErstellenType extends AbstractType
                 'label'       => 'Tischname',
                 'attr'        => ['placeholder' => 'z. B. Feierabendrunde'],
                 'constraints' => [
-                    new NotBlank(['message' => 'Bitte einen Tischnamen eingeben.']),
-                    new Length([
-                        'min'        => 3,
-                        'max'        => 50,
-                        'minMessage' => 'Mindestens 3 Zeichen.',
-                        'maxMessage' => 'Maximal 50 Zeichen.',
-                    ]),
+                    new NotBlank(message: 'Bitte einen Tischnamen eingeben.'),
+                    new Length(
+                        min: 3,
+                        max: 50,
+                        minMessage: 'Mindestens 3 Zeichen.',
+                        maxMessage: 'Maximal 50 Zeichen.',
+                    ),
                 ],
             ])
             ->add('zugangsmodus', EnumType::class, [

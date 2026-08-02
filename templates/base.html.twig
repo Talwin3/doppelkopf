@@ -1,3 +1,21 @@
+{#
+   Hauptnavigations-Links. Werden zweimal gerendert: ab sm neben dem Logo,
+   darunter in einer zweiten Kopfzeile – sonst läuft der Header auf schmalen
+   Displays über und die ganze Seite muss horizontal gescrollt werden.
+#}
+{% macro hauptlinks() %}
+    <a href="{{ path('app_lobby') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+        Lobby
+    </a>
+    <a href="{{ path('app_bestenlisten') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+        Bestenlisten
+    </a>
+    <a href="{{ path('app_replay_liste') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+        Replays
+    </a>
+{% endmacro %}
+
+{% import _self as nav %}
 <!DOCTYPE html>
 <html lang="de" class="h-full bg-gray-50 dark:bg-gray-950">
 <head>
@@ -55,11 +73,11 @@
 {# Navigation #}
 <nav class="bg-tisch-800 shadow-lg" data-controller="theme">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex h-16 items-center justify-between">
+        <div class="flex h-16 items-center justify-between gap-3">
 
             {# ── Logo + Hauptnavigation ── #}
-            <div class="flex items-center gap-6">
-                <a href="{{ path('app_start') }}" class="flex items-center gap-2.5 group">
+            <div class="flex items-center gap-6 min-w-0">
+                <a href="{{ path('app_start') }}" class="flex items-center gap-2.5 group shrink-0">
                     {# SVG-Logo: zwei überlappende Spielkarten #}
                     <svg viewBox="0 0 44 30" fill="none" xmlns="http://www.w3.org/2000/svg"
                          class="w-10 h-[1.6rem] shrink-0 transition-transform group-hover:scale-105"
@@ -69,25 +87,25 @@
                         <rect x="19.25" y="1" width="24" height="26" rx="4" fill="#15803d" stroke="#4ade80" stroke-width="1.5"/>
                         <text x="31.25" y="20" font-family="Georgia,serif" font-size="15" fill="#fca5a5" text-anchor="middle">♥</text>
                     </svg>
-                    <span class="text-white font-bold text-lg tracking-tight leading-none">
+                    {#
+                       Unterhalb von sm trägt allein das Kartenlogo die Marke: Für den
+                       Schriftzug ist neben Theme-Umschalter, Profil und Abmelden kein
+                       Platz – er würde die Icons überlappen statt zu umbrechen.
+                    #}
+                    <span class="hidden sm:inline text-white font-bold text-lg tracking-tight leading-none whitespace-nowrap">
                         Doppelkopf<span class="text-tisch-300 font-normal"> Online</span>
                     </span>
+                    <span class="sr-only sm:hidden">Doppelkopf Online – zur Startseite</span>
                 </a>
                 {% if app.user %}
-                    <a href="{{ path('app_lobby') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
-                        Lobby
-                    </a>
-                    <a href="{{ path('app_bestenlisten') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
-                        Bestenlisten
-                    </a>
-                    <a href="{{ path('app_replay_liste') }}" class="text-tisch-100 hover:text-white text-sm font-medium transition-colors">
-                        Replays
-                    </a>
+                    <div class="hidden sm:flex items-center gap-6">
+                        {{ nav.hauptlinks() }}
+                    </div>
                 {% endif %}
             </div>
 
             {# ── Rechte Seite: User-Menü + Theme-Toggle ── #}
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3 sm:gap-4 shrink-0">
                 {# Theme-Toggle: System → Hell → Dunkel → System #}
                 <button data-action="click->theme#umschalten"
                         data-theme-target="icon"
@@ -96,10 +114,12 @@
 
                 {% if app.user %}
                     <a href="{{ path('app_profil', {username: app.user.username}) }}"
-                       class="flex items-center gap-2 text-tisch-100 hover:text-white text-sm font-medium transition-colors">
+                       class="flex items-center gap-2 text-tisch-100 hover:text-white text-sm font-medium transition-colors"
+                       title="{{ app.user.username }}">
                         <img src="{{ avatar_url(app.user, 48) }}" alt=""
-                             class="w-7 h-7 rounded-full bg-tisch-700 ring-1 ring-tisch-600">
-                        {{ app.user.username }}
+                             class="w-7 h-7 rounded-full bg-tisch-700 ring-1 ring-tisch-600 shrink-0">
+                        {# Name auf schmalen Displays weglassen – der Avatar bleibt als Einstieg ins Profil. #}
+                        <span class="hidden sm:inline">{{ app.user.username }}</span>
                     </a>
                     {% if is_granted('ROLE_ADMIN') %}
                         <a href="{{ path('app_admin') }}"
@@ -122,6 +142,13 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if app.user %}
+            {# Zweite Zeile: die Hauptlinks, solange sie oben nicht danebenpassen. #}
+            <div class="sm:hidden flex items-center gap-5 pb-2.5 -mt-1.5">
+                {{ nav.hauptlinks() }}
+            </div>
+        {% endif %}
     </div>
 </nav>
 

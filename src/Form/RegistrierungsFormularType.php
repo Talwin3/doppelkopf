@@ -37,18 +37,18 @@ class RegistrierungsFormularType extends AbstractType
                 'second_options'  => ['label' => 'Passwort wiederholen'],
                 'invalid_message' => 'Die Passwörter stimmen nicht überein.',
                 'constraints'     => [
-                    new NotBlank(['message' => 'Bitte ein Passwort eingeben.']),
-                    new Length([
-                        'min'        => 8,
-                        'minMessage' => 'Das Passwort muss mindestens {{ limit }} Zeichen lang sein.',
-                        'max'        => 4096,
-                    ]),
+                    new NotBlank(message: 'Bitte ein Passwort eingeben.'),
+                    new Length(
+                        min: 8,
+                        max: 4096,
+                        minMessage: 'Das Passwort muss mindestens {{ limit }} Zeichen lang sein.',
+                    ),
                 ],
             ])
             ->add('datenschutzAkzeptiert', CheckboxType::class, [
                 'mapped'      => false,
                 'label'       => 'Ich habe die Datenschutzerklärung gelesen und akzeptiere sie.',
-                'constraints' => [new IsTrue(['message' => 'Bitte akzeptiere die Datenschutzerklärung.'])],
+                'constraints' => [new IsTrue(message: 'Bitte akzeptiere die Datenschutzerklärung.')],
             ])
         ;
     }
