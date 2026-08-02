@@ -41,7 +41,11 @@
             {% endfor %}
         </ul>
         <div class="border-t border-tisch-700 mt-2 pt-2 flex items-center justify-between text-sm">
-            <span class="text-tisch-300">Sieger: <strong class="{{ w.sieger == 'RE' ? 'text-blue-300' : 'text-red-300' }}">{{ w.sieger }}</strong></span>
+            {% if w.sieger %}
+                <span class="text-tisch-300">Sieger: <strong class="{{ w.sieger == 'RE' ? 'text-blue-300' : 'text-red-300' }}">{{ w.sieger }}</strong></span>
+            {% else %}
+                <span class="text-tisch-300">Kein Sieger – beide Ansagen verfehlt</span>
+            {% endif %}
             <span class="text-white font-bold">Spielwert {{ w.spielwert }}</span>
         </div>
     </div>

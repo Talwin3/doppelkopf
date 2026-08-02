@@ -56,7 +56,9 @@
         </p>
         <p class="text-gray-700 dark:text-gray-300">
             Im Spiel sind insgesamt <strong>240 Augen</strong> zu holen. Re gewinnt mit <strong>121 Augen</strong>,
-            Kontra genügen bereits <strong>120</strong>. Bei Gleichstand gewinnt also Kontra.
+            Kontra genügen bereits <strong>120</strong>. Bei Gleichstand gewinnt also Kontra – sofern nicht
+            angesagt wurde; eine Ansage verschiebt diese Marke (siehe
+            <a href="#ansagen" class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 underline">Ansagen</a>).
         </p>
     </section>
 
@@ -274,11 +276,23 @@
             </table>
         </div>
 
-        <p class="text-gray-700 dark:text-gray-300">
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
             Die Absagen bauen aufeinander auf: <strong>keine 90</strong> setzt ein vorheriges Re oder Contra der
             eigenen Partei voraus, <strong>keine 60</strong> ein vorheriges „keine 90“ und so weiter bis
             <strong>schwarz</strong>. Am Tisch sind immer nur die Schaltflächen aktiv, die gerade zulässig sind.
         </p>
+
+        <div class="rounded-lg border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+            <p class="text-gray-800 dark:text-gray-200 font-semibold mb-1">Eine Ansage ist eine Verpflichtung</p>
+            <p class="text-gray-700 dark:text-gray-300 text-sm">
+                Wer ansagt, muss liefern. <strong>Re</strong> oder <strong>Contra</strong> zieht das Spiel an sich:
+                Die ansagende Partei braucht dann <strong>121 Augen</strong> – Kontra genügen also nicht mehr die
+                sonst ausreichenden 120. Und wer eine Absage verfehlt, <strong>verliert das Spiel</strong>, selbst
+                mit deutlich mehr als 120 Augen: Sagt Re „keine 90“ an und Kontra kommt auf 95, gewinnt Kontra –
+                auch wenn Re 145 Augen gesammelt hat. Verfehlen <em>beide</em> Parteien ihre Ansage, gewinnt keine;
+                dann zählen nur die erspielten Grund- und Sonderpunkte, die Ansagepunkte verfallen.
+            </p>
+        </div>
     </section>
 
     {# ── 8. Abrechnung ────────────────────────────────────────────────── #}
@@ -311,7 +325,9 @@
         <p class="text-gray-700 dark:text-gray-300 mb-4">
             Re und Contra bringen je 2 Punkte, jede Absage 1 Punkt. Wichtig: Diese Punkte gehen
             <strong>immer an die Gewinnerpartei</strong> – auch dann, wenn die ansagende Partei am Ende verliert.
-            Eine gewagte Ansage kann sich also gegen einen selbst richten.
+            Eine gewagte Ansage kann sich also doppelt gegen einen selbst richten: Sie kostet den Sieg
+            (siehe <a href="#ansagen" class="text-tisch-700 hover:text-tisch-900 dark:text-tisch-400 dark:hover:text-tisch-300 underline">Ansagen</a>)
+            und schenkt dem Gegner obendrein die Punkte dafür. Hat keine Partei gewonnen, verfallen sie ganz.
         </p>
 
         <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Vom Spielwert zum Punktekonto</h3>

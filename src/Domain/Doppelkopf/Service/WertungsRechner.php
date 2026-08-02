@@ -24,12 +24,39 @@ use App\Enum\Team;
  *  - Re/Contra angesagt: je +2 an Gewinnerpartei
  *  - keine 90/60/30/Schwarz angesagt (Absage): je +1 an Gewinnerpartei
  *
- * Ansage-Punkte gehen IMMER an die Gewinnerpartei (auch wenn die ansagende Partei verliert).
- * Spielwert = Summe(Gewinner) − Summe(Verlierer); pro Spieler ±Spielwert, Solist ×3.
+ * Ansage-Punkte gehen IMMER an die Gewinnerpartei (auch wenn die ansagende Partei verliert) –
+ * so steht es in den DDV-Turnierspielregeln (F.2 b).
+ *
+ * Sieger ist nach TSR F.1 die Partei, die „ihre durch Absagen erhöhte und damit zum Gewinn
+ * notwendige Augenzahl" erreicht. Eine Ansage/Absage ist also eine Verpflichtung: Wer sie
+ * verfehlt, hat verloren – auch mit mehr als 120 Augen. Verfehlen sie beide Parteien, gewinnt
+ * keine; dann entfallen „Gewonnen" und sämtliche Ansagepunkte.
+ *
+ * Spielwert = Summe(Empfänger) − Summe(Gegenpartei); pro Spieler ±Spielwert, Solist ×3.
  */
 final class WertungsRechner
 {
     private const DOPPELKOPF_AUGEN = 40;
+
+    /** Augen, ab denen die Re-Partei den Augenvergleich für sich entscheidet. */
+    private const SCHWELLE_RE = 121;
+
+    /**
+     * Augen, die eine Partei erreichen muss, die „Re" bzw. „Contra" angesagt hat:
+     * Sie zieht das Spiel an sich und braucht 121 – Kontra genügen dann nicht mehr 120.
+     */
+    private const SCHWELLE_ANGESAGT = 121;
+
+    /**
+     * Absagen als Bedingung an die Gegenpartei: Sie muss unter der genannten Augenzahl
+     * bleiben. „Schwarz" ist keine Augen-, sondern eine Stichbedingung (null Stiche) und
+     * steht deshalb nicht in dieser Tabelle.
+     */
+    private const ABSAGE_GEGNER_UNTER = [
+        'KEINE_NEUN'  => 90,
+        'KEINE_SECHS' => 60,
+        'KEINE_DREI'  => 30,
+    ];
 
     /** Punktwert je Ansage-Typ (an die Gewinnerpartei). */
     private const ANSAGE_PUNKTE = [
@@ -54,7 +81,8 @@ final class WertungsRechner
      * @return array{
      *     augen: array<string, int>,
      *     stiche: array<string, int>,
-     *     sieger: string,
+     *     sieger: string|null,
+     *     punkteEmpfaenger: string,
      *     positionen: list<array{label: string, team: string, punkte: int}>,
      *     summeProTeam: array<string, int>,
      *     spielwert: int
@@ -122,31 +150,52 @@ final class WertungsRechner
             }
         }
 
-        $reAugen = $augen[Team::RE->value];
-        $sieger  = $reAugen >= 121 ? Team::RE : Team::KONTRA;
-        $verlierer = $sieger === Team::RE ? Team::KONTRA : Team::RE;
-        $verliererAugen  = $augen[$verlierer->value];
-        $verliererStiche = $sticheProTeam[$verlierer->value];
-
+        $sieger     = $this->ermittleSieger($augen, $sticheProTeam, $ansagen, $teamProSitzplatz);
         $positionen = [];
 
-        // ── Grundpunkte (an Gewinner) ──────────────────────────────────────
-        $positionen[] = $this->position('Gewonnen', $sieger, 1);
+        if ($sieger !== null) {
+            $verlierer       = $sieger === Team::RE ? Team::KONTRA : Team::RE;
+            $verliererAugen  = $augen[$verlierer->value];
+            $verliererStiche = $sticheProTeam[$verlierer->value];
 
-        if (!$istSolo && $sieger === Team::KONTRA) {
-            $positionen[] = $this->position('Gegen die Alten', $sieger, 1);
-        }
-        if ($verliererAugen < 90) {
-            $positionen[] = $this->position('keine 90', $sieger, 1);
-        }
-        if ($verliererAugen < 60) {
-            $positionen[] = $this->position('keine 60', $sieger, 1);
-        }
-        if ($verliererAugen < 30) {
-            $positionen[] = $this->position('keine 30', $sieger, 1);
-        }
-        if ($verliererStiche === 0) {
-            $positionen[] = $this->position('Schwarz', $sieger, 1);
+            // ── Grundpunkte (an Gewinner) ──────────────────────────────────
+            $positionen[] = $this->position('Gewonnen', $sieger, 1);
+
+            if (!$istSolo && $sieger === Team::KONTRA) {
+                $positionen[] = $this->position('Gegen die Alten', $sieger, 1);
+            }
+            if ($verliererAugen < 90) {
+                $positionen[] = $this->position('keine 90', $sieger, 1);
+            }
+            if ($verliererAugen < 60) {
+                $positionen[] = $this->position('keine 60', $sieger, 1);
+            }
+            if ($verliererAugen < 30) {
+                $positionen[] = $this->position('keine 30', $sieger, 1);
+            }
+            if ($verliererStiche === 0) {
+                $positionen[] = $this->position('Schwarz', $sieger, 1);
+            }
+        } else {
+            // Beide Parteien haben ihre Ansage verfehlt (TSR F.1): kein „Gewonnen",
+            // keine Ansagepunkte. Die erspielten Grundpunkte bekommt weiterhin die
+            // Partei, die den Gegner unter die jeweilige Marke gedrückt hat.
+            foreach ([Team::RE, Team::KONTRA] as $team) {
+                $gegner = $team === Team::RE ? Team::KONTRA : Team::RE;
+
+                if ($augen[$gegner->value] < 90) {
+                    $positionen[] = $this->position('keine 90', $team, 1);
+                }
+                if ($augen[$gegner->value] < 60) {
+                    $positionen[] = $this->position('keine 60', $team, 1);
+                }
+                if ($augen[$gegner->value] < 30) {
+                    $positionen[] = $this->position('keine 30', $team, 1);
+                }
+                if ($sticheProTeam[$gegner->value] === 0) {
+                    $positionen[] = $this->position('Schwarz', $team, 1);
+                }
+            }
         }
 
         // ── Sonderpunkte (an die jeweils erzielende Partei) ────────────────
@@ -170,9 +219,11 @@ final class WertungsRechner
             }
         }
 
-        // ── Ansagen (immer an Gewinner) ────────────────────────────────────
-        foreach ($this->ansagePunkte($ansagen, $teamProSitzplatz) as $eintrag) {
-            $positionen[] = $this->position($eintrag['label'], $sieger, $eintrag['punkte']);
+        // ── Ansagen (immer an Gewinner; ohne Sieger verfallen sie) ─────────
+        if ($sieger !== null) {
+            foreach ($this->ansagePunkte($ansagen, $teamProSitzplatz) as $eintrag) {
+                $positionen[] = $this->position($eintrag['label'], $sieger, $eintrag['punkte']);
+            }
         }
 
         // ── Summen & Spielwert ─────────────────────────────────────────────
@@ -180,16 +231,91 @@ final class WertungsRechner
         foreach ($positionen as $p) {
             $summeProTeam[$p['team']] += $p['punkte'];
         }
-        $spielwert = $summeProTeam[$sieger->value] - $summeProTeam[$verlierer->value];
+
+        // Ohne Sieger bekommt die Partei mit den meisten erspielten Punkten die Differenz.
+        $empfaenger = $sieger
+            ?? ($summeProTeam[Team::RE->value] >= $summeProTeam[Team::KONTRA->value] ? Team::RE : Team::KONTRA);
+        $gegenpartei = $empfaenger === Team::RE ? Team::KONTRA : Team::RE;
+
+        $spielwert = $summeProTeam[$empfaenger->value] - $summeProTeam[$gegenpartei->value];
 
         return [
-            'augen'        => $augen,
-            'stiche'       => $sticheProTeam,
-            'sieger'       => $sieger->value,
-            'positionen'   => $positionen,
-            'summeProTeam' => $summeProTeam,
-            'spielwert'    => $spielwert,
+            'augen'            => $augen,
+            'stiche'           => $sticheProTeam,
+            'sieger'           => $sieger?->value,
+            'punkteEmpfaenger' => $empfaenger->value,
+            'positionen'       => $positionen,
+            'summeProTeam'     => $summeProTeam,
+            'spielwert'        => $spielwert,
         ];
+    }
+
+    /**
+     * Sieger nach TSR F.1. Eine Ansage ist eine Verpflichtung: Wer sie verfehlt, hat
+     * verloren – „auch wenn sie mehr als 120 Augen erspielt hat". Verfehlen beide
+     * Parteien ihre Ansagen, gewinnt keine (dann liefert die Methode null).
+     *
+     * Ohne jede Ansage bleibt es beim reinen Augenvergleich wie bisher.
+     *
+     * @param array<string, int>                          $augen
+     * @param array<string, int>                          $sticheProTeam
+     * @param list<array{sitzplatz: int, typ: AnsageTyp}> $ansagen
+     * @param array<int, Team>                            $teamProSitzplatz
+     */
+    private function ermittleSieger(
+        array $augen,
+        array $sticheProTeam,
+        array $ansagen,
+        array $teamProSitzplatz,
+    ): ?Team {
+        $augenSieger = $augen[Team::RE->value] >= self::SCHWELLE_RE ? Team::RE : Team::KONTRA;
+
+        $verfehlt = [Team::RE->value => false, Team::KONTRA->value => false];
+
+        foreach ($ansagen as $ansage) {
+            $team = $teamProSitzplatz[$ansage['sitzplatz']] ?? null;
+            if ($team === null) {
+                continue;
+            }
+
+            $gegner = $team === Team::RE ? Team::KONTRA : Team::RE;
+            $typ    = $ansage['typ']->value;
+
+            $erfuellt = match (true) {
+                // „Re"/„Contra": die ansagende Partei zieht das Spiel an sich → 121 Augen.
+                $typ === AnsageTyp::RE->value, $typ === AnsageTyp::CONTRA->value
+                    => $augen[$team->value] >= self::SCHWELLE_ANGESAGT,
+
+                // „Schwarz": die Gegenpartei darf keinen Stich bekommen.
+                $typ === AnsageTyp::SCHWARZ->value
+                    => $sticheProTeam[$gegner->value] === 0,
+
+                // Absagen: die Gegenpartei muss unter der genannten Augenzahl bleiben.
+                isset(self::ABSAGE_GEGNER_UNTER[$typ])
+                    => $augen[$gegner->value] < self::ABSAGE_GEGNER_UNTER[$typ],
+
+                // Hochzeit/Solo sind keine Wertungs-Ansagen.
+                default => true,
+            };
+
+            if (!$erfuellt) {
+                $verfehlt[$team->value] = true;
+            }
+        }
+
+        if ($verfehlt[Team::RE->value] && $verfehlt[Team::KONTRA->value]) {
+            return null;
+        }
+
+        // Genau eine Partei verfehlt → die andere gewinnt, unabhängig von den Augen.
+        if ($verfehlt[Team::RE->value]) {
+            return Team::KONTRA;
+        }
+        if ($verfehlt[Team::KONTRA->value]) {
+            return Team::RE;
+        }
+
+        return $augenSieger;
     }
 
     /** Ein Fuchs ist das Karo-Ass, sofern es im aktuellen Spiel Trumpf ist (also nicht in Soli ohne Karo-Trumpf). */

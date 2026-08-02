@@ -133,7 +133,193 @@ final class WertungsRechnerTest extends TestCase
         self::assertPositionExists($w, 'Re angesagt', 'KONTRA', 2);
     }
 
+    // ── Ansagen als Verpflichtung (TSR F.1) ──────────────────────────────────
+
+    public function testGescheiterteAbsageVerliertTrotzMehrheitDerAugen(): void
+    {
+        // RE sagt "keine 90" ab, drückt KONTRA aber nur auf 96 Augen – und verliert
+        // damit das Spiel, obwohl RE mit 144 Augen klar vorn liegt.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(144, 96),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame(144, $w['augen']['RE']);
+        self::assertSame('KONTRA', $w['sieger'], 'Verfehlte Absage muss das Spiel kosten.');
+        self::assertPositionExists($w, 'Gewonnen', 'KONTRA', 1);
+
+        // Die Ansagepunkte der gescheiterten Partei gehen an den Gegner.
+        self::assertPositionExists($w, 'Re angesagt', 'KONTRA', 2);
+        self::assertPositionExists($w, 'Absage: keine 90', 'KONTRA', 1);
+    }
+
+    public function testErfuellteAbsageGewinntWieBisher(): void
+    {
+        // Dieselbe Ansage, diesmal bleibt KONTRA unter 90 → RE gewinnt.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(155, 85),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame('RE', $w['sieger']);
+        self::assertPositionExists($w, 'keine 90', 'RE', 1);
+    }
+
+    public function testContraAnsageHebtDieSchwelleAuf121(): void
+    {
+        // 120:120 – ohne Ansage gewönne KONTRA. Mit eigener Contra-Ansage braucht
+        // KONTRA jedoch 121 Augen und verfehlt sie.
+        $ohneAnsage = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [],
+            false,
+            null,
+        );
+        self::assertSame('KONTRA', $ohneAnsage['sieger'], 'Ohne Ansage genügen KONTRA 120 Augen.');
+
+        $mitAnsage = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA]],
+            false,
+            null,
+        );
+        self::assertSame('RE', $mitAnsage['sieger'], 'Mit Contra-Ansage braucht KONTRA 121.');
+    }
+
+    public function testBeideVerfehlenIhreAnsageDannGewinntNiemand(): void
+    {
+        // Beide Parteien sagen an, keine erreicht 121 Augen.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA],
+            ],
+            false,
+            null,
+        );
+
+        self::assertNull($w['sieger'], 'Keine Partei hat gewonnen.');
+        self::assertNull($this->findePosition($w, 'Gewonnen'));
+        self::assertNull($this->findePosition($w, 'Gegen die Alten'));
+
+        // Ansagepunkte verfallen komplett.
+        self::assertNull($this->findePosition($w, 'Re angesagt'));
+        self::assertNull($this->findePosition($w, 'Contra angesagt'));
+
+        // Es gibt trotzdem einen Empfänger für den Spielwert.
+        self::assertContains($w['punkteEmpfaenger'], ['RE', 'KONTRA']);
+    }
+
+    public function testOhneAnsagenBleibtDieWertungUnveraendert(): void
+    {
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(121, 119),
+            $this->teams,
+            $this->ordnung,
+            [],
+            false,
+            null,
+        );
+
+        self::assertSame('RE', $w['sieger']);
+        self::assertSame('RE', $w['punkteEmpfaenger']);
+        self::assertPositionExists($w, 'Gewonnen', 'RE', 1);
+    }
+
     // ── Helfer ────────────────────────────────────────────────────────────────
+
+    /**
+     * Baut eine Stichfolge, in der RE und KONTRA exakt die gewünschten Augen holen.
+     * Hier zählt allein die Augenverteilung, nicht die Realistik des Blattes – der
+     * WertungsRechner prüft keine Kartenherkunft, deshalb dürfen Karten mehrfach fallen.
+     *
+     * Jeder Stich wird vom Führenden mit der Karo-Neun (Trumpf, 0 Augen) gewonnen; die
+     * drei Mitspieler legen Fehlfarben, deren Augen die Zielsumme ergeben.
+     *
+     * @return list<list<array{sitzplatz: int, karte: Karte}>>
+     */
+    private function stichfolgeMitAugen(int $reAugen, int $kontraAugen): array
+    {
+        $stiche = [];
+
+        foreach ([[1, $reAugen], [2, $kontraAugen]] as [$fuehrer, $ziel]) {
+            foreach (array_chunk($this->augenZerlegen($ziel), 3) as $gruppe) {
+                $gruppe = array_pad($gruppe, 3, 0);
+                $stiche[] = $this->stichFuer($fuehrer, $gruppe);
+            }
+        }
+
+        return $stiche;
+    }
+
+    /**
+     * Zerlegt eine Augenzahl exakt in Kartenwerte (Ass 11 / König 4).
+     * Für jede hier verwendete Zielzahl existiert eine solche Zerlegung.
+     *
+     * @return list<int>
+     */
+    private function augenZerlegen(int $ziel): array
+    {
+        for ($asse = 0; $asse * 11 <= $ziel; $asse++) {
+            $rest = $ziel - $asse * 11;
+            if ($rest % 4 !== 0) {
+                continue;
+            }
+
+            return array_merge(
+                array_fill(0, $asse, 11),
+                array_fill(0, intdiv($rest, 4), 4),
+            );
+        }
+
+        self::fail(sprintf('Augenzahl %d lässt sich nicht aus Assen und Königen bilden.', $ziel));
+    }
+
+    /**
+     * Ein Stich, den $fuehrer mit der Karo-Neun gewinnt. Die drei Mitspieler legen
+     * Fehlfarben mit den gewünschten Augenwerten (11 = Ass, 4 = König, 0 = Neun).
+     *
+     * @param list<int> $augenWerte genau drei Werte
+     * @return list<array{sitzplatz: int, karte: Karte}>
+     */
+    private function stichFuer(int $fuehrer, array $augenWerte): array
+    {
+        $farben = ['KREUZ', 'PIK', 'HERZ'];
+        $karte  = static fn(int $augen, string $farbe): string => $farbe . '_' . match ($augen) {
+            11      => 'ASS',
+            4       => 'KOENIG',
+            default => 'NEUN',
+        } . '_1';
+
+        $eintraege = [[$fuehrer, 'KARO_NEUN_1']];
+        foreach ($augenWerte as $i => $augen) {
+            $sitz = ($fuehrer + $i) % 4 + 1;
+            $eintraege[] = [$sitz, $karte($augen, $farben[$i])];
+        }
+
+        return $this->stich($eintraege);
+    }
 
     /**
      * @param list<array{0: int, 1: string}> $eintraege  je [sitzplatz, KartenId] in Ausspielreihenfolge

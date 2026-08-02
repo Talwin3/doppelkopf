@@ -104,8 +104,10 @@ final class SpielAbschlussService
             $team = $teilnehmer->getTeam();
             if ($team === null) continue;
 
-            $istGewinner = $team->value === $wertung['sieger'];
-            $delta = $istGewinner ? $spielwert : -$spielwert;
+            // „Gewonnen" kann leer bleiben (beide Parteien haben ihre Ansage verfehlt);
+            // der Spielwert geht dann an die Partei mit den meisten erspielten Punkten.
+            $istGewinner = $wertung['sieger'] !== null && $team->value === $wertung['sieger'];
+            $delta = $team->value === $wertung['punkteEmpfaenger'] ? $spielwert : -$spielwert;
 
             if ($solistSitzplatz !== null && $teilnehmer->getSitzplatz() === $solistSitzplatz) {
                 $delta *= 3;
@@ -130,31 +132,41 @@ final class SpielAbschlussService
      * Schreibt das Spielergebnis (Sieger, Augen, Spielwert, Gewinner) und etwaige
      * Sonderpunkte (Doppelkopf/Karlchen/Fuchs gefangen) ins Event-Log.
      *
-     * @param array{augen: array<string, int>, sieger: string, positionen: list<array{label: string, team: string, punkte: int}>, spielwert: int} $wertung
+     * @param array{augen: array<string, int>, sieger: string|null, punkteEmpfaenger: string, positionen: list<array{label: string, team: string, punkte: int}>, spielwert: int} $wertung
      */
     private function protokolliereErgebnis(Spiel $spiel, array $wertung): void
     {
-        $sieger    = $wertung['sieger'];
-        $verlierer = $sieger === Team::RE->value ? Team::KONTRA->value : Team::RE->value;
+        $sieger = $wertung['sieger'];
 
-        $augenSieger    = $wertung['augen'][$sieger] ?? 0;
-        $augenVerlierer = $wertung['augen'][$verlierer] ?? 0;
+        if ($sieger === null) {
+            // Beide Parteien haben ihre Ansage verfehlt – niemand hat gewonnen.
+            $this->protokoll->ereignis($spiel->getTisch(), sprintf(
+                'Spiel beendet: keine Partei hat ihr angesagtes Ziel erreicht – %d:%d Augen, '
+                . 'Punkte gehen an %s (Spielwert %d).',
+                $wertung['augen'][Team::RE->value] ?? 0,
+                $wertung['augen'][Team::KONTRA->value] ?? 0,
+                $this->teamLabel($wertung['punkteEmpfaenger']),
+                $wertung['spielwert'],
+            ));
+        } else {
+            $verlierer = $sieger === Team::RE->value ? Team::KONTRA->value : Team::RE->value;
 
-        $siegerNamen = [];
-        foreach ($spiel->getTeilnehmer() as $t) {
-            if ($t->getTeam()?->value === $sieger) {
-                $siegerNamen[] = $t->getAnzeigeName();
+            $siegerNamen = [];
+            foreach ($spiel->getTeilnehmer() as $t) {
+                if ($t->getTeam()?->value === $sieger) {
+                    $siegerNamen[] = $t->getAnzeigeName();
+                }
             }
-        }
 
-        $this->protokoll->ereignis($spiel->getTisch(), sprintf(
-            'Spiel beendet: %s gewinnt %d:%d Augen (Spielwert %d) – %s.',
-            $this->teamLabel($sieger),
-            $augenSieger,
-            $augenVerlierer,
-            $wertung['spielwert'],
-            $siegerNamen === [] ? '–' : implode(', ', $siegerNamen),
-        ));
+            $this->protokoll->ereignis($spiel->getTisch(), sprintf(
+                'Spiel beendet: %s gewinnt %d:%d Augen (Spielwert %d) – %s.',
+                $this->teamLabel($sieger),
+                $wertung['augen'][$sieger] ?? 0,
+                $wertung['augen'][$verlierer] ?? 0,
+                $wertung['spielwert'],
+                $siegerNamen === [] ? '–' : implode(', ', $siegerNamen),
+            ));
+        }
 
         // Sonderpunkte als eigene Zeile, der erzielenden Partei zugeordnet.
         $besonderheiten = [];
