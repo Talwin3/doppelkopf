@@ -54,9 +54,18 @@ class Spiel
     #[ORM\Column]
     private int $aktuellerStichNr = 1;
 
-    /** Gesetzt, wenn bei Hochzeit der Partner gefunden wurde. */
+    /** Gesetzt, sobald bei einer Hochzeit feststeht, wie sie ausgeht (Partner gefunden ODER Frist verstrichen). */
     #[ORM\Column(options: ['default' => false])]
     private bool $hochzeitAufgeloest = false;
+
+    /**
+     * Gesetzt, wenn der Hochzeitsspieler die ersten drei Stiche alle selbst gewonnen
+     * hat: Die Hochzeit bleibt ungeklärt und wird als Solo gewertet (Solist ×3,
+     * keine Sonderpunkte). Die Variante bleibt HOCHZEIT, damit Replay und Statistik
+     * weiterhin zeigen, was tatsächlich gespielt wurde.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $hochzeitAlsSolo = false;
 
     /** Sitzplatz des Armut-Spielers (null = keine Armut). */
     #[ORM\Column(nullable: true)]
@@ -158,6 +167,9 @@ class Spiel
 
     public function isHochzeitAufgeloest(): bool { return $this->hochzeitAufgeloest; }
     public function setHochzeitAufgeloest(bool $aufgeloest): static { $this->hochzeitAufgeloest = $aufgeloest; return $this; }
+
+    public function isHochzeitAlsSolo(): bool { return $this->hochzeitAlsSolo; }
+    public function setHochzeitAlsSolo(bool $alsSolo): static { $this->hochzeitAlsSolo = $alsSolo; return $this; }
 
     public function getArmutSpielerSitzplatz(): ?int { return $this->armutSpielerSitzplatz; }
     public function setArmutSpielerSitzplatz(?int $sitzplatz): static { $this->armutSpielerSitzplatz = $sitzplatz; return $this; }

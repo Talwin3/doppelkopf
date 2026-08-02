@@ -63,9 +63,14 @@ final class SpielAbschlussService
             }
         }
 
-        // Solist (lonely RE-Spieler) bei Soli ermitteln → zählt dreifach.
+        // Solist (lonely RE-Spieler) ermitteln → zählt dreifach. Neben den echten Soli
+        // auch die ungeklärt gebliebene Hochzeit: Dort steht der Hochzeitsspieler
+        // ebenfalls allein gegen drei und wird deshalb wie ein Solist abgerechnet.
         $solistSitzplatz = null;
-        if ($spiel->getVariante() !== null && str_starts_with($spiel->getVariante()->value, 'SOLO_')) {
+        $istSoloWertung  = $spiel->isHochzeitAlsSolo()
+            || ($spiel->getVariante() !== null && str_starts_with($spiel->getVariante()->value, 'SOLO_'));
+
+        if ($istSoloWertung) {
             foreach ($spiel->getTeilnehmer() as $t) {
                 if ($t->getTeam() === Team::RE) {
                     $solistSitzplatz = $t->getSitzplatz();

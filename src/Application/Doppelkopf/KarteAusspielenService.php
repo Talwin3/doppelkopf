@@ -26,6 +26,12 @@ final class KarteAusspielenService
     /** Sekunden, die der Endstich sichtbar bleibt, bevor der Worker das Spiel abschließt. */
     private const ABSCHLUSS_VERZOEGERUNG_SEK = 2;
 
+    /**
+     * Klärungsfrist der Hochzeit: Nur in diesen ersten Stichen kann sich ein Partner
+     * finden. Danach spielt der Hochzeitsspieler allein weiter (Wertung als Solo).
+     */
+    private const HOCHZEIT_KLAERUNGS_STICHE = 3;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
@@ -162,14 +168,23 @@ final class KarteAusspielenService
         $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
         $gewinnerSitzplatz = $this->stichGewinner->bestimme($kartenFuerGewinner, $ordnung, $zweiteDulleSticht);
 
-        // Hochzeit: erster Stich den ein KONTRA-Spieler gewinnt → wird RE-Partner
+        // Hochzeit: Der erste Stich, den ein KONTRA-Spieler gewinnt, macht ihn zum
+        // RE-Partner – aber nur innerhalb der Klärungsfrist. Gewinnt der Hochzeits-
+        // spieler alle drei ersten Stiche selbst, bleibt er allein und das Spiel
+        // wird als Solo gewertet.
         $hochzeitPartnerName = null;
+        $hochzeitSoloName    = null;
         if ($spiel->getVariante() === SpielVariante::HOCHZEIT && !$spiel->isHochzeitAufgeloest()) {
             $gewinner = $spiel->getTeilnehmerBySitzplatz($gewinnerSitzplatz);
+
             if ($gewinner?->getTeam() === Team::KONTRA) {
                 $gewinner->setTeam(Team::RE);
                 $spiel->setHochzeitAufgeloest(true);
                 $hochzeitPartnerName = $gewinner->getAnzeigeName();
+            } elseif ($spiel->getAktuellerStichNr() >= self::HOCHZEIT_KLAERUNGS_STICHE) {
+                $spiel->setHochzeitAufgeloest(true);
+                $spiel->setHochzeitAlsSolo(true);
+                $hochzeitSoloName = $gewinner?->getAnzeigeName();
             }
         }
 
@@ -199,6 +214,17 @@ final class KarteAusspielenService
             $this->protokoll->ereignis(
                 $spiel->getTisch(),
                 sprintf('%s wird Partner – die Hochzeit ist geklärt.', $hochzeitPartnerName),
+            );
+        }
+
+        if ($hochzeitSoloName !== null) {
+            $this->protokoll->ereignis(
+                $spiel->getTisch(),
+                sprintf(
+                    '%s hat die ersten %d Stiche selbst gewonnen – die Hochzeit bleibt ungeklärt und zählt als Solo.',
+                    $hochzeitSoloName,
+                    self::HOCHZEIT_KLAERUNGS_STICHE,
+                ),
             );
         }
     }
