@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { SoundEngine } from '../sound_engine.js'
 import { toast } from '../toast.js'
+import { confirmDialog } from '../dialog.js'
 
 export default class extends Controller {
   static targets = [
@@ -181,7 +182,21 @@ export default class extends Controller {
 
   async vorbehalt(event) {
     event.preventDefault()
-    const ok = await this.#postForm(event.currentTarget, 'Vorbehalt nicht möglich.')
+    const form = event.currentTarget
+
+    // Trägt das Formular eine Warnung (stille Hochzeit), erst rückfragen.
+    // Der Text steht im Markup, damit hier keine Spiellogik dupliziert wird.
+    if (form.dataset.warnung) {
+      const weiter = await confirmDialog({
+        title: form.dataset.warnungTitel || 'Bist du sicher?',
+        text: form.dataset.warnung,
+        bestaetigen: form.dataset.warnungBestaetigen || 'Ja, weiter',
+        abbrechen: 'Zurück',
+      })
+      if (!weiter) return
+    }
+
+    const ok = await this.#postForm(form, 'Vorbehalt nicht möglich.')
     if (ok) {
       this.sound.play('vorbehalt')
     }

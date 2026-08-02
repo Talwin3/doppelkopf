@@ -59,10 +59,14 @@ class Spiel
     private bool $hochzeitAufgeloest = false;
 
     /**
-     * Gesetzt, wenn der Hochzeitsspieler die ersten drei Stiche alle selbst gewonnen
-     * hat: Die Hochzeit bleibt ungeklärt und wird als Solo gewertet (Solist ×3,
-     * keine Sonderpunkte). Die Variante bleibt HOCHZEIT, damit Replay und Statistik
-     * weiterhin zeigen, was tatsächlich gespielt wurde.
+     * Ein Spieler steht allein gegen drei und wird wie ein Solist abgerechnet
+     * (×3, keine Sonderpunkte) – ohne dass ein Solo angemeldet wurde. Zwei Fälle:
+     *  - angemeldete Hochzeit, bei der der Hochzeiter die ersten drei Stiche
+     *    selbst gewann und die Klärung damit ausblieb (TSR 4.4.3 b),
+     *  - „Stille Hochzeit": beide Kreuz-Damen auf einer Hand, aber „gesund"
+     *    gemeldet (TSR 4.4.5).
+     * Die Variante bleibt in beiden Fällen unverändert (HOCHZEIT bzw. NORMALSPIEL),
+     * damit Replay und Statistik zeigen, was tatsächlich gespielt wurde.
      */
     #[ORM\Column(options: ['default' => false])]
     private bool $hochzeitAlsSolo = false;

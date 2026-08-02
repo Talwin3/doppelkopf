@@ -138,7 +138,18 @@ final class SpielTypResolver
         foreach ($alleTeilnehmer as $t) {
             $hatKreuzDame = $t->anzahlKreuzDamen() > 0;
             $t->setTeam($hatKreuzDame ? Team::RE : Team::KONTRA);
+
+            // Stille Hochzeit (TSR 4.4.5): Wer beide Kreuz-Damen hält und trotzdem
+            // „gesund" meldet, steht allein gegen drei und wird wie ein Solist
+            // abgerechnet. Die Variante bleibt NORMALSPIEL – so notieren es auch die
+            // TSR, und Replay/Statistik zeigen weiter, was gespielt wurde.
+            if ($t->anzahlKreuzDamen() === 2) {
+                $spiel->setHochzeitAlsSolo(true);
+            }
         }
+
+        // Bewusst kein Eintrag im Event-Log: Die stille Hochzeit bleibt verdeckt,
+        // bis die zweite Kreuz-Dame fällt. Ein Hinweis hier würde sie sofort verraten.
 
         $spiel->setAktuellerSpielerSitzplatz(1);
         $this->spielStarten($spiel);

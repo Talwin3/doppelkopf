@@ -32,10 +32,18 @@
         <div class="bg-tisch-900/60 rounded-xl p-5 border border-tisch-600 w-full">
             <p class="text-white text-sm font-medium mb-3 text-center">Du bist an der Reihe:</p>
             <div class="flex flex-col gap-2">
-                {# GESUND — sofort absenden #}
+                {# GESUND — sofort absenden. Wer beide Kreuz-Damen hält (dann steht auch
+                   „Hochzeit" zur Wahl), spielt bei „gesund" eine stille Hochzeit allein
+                   gegen drei – davor wird gewarnt, ohne es den Mitspielern zu verraten. #}
+                {% set stilleHochzeitMoeglich = 'HOCHZEIT' in vorbehaltOptionen|map(o => o.value) %}
                 {% if 'GESUND' in vorbehaltOptionen|map(o => o.value) %}
                     <form method="post" action="{{ path('app_vorbehalt', {id: tisch.id}) }}"
-                          data-action="submit->spieltisch#vorbehalt">
+                          data-action="submit->spieltisch#vorbehalt"
+                          {% if stilleHochzeitMoeglich %}
+                              data-warnung-titel="Stille Hochzeit?"
+                              data-warnung="Du hast beide Kreuz-Damen. Meldest du dich gesund, spielst du eine stille Hochzeit: allein gegen die anderen drei, abgerechnet wie ein Solo (dreifacher Spielwert, keine Sonderpunkte). Willst du stattdessen einen Partner suchen, wähle „Hochzeit“."
+                              data-warnung-bestaetigen="Ja, allein spielen"
+                          {% endif %}>
                         <input type="hidden" name="_token" value="{{ csrf_token('vorbehalt_' ~ tisch.id) }}">
                         <input type="hidden" name="vorbehalt_typ" value="GESUND">
                         <button type="submit" class="w-full py-2 rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-sm font-medium">
