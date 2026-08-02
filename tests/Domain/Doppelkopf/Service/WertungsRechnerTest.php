@@ -133,7 +133,7 @@ final class WertungsRechnerTest extends TestCase
         self::assertPositionExists($w, 'Re angesagt', 'KONTRA', 2);
     }
 
-    // ── Ansagen als Verpflichtung (TSR F.1) ──────────────────────────────────
+    // ── Ansagen als Verpflichtung (TSR 7.1.3) ──────────────────────────────────
 
     public function testGescheiterteAbsageVerliertTrotzMehrheitDerAugen(): void
     {
@@ -204,9 +204,11 @@ final class WertungsRechnerTest extends TestCase
         self::assertSame('RE', $mitAnsage['sieger'], 'Mit Contra-Ansage braucht KONTRA 121.');
     }
 
-    public function testBeideVerfehlenIhreAnsageDannGewinntNiemand(): void
+    public function testReUndContraZusammenLassenDieGrenzeBei120(): void
     {
-        // Beide Parteien sagen an, keine erreicht 121 Augen.
+        // TSR 7.1.2.3: Sind "Re" UND "Kontra" angesagt, gewinnt KONTRA weiterhin mit
+        // dem 120. Auge – die Contra-Ansage zieht das Spiel nur dann an sich, wenn
+        // Re nicht ebenfalls angesagt hat.
         $w = $this->rechner->berechne(
             $this->stichfolgeMitAugen(120, 120),
             $this->teams,
@@ -219,16 +221,70 @@ final class WertungsRechnerTest extends TestCase
             null,
         );
 
+        self::assertSame('KONTRA', $w['sieger']);
+        self::assertPositionExists($w, 'Gewonnen', 'KONTRA', 1);
+    }
+
+    public function testBeideVerfehlenIhreAbsageDannGewinntNiemand(): void
+    {
+        // TSR 7.1.3: Beide Parteien sagen "keine 90" ab, keine drückt die andere
+        // unter 90 → keine Partei hat gewonnen.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(130, 110),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
         self::assertNull($w['sieger'], 'Keine Partei hat gewonnen.');
         self::assertNull($this->findePosition($w, 'Gewonnen'));
         self::assertNull($this->findePosition($w, 'Gegen die Alten'));
 
-        // Ansagepunkte verfallen komplett.
+        // Ansage- und Absagepunkte verfallen komplett.
         self::assertNull($this->findePosition($w, 'Re angesagt'));
         self::assertNull($this->findePosition($w, 'Contra angesagt'));
+        self::assertNull($this->findePosition($w, 'Absage: keine 90'));
 
         // Es gibt trotzdem einen Empfänger für den Spielwert.
         self::assertContains($w['punkteEmpfaenger'], ['RE', 'KONTRA']);
+    }
+
+    public function testGegenAbgesagtesSchwarzGenuegtEinEinzigerStich(): void
+    {
+        // TSR 7.1.1.8: Sagt die Gegenpartei "schwarz" ab, gewinnt man bereits mit dem
+        // ersten Stich, den man bekommt – hier mit lediglich 4 Augen.
+        $stiche = [
+            // KONTRA (Sitz 2) holt fast alles …
+            ...$this->stichfolgeMitAugen(0, 236),
+            // … aber RE (Sitz 1) bekommt einen Stich mit 4 Augen.
+            $this->stichFuer(1, [4, 0, 0]),
+        ];
+
+        $w = $this->rechner->berechne(
+            $stiche,
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::KEINE_NEUN],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::KEINE_SECHS],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::KEINE_DREI],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::SCHWARZ],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame(4, $w['augen']['RE']);
+        self::assertSame(1, $w['stiche']['RE']);
+        self::assertSame('RE', $w['sieger'], 'Ein Stich gegen abgesagtes Schwarz genügt.');
     }
 
     public function testOhneAnsagenBleibtDieWertungUnveraendert(): void
@@ -247,7 +303,7 @@ final class WertungsRechnerTest extends TestCase
         self::assertPositionExists($w, 'Gewonnen', 'RE', 1);
     }
 
-    // ── Punkte gegen Absagen der Gegenpartei (TSR F.2 c) ─────────────────────
+    // ── Punkte gegen Absagen der Gegenpartei (TSR 7.2.2 e/f) ─────────────────────
 
     public function testPunktGegenAbgesagteKeine90AbHundertzwanzigAugen(): void
     {
@@ -348,24 +404,25 @@ final class WertungsRechnerTest extends TestCase
 
     public function testGegenpunkteBleibenAuchOhneSiegerErhalten(): void
     {
-        // Beide Parteien sagen an und verfehlen: RE die Absage "keine 90" (KONTRA hat 120),
-        // KONTRA die eigene Contra-Ansage (120 statt 121). Der Gegenpunkt bleibt trotzdem.
+        // Beide sagen "keine 90" ab und scheitern (TSR 7.1.3). RE erreicht dabei 130 Augen
+        // gegen KONTRAs Absage und behält diesen Punkt, obwohl niemand gewonnen hat.
         $w = $this->rechner->berechne(
-            $this->stichfolgeMitAugen(120, 120),
+            $this->stichfolgeMitAugen(130, 110),
             $this->teams,
             $this->ordnung,
             [
                 ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
                 ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
                 ['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::KEINE_NEUN],
             ],
             false,
             null,
         );
 
-        self::assertNull($w['sieger'], 'Beide Parteien haben ihre Ansage verfehlt.');
+        self::assertNull($w['sieger'], 'Beide Parteien haben ihre Absage verfehlt.');
         self::assertNull($this->findePosition($w, 'Re angesagt'), 'Ansagepunkte verfallen.');
-        self::assertPositionExists($w, '120 Augen gegen keine 90', 'KONTRA', 1);
+        self::assertPositionExists($w, '120 Augen gegen keine 90', 'RE', 1);
     }
 
     // ── Helfer ────────────────────────────────────────────────────────────────

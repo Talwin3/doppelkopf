@@ -23,12 +23,12 @@ use App\Enum\Team;
  *  - Karlchen: +1 wenn der Kreuz-Bube den letzten Stich gewinnt (nur Normalspiel)
  *  - Re/Contra angesagt: je +2 an Gewinnerpartei
  *  - keine 90/60/30/Schwarz angesagt (Absage): je +1 an Gewinnerpartei
- *  - gegen eine Absage der Gegenpartei die zugehörige Augenmarke erreicht: je +1 (TSR F.2 c)
+ *  - gegen eine Absage der Gegenpartei die zugehörige Augenmarke erreicht: je +1 (TSR 7.2.2 e/f)
  *
  * Ansage-Punkte gehen IMMER an die Gewinnerpartei (auch wenn die ansagende Partei verliert) –
- * so steht es in den DDV-Turnierspielregeln (F.2 b).
+ * so steht es in den DDV-Turnierspielregeln (7.2.2 b–d).
  *
- * Sieger ist nach TSR F.1 die Partei, die „ihre durch Absagen erhöhte und damit zum Gewinn
+ * Sieger ist nach TSR 7.1 die Partei, die „ihre durch Absagen erhöhte und damit zum Gewinn
  * notwendige Augenzahl" erreicht. Eine Ansage/Absage ist also eine Verpflichtung: Wer sie
  * verfehlt, hat verloren – auch mit mehr als 120 Augen. Verfehlen sie beide Parteien, gewinnt
  * keine; dann entfallen „Gewonnen" und sämtliche Ansagepunkte.
@@ -39,28 +39,20 @@ final class WertungsRechner
 {
     private const DOPPELKOPF_AUGEN = 40;
 
-    /** Augen, ab denen die Re-Partei den Augenvergleich für sich entscheidet. */
-    private const SCHWELLE_RE = 121;
-
     /**
-     * Augen, die eine Partei erreichen muss, die „Re" bzw. „Contra" angesagt hat:
-     * Sie zieht das Spiel an sich und braucht 121 – Kontra genügen dann nicht mehr 120.
+     * Die Augenmarke einer Absage. Sie wird zweifach gelesen (TSR 6.3.1 und 7.1.1/7.1.2):
+     *  - für die absagende Partei: die Gegenpartei muss darunter bleiben (Fall 5),
+     *  - für die Gegenpartei: wer die Marke erreicht, hat gewonnen (Fall 7).
+     * „Schwarz" ist keine Augen-, sondern eine Stichbedingung und fehlt deshalb hier.
      */
-    private const SCHWELLE_ANGESAGT = 121;
-
-    /**
-     * Absagen als Bedingung an die Gegenpartei: Sie muss unter der genannten Augenzahl
-     * bleiben. „Schwarz" ist keine Augen-, sondern eine Stichbedingung (null Stiche) und
-     * steht deshalb nicht in dieser Tabelle.
-     */
-    private const ABSAGE_GEGNER_UNTER = [
+    private const ABSAGE_MARKE = [
         'KEINE_NEUN'  => 90,
         'KEINE_SECHS' => 60,
         'KEINE_DREI'  => 30,
     ];
 
     /**
-     * TSR F.2 (c) – Punkte gegen Absagen der Gegenpartei: Wer gegen eine Absage die
+     * TSR 7.2.2 (e)/(f) – Punkte gegen Absagen der Gegenpartei: Wer gegen eine Absage die
      * genannte Augenzahl erreicht, bekommt je 1 Punkt. Die Marke liegt jeweils eine
      * Stufe über dem, was die Gegenpartei abgesagt hatte.
      */
@@ -190,7 +182,7 @@ final class WertungsRechner
                 $positionen[] = $this->position('Schwarz', $sieger, 1);
             }
         } else {
-            // Beide Parteien haben ihre Ansage verfehlt (TSR F.1): kein „Gewonnen",
+            // Beide Parteien haben ihre Ansage verfehlt (TSR 7.1.3): kein „Gewonnen",
             // keine Ansagepunkte. Die erspielten Grundpunkte bekommt weiterhin die
             // Partei, die den Gegner unter die jeweilige Marke gedrückt hat.
             foreach ([Team::RE, Team::KONTRA] as $team) {
@@ -232,7 +224,7 @@ final class WertungsRechner
             }
         }
 
-        // ── Punkte gegen Absagen der Gegenpartei (TSR F.2 c) ───────────────
+        // ── Punkte gegen Absagen der Gegenpartei (TSR 7.2.2 e/f) ───────────────
         // Sie gehen an die Partei, die die Marke erreicht hat. Das ist immer die
         // Gewinnerpartei – wer eine Absage derart überbietet, bringt die absagende
         // Seite zwangsläufig zu Fall – und bleibt auch dann richtig zugeordnet,
@@ -273,7 +265,7 @@ final class WertungsRechner
     }
 
     /**
-     * Sieger nach TSR F.1. Eine Ansage ist eine Verpflichtung: Wer sie verfehlt, hat
+     * Sieger nach TSR 7.1. Eine Ansage ist eine Verpflichtung: Wer sie verfehlt, hat
      * verloren – „auch wenn sie mehr als 120 Augen erspielt hat". Verfehlen beide
      * Parteien ihre Ansagen, gewinnt keine (dann liefert die Methode null).
      *
@@ -290,54 +282,79 @@ final class WertungsRechner
         array $ansagen,
         array $teamProSitzplatz,
     ): ?Team {
-        $augenSieger = $augen[Team::RE->value] >= self::SCHWELLE_RE ? Team::RE : Team::KONTRA;
-
-        $verfehlt = [Team::RE->value => false, Team::KONTRA->value => false];
+        /** @var array<string, array<string, true>> $angesagt Partei → gemachte Ansagen */
+        $angesagt = [Team::RE->value => [], Team::KONTRA->value => []];
 
         foreach ($ansagen as $ansage) {
             $team = $teamProSitzplatz[$ansage['sitzplatz']] ?? null;
-            if ($team === null) {
-                continue;
-            }
-
-            $gegner = $team === Team::RE ? Team::KONTRA : Team::RE;
-            $typ    = $ansage['typ']->value;
-
-            $erfuellt = match (true) {
-                // „Re"/„Contra": die ansagende Partei zieht das Spiel an sich → 121 Augen.
-                $typ === AnsageTyp::RE->value, $typ === AnsageTyp::CONTRA->value
-                    => $augen[$team->value] >= self::SCHWELLE_ANGESAGT,
-
-                // „Schwarz": die Gegenpartei darf keinen Stich bekommen.
-                $typ === AnsageTyp::SCHWARZ->value
-                    => $sticheProTeam[$gegner->value] === 0,
-
-                // Absagen: die Gegenpartei muss unter der genannten Augenzahl bleiben.
-                isset(self::ABSAGE_GEGNER_UNTER[$typ])
-                    => $augen[$gegner->value] < self::ABSAGE_GEGNER_UNTER[$typ],
-
-                // Hochzeit/Solo sind keine Wertungs-Ansagen.
-                default => true,
-            };
-
-            if (!$erfuellt) {
-                $verfehlt[$team->value] = true;
+            if ($team !== null) {
+                $angesagt[$team->value][$ansage['typ']->value] = true;
             }
         }
 
-        if ($verfehlt[Team::RE->value] && $verfehlt[Team::KONTRA->value]) {
-            return null;
+        // Fälle 1–4: Wurde nichts abgesagt, entscheidet allein der Augenvergleich.
+        // Nur eine alleinige „Kontra"-Ansage verschiebt die Grenze; sagt Re ebenfalls
+        // an, gilt wieder 121:120 (TSR 7.1.1.3 / 7.1.2.3).
+        if (!$this->hatAbgesagt($angesagt[Team::RE->value]) && !$this->hatAbgesagt($angesagt[Team::KONTRA->value])) {
+            $nurKontraAngesagt = isset($angesagt[Team::KONTRA->value][AnsageTyp::CONTRA->value])
+                && !isset($angesagt[Team::RE->value][AnsageTyp::RE->value]);
+
+            return $augen[Team::RE->value] >= ($nurKontraAngesagt ? 120 : 121) ? Team::RE : Team::KONTRA;
         }
 
-        // Genau eine Partei verfehlt → die andere gewinnt, unabhängig von den Augen.
-        if ($verfehlt[Team::RE->value]) {
-            return Team::KONTRA;
-        }
-        if ($verfehlt[Team::KONTRA->value]) {
-            return Team::RE;
+        // Fälle 5–8: Mindestens eine Partei hat abgesagt.
+        foreach ([Team::RE, Team::KONTRA] as $team) {
+            if ($this->hatGewonnen($team, $augen, $sticheProTeam, $angesagt)) {
+                return $team;
+            }
         }
 
-        return $augenSieger;
+        // Beide Parteien haben ihr abgesagtes Ziel verfehlt (TSR 7.1.3).
+        return null;
+    }
+
+    /** @param array<string, true> $eigene */
+    private function hatAbgesagt(array $eigene): bool
+    {
+        return isset($eigene[AnsageTyp::SCHWARZ->value])
+            || array_intersect_key(self::ABSAGE_MARKE, $eigene) !== [];
+    }
+
+    /**
+     * Gewinnbedingung einer Partei bei vorhandenen Absagen (TSR 7.1.1/7.1.2, Fälle 5–8).
+     * Die Bedingungen beider Parteien schließen einander aus; sie können aber beide
+     * scheitern, wenn beide abgesagt haben – genau das ist der Fall aus 7.1.3.
+     *
+     * @param array<string, int>                 $augen
+     * @param array<string, int>                 $sticheProTeam
+     * @param array<string, array<string, true>> $angesagt
+     */
+    private function hatGewonnen(Team $team, array $augen, array $sticheProTeam, array $angesagt): bool
+    {
+        $gegner      = $team === Team::RE ? Team::KONTRA : Team::RE;
+        $eigene      = $angesagt[$team->value];
+        $gegnerische = $angesagt[$gegner->value];
+
+        // Fall 6: eigenes „schwarz" abgesagt → die Gegenpartei darf keinen Stich bekommen.
+        if (isset($eigene[AnsageTyp::SCHWARZ->value])) {
+            return $sticheProTeam[$gegner->value] === 0;
+        }
+
+        // Fall 5: eigene Absage → die Gegenpartei muss unter der schärfsten Marke bleiben.
+        $eigeneMarken = array_intersect_key(self::ABSAGE_MARKE, $eigene);
+        if ($eigeneMarken !== []) {
+            return $augen[$gegner->value] < min($eigeneMarken);
+        }
+
+        // Fall 8: die Gegenpartei hat „schwarz" abgesagt → ein einziger Stich genügt.
+        if (isset($gegnerische[AnsageTyp::SCHWARZ->value])) {
+            return $sticheProTeam[$team->value] >= 1;
+        }
+
+        // Fall 7: die Gegenpartei hat abgesagt → die abgesagte Marke zu erreichen genügt.
+        $gegenMarken = array_intersect_key(self::ABSAGE_MARKE, $gegnerische);
+
+        return $gegenMarken !== [] && $augen[$team->value] >= min($gegenMarken);
     }
 
     /** Ein Fuchs ist das Karo-Ass, sofern es im aktuellen Spiel Trumpf ist (also nicht in Soli ohne Karo-Trumpf). */
@@ -386,7 +403,7 @@ final class WertungsRechner
     }
 
     /**
-     * TSR F.2 (c): Für jede Absage der Gegenpartei, deren zugehörige Augenmarke erreicht
+     * TSR 7.2.2 (e)/(f): Für jede Absage der Gegenpartei, deren zugehörige Augenmarke erreicht
      * wurde, ein Punkt. Mehrfach möglich, weil Absagen aufeinander aufbauen – wer 120 Augen
      * gegen „keine 90 / keine 60" holt, erhält beide Punkte.
      *
