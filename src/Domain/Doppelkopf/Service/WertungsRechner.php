@@ -23,6 +23,7 @@ use App\Enum\Team;
  *  - Karlchen: +1 wenn der Kreuz-Bube den letzten Stich gewinnt (nur Normalspiel)
  *  - Re/Contra angesagt: je +2 an Gewinnerpartei
  *  - keine 90/60/30/Schwarz angesagt (Absage): je +1 an Gewinnerpartei
+ *  - gegen eine Absage der Gegenpartei die zugehörige Augenmarke erreicht: je +1 (TSR F.2 c)
  *
  * Ansage-Punkte gehen IMMER an die Gewinnerpartei (auch wenn die ansagende Partei verliert) –
  * so steht es in den DDV-Turnierspielregeln (F.2 b).
@@ -56,6 +57,18 @@ final class WertungsRechner
         'KEINE_NEUN'  => 90,
         'KEINE_SECHS' => 60,
         'KEINE_DREI'  => 30,
+    ];
+
+    /**
+     * TSR F.2 (c) – Punkte gegen Absagen der Gegenpartei: Wer gegen eine Absage die
+     * genannte Augenzahl erreicht, bekommt je 1 Punkt. Die Marke liegt jeweils eine
+     * Stufe über dem, was die Gegenpartei abgesagt hatte.
+     */
+    private const GEGEN_ABSAGE_AUGEN = [
+        'KEINE_NEUN'  => 120, // 120 Augen gegen „keine 90"
+        'KEINE_SECHS' => 90,  //  90 Augen gegen „keine 60"
+        'KEINE_DREI'  => 60,  //  60 Augen gegen „keine 30"
+        'SCHWARZ'     => 30,  //  30 Augen gegen „schwarz"
     ];
 
     /** Punktwert je Ansage-Typ (an die Gewinnerpartei). */
@@ -219,6 +232,15 @@ final class WertungsRechner
             }
         }
 
+        // ── Punkte gegen Absagen der Gegenpartei (TSR F.2 c) ───────────────
+        // Sie gehen an die Partei, die die Marke erreicht hat. Das ist immer die
+        // Gewinnerpartei – wer eine Absage derart überbietet, bringt die absagende
+        // Seite zwangsläufig zu Fall – und bleibt auch dann richtig zugeordnet,
+        // wenn beide Parteien gescheitert sind und es keinen Sieger gibt.
+        foreach ($this->punkteGegenAbsagen($ansagen, $teamProSitzplatz, $augen) as $eintrag) {
+            $positionen[] = $this->position($eintrag['label'], $eintrag['team'], 1);
+        }
+
         // ── Ansagen (immer an Gewinner; ohne Sieger verfallen sie) ─────────
         if ($sieger !== null) {
             foreach ($this->ansagePunkte($ansagen, $teamProSitzplatz) as $eintrag) {
@@ -361,6 +383,65 @@ final class WertungsRechner
         }
 
         return $ergebnis;
+    }
+
+    /**
+     * TSR F.2 (c): Für jede Absage der Gegenpartei, deren zugehörige Augenmarke erreicht
+     * wurde, ein Punkt. Mehrfach möglich, weil Absagen aufeinander aufbauen – wer 120 Augen
+     * gegen „keine 90 / keine 60" holt, erhält beide Punkte.
+     *
+     * @param list<array{sitzplatz: int, typ: AnsageTyp}> $ansagen
+     * @param array<int, Team>                            $teamProSitzplatz
+     * @param array<string, int>                          $augen
+     * @return list<array{label: string, team: Team}>
+     */
+    private function punkteGegenAbsagen(array $ansagen, array $teamProSitzplatz, array $augen): array
+    {
+        $gesehen  = [];
+        $ergebnis = [];
+
+        foreach ($ansagen as $ansage) {
+            $typ = $ansage['typ']->value;
+            if (!isset(self::GEGEN_ABSAGE_AUGEN[$typ])) {
+                continue; // Re/Contra sind keine Absagen
+            }
+
+            $absager = $teamProSitzplatz[$ansage['sitzplatz']] ?? null;
+            if ($absager === null) {
+                continue;
+            }
+
+            $schluessel = $absager->value . ':' . $typ;
+            if (isset($gesehen[$schluessel])) {
+                continue;
+            }
+            $gesehen[$schluessel] = true;
+
+            $gegenpartei = $absager === Team::RE ? Team::KONTRA : Team::RE;
+            $marke       = self::GEGEN_ABSAGE_AUGEN[$typ];
+
+            if ($augen[$gegenpartei->value] < $marke) {
+                continue;
+            }
+
+            $ergebnis[] = [
+                'label' => sprintf('%d Augen gegen %s', $marke, $this->absageBezeichnung($typ)),
+                'team'  => $gegenpartei,
+            ];
+        }
+
+        return $ergebnis;
+    }
+
+    private function absageBezeichnung(string $typ): string
+    {
+        return match ($typ) {
+            'KEINE_NEUN'  => 'keine 90',
+            'KEINE_SECHS' => 'keine 60',
+            'KEINE_DREI'  => 'keine 30',
+            'SCHWARZ'     => 'schwarz',
+            default       => $typ,
+        };
     }
 
     private function ansageLabel(string $typ): string

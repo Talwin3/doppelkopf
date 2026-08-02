@@ -247,6 +247,127 @@ final class WertungsRechnerTest extends TestCase
         self::assertPositionExists($w, 'Gewonnen', 'RE', 1);
     }
 
+    // ── Punkte gegen Absagen der Gegenpartei (TSR F.2 c) ─────────────────────
+
+    public function testPunktGegenAbgesagteKeine90AbHundertzwanzigAugen(): void
+    {
+        // RE sagt "keine 90" ab, KONTRA erreicht 120 Augen → Zusatzpunkt für KONTRA.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame('KONTRA', $w['sieger'], 'REs Absage ist gescheitert.');
+        self::assertPositionExists($w, '120 Augen gegen keine 90', 'KONTRA', 1);
+    }
+
+    public function testKnappUnterDerMarkeGibtKeinenPunkt(): void
+    {
+        // KONTRA erreicht nur 116 Augen – die Absage ist zwar gescheitert (über 90),
+        // die Marke von 120 aber nicht erreicht.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(124, 116),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame('KONTRA', $w['sieger']);
+        self::assertNull($this->findePosition($w, '120 Augen gegen keine 90'));
+    }
+
+    public function testGestapelteAbsagenBringenMehrereGegenpunkte(): void
+    {
+        // RE sagt keine 90 und keine 60 ab; KONTRA holt 120 Augen und überbietet beide
+        // Marken (120 gegen keine 90, 90 gegen keine 60).
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+                ['sitzplatz' => 3, 'typ' => AnsageTyp::KEINE_SECHS],
+            ],
+            false,
+            null,
+        );
+
+        self::assertPositionExists($w, '120 Augen gegen keine 90', 'KONTRA', 1);
+        self::assertPositionExists($w, '90 Augen gegen keine 60', 'KONTRA', 1);
+    }
+
+    public function testDreissigAugenGegenAngesagtesSchwarz(): void
+    {
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(208, 32),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::SCHWARZ],
+            ],
+            false,
+            null,
+        );
+
+        // KONTRA hat Stiche gemacht → das angesagte Schwarz ist gescheitert.
+        self::assertSame('KONTRA', $w['sieger']);
+        self::assertPositionExists($w, '30 Augen gegen schwarz', 'KONTRA', 1);
+    }
+
+    public function testErfuellteAbsageBringtDerGegenparteiKeinenPunkt(): void
+    {
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(155, 85),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+            ],
+            false,
+            null,
+        );
+
+        self::assertSame('RE', $w['sieger']);
+        self::assertNull($this->findePosition($w, '120 Augen gegen keine 90'));
+    }
+
+    public function testGegenpunkteBleibenAuchOhneSiegerErhalten(): void
+    {
+        // Beide Parteien sagen an und verfehlen: RE die Absage "keine 90" (KONTRA hat 120),
+        // KONTRA die eigene Contra-Ansage (120 statt 121). Der Gegenpunkt bleibt trotzdem.
+        $w = $this->rechner->berechne(
+            $this->stichfolgeMitAugen(120, 120),
+            $this->teams,
+            $this->ordnung,
+            [
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::RE],
+                ['sitzplatz' => 1, 'typ' => AnsageTyp::KEINE_NEUN],
+                ['sitzplatz' => 2, 'typ' => AnsageTyp::CONTRA],
+            ],
+            false,
+            null,
+        );
+
+        self::assertNull($w['sieger'], 'Beide Parteien haben ihre Ansage verfehlt.');
+        self::assertNull($this->findePosition($w, 'Re angesagt'), 'Ansagepunkte verfallen.');
+        self::assertPositionExists($w, '120 Augen gegen keine 90', 'KONTRA', 1);
+    }
+
     // ── Helfer ────────────────────────────────────────────────────────────────
 
     /**
