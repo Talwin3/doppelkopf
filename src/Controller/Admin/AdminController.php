@@ -6,7 +6,9 @@ namespace App\Controller\Admin;
 
 use App\Application\SystemEinstellungService;
 use App\Entity\User;
+use App\Enum\TischStatus;
 use App\Repository\SystemEinstellungRepository;
+use App\Repository\TischRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +24,7 @@ class AdminController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly SystemEinstellungService $einstellungService,
         private readonly SystemEinstellungRepository $einstellungRepo,
+        private readonly TischRepository $tischRepo,
     ) {}
 
     #[Route('', name: '')]
@@ -33,6 +36,8 @@ class AdminController extends AbstractController
         return $this->render('admin/dashboard.html.twig', [
             'gesamtBenutzer' => $gesamtBenutzer,
             'verifiziert'    => $verifiziert,
+            'aktiveTische'   => $this->tischRepo->zaehleAktive(),
+            'laufendeSpiele' => $this->tischRepo->count(['status' => TischStatus::LAUFEND]),
         ]);
     }
 

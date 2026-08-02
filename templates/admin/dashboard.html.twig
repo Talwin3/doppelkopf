@@ -18,8 +18,14 @@
     </div>
     <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg px-6 py-5">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Aktive Tische</p>
-        <p class="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">—</p>
-        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">verfügbar ab Phase 1</p>
+        <p class="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">{{ aktiveTische }}</p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {% if laufendeSpiele > 0 %}
+                davon {{ laufendeSpiele }} im Spiel
+            {% else %}
+                keiner im Spiel
+            {% endif %}
+        </p>
     </div>
 </div>
 

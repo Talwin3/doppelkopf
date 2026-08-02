@@ -30,6 +30,17 @@ class TischRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /** Anzahl der nicht-beendeten Tische – dieselbe Abgrenzung wie in der Lobby. */
+    public function zaehleAktive(): int
+    {
+        return (int) $this->createQueryBuilder('t')
+            ->select('COUNT(t.id)')
+            ->where('t.status != :beendet')
+            ->setParameter('beendet', TischStatus::BEENDET)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     /**
      * Tische mit abgelaufenem Auto-Start-Countdown (naechsterSpielstartAm <= now).
      *
