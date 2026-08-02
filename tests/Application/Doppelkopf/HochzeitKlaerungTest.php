@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Application\Doppelkopf;
 
+use App\Application\Doppelkopf\AnsageService;
 use App\Application\Doppelkopf\KarteAusspielenService;
 use App\Application\Doppelkopf\SpielAbschlussService;
 use App\Domain\Doppelkopf\ValueObject\Kartenstapel;
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
 use App\Entity\Tisch;
+use App\Enum\AnsageTyp;
 use App\Enum\SpielStatus;
 use App\Enum\SpielVariante;
 use App\Enum\Team;
@@ -27,6 +29,7 @@ use App\Tests\Support\DoppelkopfIntegrationTestCase;
 final class HochzeitKlaerungTest extends DoppelkopfIntegrationTestCase
 {
     private KarteAusspielenService $ausspielen;
+    private \App\Entity\User $hochzeitsSpieler;
 
     protected function setUp(): void
     {
@@ -148,6 +151,69 @@ final class HochzeitKlaerungTest extends DoppelkopfIntegrationTestCase
         }
     }
 
+    // ── Ansagezeitpunkte bei angemeldeter Hochzeit (TSR 4.4.4 / 6.4.2) ───────
+
+    public function testVorDemKlaerungsstichIstKeineAnsageErlaubt(): void
+    {
+        $spiel = $this->hochzeitsSpiel();
+        $ansage = static::getContainer()->get(AnsageService::class);
+
+        // Noch kein Stich gespielt → Klärungsstich offen.
+        self::assertSame([], $ansage->verfuegbareAnsagen($spiel, $this->hochzeitsSpieler));
+
+        $this->erwarteAnsageFehler(
+            fn() => $ansage->machen($spiel, $this->hochzeitsSpieler, AnsageTyp::RE),
+            'Klärungsstich',
+        );
+    }
+
+    public function testNachKlaerungImErstenStichGeltenDieNormalenFristen(): void
+    {
+        $spiel  = $this->hochzeitsSpiel();
+        $ansage = static::getContainer()->get(AnsageService::class);
+
+        // Klärungsstich ist Stich 1 → keine Verschiebung, danach 11 Karten auf der Hand.
+        $this->stichSpielen($spiel, [1 => 'PIK_NEUN_1', 2 => 'PIK_ASS_1', 3 => 'PIK_KOENIG_2', 4 => 'PIK_NEUN_2']);
+        $this->em->refresh($spiel);
+
+        self::assertSame(1, $spiel->getHochzeitKlaerungsStichNr());
+        self::assertContains(AnsageTyp::RE, $ansage->verfuegbareAnsagen($spiel, $this->hochzeitsSpieler));
+    }
+
+    public function testKlaerungImDrittenStichVerschiebtDieFristenUmZweiKarten(): void
+    {
+        $spiel  = $this->hochzeitsSpiel();
+        $ansage = static::getContainer()->get(AnsageService::class);
+
+        $this->stichSpielen($spiel, [1 => 'HERZ_ZEHN_1', 2 => 'KARO_NEUN_1', 3 => 'KARO_NEUN_2', 4 => 'KARO_KOENIG_2']);
+        $this->stichSpielen($spiel, [1 => 'HERZ_ZEHN_2', 2 => 'KARO_KOENIG_1', 3 => 'KARO_ZEHN_1', 4 => 'KARO_ZEHN_2']);
+        $this->stichSpielen($spiel, [1 => 'PIK_NEUN_1', 2 => 'PIK_KOENIG_1', 3 => 'PIK_ASS_2', 4 => 'PIK_ZEHN_2']);
+
+        $this->em->refresh($spiel);
+        self::assertSame(3, $spiel->getHochzeitKlaerungsStichNr());
+
+        // Nach drei Stichen sind noch 9 Karten auf der Hand. Ohne Nachlass bräuchte
+        // „Re" 11 Karten – mit dem Nachlass von 2 ist die Ansage gerade noch möglich.
+        $verfuegbar = $ansage->verfuegbareAnsagen($spiel, $this->hochzeitsSpieler);
+        self::assertContains(AnsageTyp::RE, $verfuegbar);
+
+        $ansage->machen($spiel, $this->hochzeitsSpieler, AnsageTyp::RE);
+        $this->em->refresh($spiel);
+
+        // „keine 90" braucht regulär 10 Karten, mit Nachlass 8 – bei 9 noch erlaubt.
+        self::assertContains(AnsageTyp::KEINE_NEUN, $ansage->verfuegbareAnsagen($spiel, $this->hochzeitsSpieler));
+    }
+
+    private function erwarteAnsageFehler(callable $aktion, string $textteil): void
+    {
+        try {
+            $aktion();
+            self::fail('Ansage hätte abgelehnt werden müssen.');
+        } catch (\App\Domain\Doppelkopf\Exception\UngueltigeAnsageException $e) {
+            self::assertStringContainsString($textteil, $e->getMessage());
+        }
+    }
+
     /**
      * Laufendes Hochzeitsspiel mit fest verteilten Blättern: Sitzplatz 1 hält beide
      * Kreuz-Damen sowie beide Dullen und kann die ersten Stiche daher nach Belieben
@@ -176,8 +242,16 @@ final class HochzeitKlaerungTest extends DoppelkopfIntegrationTestCase
             $teilnehmer->setStartkartenIds($karten);
             // Vor der Klärung: der Hochzeitsspieler allein als RE.
             $teilnehmer->setTeam($sitz === 1 ? Team::RE : Team::KONTRA);
-            $teilnehmer->setIstBot(true);
-            $teilnehmer->setBotName('Bot ' . $sitz);
+
+            // Sitzplatz 1 ist der Hochzeitsspieler und ein echter Nutzer – nur so lassen
+            // sich die nutzerbezogenen Ansage-Prüfungen testen. Der Rest sind Bots.
+            if ($sitz === 1) {
+                $teilnehmer->setUser($host);
+                $this->hochzeitsSpieler = $host;
+            } else {
+                $teilnehmer->setIstBot(true);
+                $teilnehmer->setBotName('Bot ' . $sitz);
+            }
             $teilnehmer->setVorbehaltDeklariert(true);
 
             $this->em->persist($teilnehmer);

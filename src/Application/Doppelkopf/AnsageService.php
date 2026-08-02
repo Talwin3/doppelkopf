@@ -10,6 +10,7 @@ use App\Entity\SpielAnsage;
 use App\Entity\User;
 use App\Enum\AnsageTyp;
 use App\Enum\SpielStatus;
+use App\Enum\SpielVariante;
 use App\Enum\Team;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\GespielteKarteRepository;
@@ -49,6 +50,38 @@ final class AnsageService
         private readonly TischProtokollService $protokoll,
     ) {}
 
+    /**
+     * Ist bei einer angemeldeten Hochzeit der Klärungsstich noch offen? Dann ist keine
+     * Ansage erlaubt (TSR 4.4.4: „Die Erstansage ist erst erlaubt, nachdem der
+     * Klärungsstich vollendet wurde"). Die „Stille Hochzeit" läuft als Normalspiel und
+     * ist davon nicht betroffen.
+     */
+    private function wartetAufKlaerungsstich(Spiel $spiel): bool
+    {
+        return $spiel->getVariante() === SpielVariante::HOCHZEIT
+            && $spiel->getHochzeitKlaerungsStichNr() === null;
+    }
+
+    /**
+     * Nachlass auf die Ansagefristen nach TSR 6.4.2: Zog sich die Hochzeit über mehrere
+     * Stiche hin, bekommen alle Spieler die verlorene Zeit zurück – je Stich, den der
+     * Klärungsstich nach hinten rückte, eine Karte weniger auf der Hand.
+     */
+    private function klaerungsNachlass(Spiel $spiel): int
+    {
+        if ($spiel->getVariante() !== SpielVariante::HOCHZEIT) {
+            return 0;
+        }
+
+        return max(0, ($spiel->getHochzeitKlaerungsStichNr() ?? 1) - 1);
+    }
+
+    /** Mindestzahl der Handkarten für eine Ansage, inklusive Hochzeits-Nachlass. */
+    private function mindestKarten(Spiel $spiel, AnsageTyp $typ): int
+    {
+        return (self::TIMING[$typ->value] ?? 0) - $this->klaerungsNachlass($spiel);
+    }
+
     public function machen(Spiel $spiel, User $user, AnsageTyp $typ): void
     {
         if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
@@ -78,7 +111,14 @@ final class AnsageService
 
         $gespielteIds     = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
         $verbleibenKarten = count($teilnehmer->getStartkartenIds()) - count($gespielteIds);
-        $minKarten        = self::TIMING[$typ->value] ?? 0;
+
+        if ($this->wartetAufKlaerungsstich($spiel)) {
+            throw new UngueltigeAnsageException(
+                'Bei einer Hochzeit sind Ansagen erst nach dem Klärungsstich erlaubt.',
+            );
+        }
+
+        $minKarten = $this->mindestKarten($spiel, $typ);
 
         if ($verbleibenKarten < $minKarten) {
             throw new UngueltigeAnsageException(sprintf(
@@ -190,6 +230,11 @@ final class AnsageService
             return [];
         }
 
+        // Bei angemeldeter Hochzeit ist vor dem Klärungsstich gar nichts möglich.
+        if ($this->wartetAufKlaerungsstich($spiel)) {
+            return [];
+        }
+
         $teilnehmer = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user);
         if ($teilnehmer === null || $teilnehmer->getTeam() === null) {
             return [];
@@ -201,7 +246,8 @@ final class AnsageService
         $teamSitzplaetze  = $this->teamSitzplaetze($spiel, $team);
         $verfuegbar       = [];
 
-        foreach (self::TIMING as $typWert => $minKarten) {
+        foreach (self::TIMING as $typWert => $basisMinKarten) {
+            $minKarten = $basisMinKarten - $this->klaerungsNachlass($spiel);
             if ($verbleibenKarten < $minKarten) {
                 continue;
             }

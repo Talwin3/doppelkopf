@@ -180,10 +180,13 @@ final class KarteAusspielenService
             if ($gewinner?->getTeam() === Team::KONTRA) {
                 $gewinner->setTeam(Team::RE);
                 $spiel->setHochzeitAufgeloest(true);
+                $spiel->setHochzeitKlaerungsStichNr($spiel->getAktuellerStichNr());
                 $hochzeitPartnerName = $gewinner->getAnzeigeName();
             } elseif ($spiel->getAktuellerStichNr() >= self::HOCHZEIT_KLAERUNGS_STICHE) {
+                // Der dritte Stich zählt dann als Klärungsstich (TSR 4.4.3 b).
                 $spiel->setHochzeitAufgeloest(true);
                 $spiel->setHochzeitAlsSolo(true);
+                $spiel->setHochzeitKlaerungsStichNr($spiel->getAktuellerStichNr());
                 $hochzeitSoloName = $gewinner?->getAnzeigeName();
             }
         }

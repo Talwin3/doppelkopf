@@ -67,6 +67,14 @@ class Spiel
     #[ORM\Column(options: ['default' => false])]
     private bool $hochzeitAlsSolo = false;
 
+    /**
+     * Nummer des Klärungsstichs einer angemeldeten Hochzeit (1–3), sonst null.
+     * Bestimmt die Ansage-/Absagezeitpunkte: Vor dem Klärungsstich ist keine Ansage
+     * erlaubt, danach verschieben sich die Fristen um (Stich-Nr − 1) Karten (TSR 6.4.2).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $hochzeitKlaerungsStichNr = null;
+
     /** Sitzplatz des Armut-Spielers (null = keine Armut). */
     #[ORM\Column(nullable: true)]
     private ?int $armutSpielerSitzplatz = null;
@@ -170,6 +178,9 @@ class Spiel
 
     public function isHochzeitAlsSolo(): bool { return $this->hochzeitAlsSolo; }
     public function setHochzeitAlsSolo(bool $alsSolo): static { $this->hochzeitAlsSolo = $alsSolo; return $this; }
+
+    public function getHochzeitKlaerungsStichNr(): ?int { return $this->hochzeitKlaerungsStichNr; }
+    public function setHochzeitKlaerungsStichNr(?int $stichNr): static { $this->hochzeitKlaerungsStichNr = $stichNr; return $this; }
 
     public function getArmutSpielerSitzplatz(): ?int { return $this->armutSpielerSitzplatz; }
     public function setArmutSpielerSitzplatz(?int $sitzplatz): static { $this->armutSpielerSitzplatz = $sitzplatz; return $this; }
