@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Passwort zurücksetzen – Doppelkopf Online</title>
+</head>
+<body style="font-family: sans-serif; color: #111827; max-width: 600px; margin: 0 auto; padding: 24px;">
+    <h2 style="color: #15803d;">Passwort zurücksetzen</h2>
+
+    <p>Hallo {{ username }},</p>
+
+    <p>für dein Konto wurde ein neues Passwort angefordert. Mit einem Klick auf den folgenden Link kannst du eines vergeben:</p>
+
+    <p style="margin: 32px 0;">
+        <a href="{{ resetUrl }}"
+           style="background-color: #15803d; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+            Neues Passwort vergeben
+        </a>
+    </p>
+
+    <p style="color: #6b7280; font-size: 14px;">
+        Der Link ist gültig bis: {{ expiresAt|date('d.m.Y H:i') }} Uhr und lässt sich nur einmal verwenden.
+    </p>
+
+    <p style="color: #6b7280; font-size: 14px;">
+        Falls du kein neues Passwort angefordert hast, kannst du diese E-Mail ignorieren –
+        dein bisheriges Passwort bleibt unverändert gültig.
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+    <p style="color: #9ca3af; font-size: 12px;">
+        Doppelkopf Online – kostenloses Kartenspiel im Browser
+    </p>
+</body>
+</html>

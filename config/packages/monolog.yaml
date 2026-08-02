@@ -1,0 +1,119 @@
+monolog:
+    channels:
+        - deprecation
+        - spiellogik
+        - sicherheit
+        - bot_api
+        - mercure
+        - performance
+
+when@dev:
+    monolog:
+        handlers:
+            main:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/dev.log'
+                level:     debug
+                max_files: 7
+                channels:  ['!event']
+                formatter: monolog.formatter.json
+
+            spiellogik:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/spiellogik.log'
+                level:     debug
+                max_files: 7
+                channels:  [spiellogik]
+                formatter: monolog.formatter.json
+
+            sicherheit:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/sicherheit.log'
+                level:     debug
+                max_files: 7
+                channels:  [sicherheit]
+                formatter: monolog.formatter.json
+
+            bot_api:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/bot_api.log'
+                level:     debug
+                max_files: 7
+                channels:  [bot_api]
+                formatter: monolog.formatter.json
+
+            mercure:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/mercure.log'
+                level:     debug
+                max_files: 7
+                channels:  [mercure]
+                formatter: monolog.formatter.json
+
+            console:
+                type:     console
+                process_psr_3_messages: false
+                channels: ['!event', '!doctrine', '!console']
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type:             fingers_crossed
+                action_level:     error
+                handler:          nested
+                excluded_http_codes: [404, 405]
+                channels:         ['!event']
+            nested:
+                type:  stream
+                path:  '%kernel.logs_dir%/%kernel.environment%.log'
+                level: debug
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/prod.log'
+                level:     warning
+                max_files: 30
+                channels:  ['!deprecation', '!spiellogik', '!sicherheit', '!bot_api', '!mercure']
+                formatter: monolog.formatter.json
+
+            spiellogik:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/spiellogik.log'
+                level:     info
+                max_files: 30
+                channels:  [spiellogik]
+                formatter: monolog.formatter.json
+
+            sicherheit:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/sicherheit.log'
+                level:     info
+                max_files: 30
+                channels:  [sicherheit]
+                formatter: monolog.formatter.json
+
+            bot_api:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/bot_api.log'
+                level:     warning
+                max_files: 30
+                channels:  [bot_api]
+                formatter: monolog.formatter.json
+
+            mercure:
+                type:      rotating_file
+                path:      '%kernel.logs_dir%/mercure.log'
+                level:     error
+                max_files: 30
+                channels:  [mercure]
+                formatter: monolog.formatter.json
+
+            deprecation:
+                type:     stream
+                channels: [deprecation]
+                path:     php://stderr
+                formatter: monolog.formatter.json

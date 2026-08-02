@@ -1,0 +1,8 @@
+framework:
+    mailer:
+        dsn: '%env(MAILER_DSN)%'
+
+        # Absender zentral setzen: ohne "From" lehnt symfony/mime jede Nachricht
+        # mit einer LogicException ab. Gilt für alle Mails (Verifikation, Passwort-Reset).
+        headers:
+            From: '%env(MAILER_ABSENDER)%'

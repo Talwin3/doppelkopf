@@ -17,9 +17,12 @@ mercure.db
 # macOS
 .DS_Store
 
-# Caddy-Daten (lokal, nicht im Repo)
+# Caddy-Daten (lokal, nicht im Repo).
+# Achtung: hier stand früher auch "/config/" – gemeint war Caddys Config-Volume,
+# getroffen hat es aber das Symfony-Verzeichnis config/, das dadurch komplett
+# ungetrackt blieb. Caddy nutzt ohnehin die Docker-Volumes caddy_data/caddy_config,
+# also braucht es die Regel nicht.
 /data/
-/config/
 
 # Automatisch von Symfony Flex generiert – kollidieren mit docker-compose.yml
 /compose.yaml

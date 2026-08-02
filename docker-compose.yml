@@ -19,7 +19,8 @@ services:
       APP_ENV: "${APP_ENV:-dev}"
       APP_SECRET: "${APP_SECRET}"
       DATABASE_URL: "postgresql://app:${DB_PASSWORD:-secret}@db:5432/doppelkopf?serverVersion=16&charset=utf8"
-      MAILER_DSN: "${MAILER_DSN:-smtp://localhost:1025}"
+      MAILER_DSN: "${MAILER_DSN:-smtp://mailpit:1025}"
+      MAILER_ABSENDER: "${MAILER_ABSENDER:-Doppelkopf Online <noreply@doppelkopf.local>}"
       # Mercure – integriert in FrankenPHP
       MERCURE_URL: "${MERCURE_URL:-http://app/.well-known/mercure}"
       MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost:8443/.well-known/mercure}"

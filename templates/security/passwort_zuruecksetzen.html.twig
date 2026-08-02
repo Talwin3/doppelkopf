@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Neues Passwort vergeben – Doppelkopf Online{% endblock %}
+
+{% block body %}
+<div class="flex min-h-[60vh] items-center justify-center">
+    <div class="w-full max-w-sm">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-50 text-center mb-2">Neues Passwort vergeben</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">
+            Wähle ein neues Passwort mit mindestens 8 Zeichen.
+        </p>
+
+        {{ form_start(formular, {attr: {class: 'space-y-5'}}) }}
+
+            {% for fehler in formular.vars.errors %}
+                <div class="flash-error">{{ fehler.message }}</div>
+            {% endfor %}
+
+            <div>
+                {{ form_label(formular.neuesPasswort.first, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(formular.neuesPasswort.first, {attr: {class: 'form-input'}}) }}
+                {{ form_errors(formular.neuesPasswort.first) }}
+            </div>
+
+            <div>
+                {{ form_label(formular.neuesPasswort.second, null, {label_attr: {class: 'form-label'}}) }}
+                {{ form_widget(formular.neuesPasswort.second, {attr: {class: 'form-input'}}) }}
+                {{ form_errors(formular.neuesPasswort.second) }}
+            </div>
+
+            <button type="submit" class="btn-primary w-full justify-center py-2.5">
+                Passwort speichern
+            </button>
+
+        {{ form_end(formular) }}
+
+        <p class="mt-6 text-center">
+            <a href="{{ path('app_login') }}"
+               class="text-sm text-tisch-700 dark:text-tisch-400 hover:text-tisch-900 dark:hover:text-tisch-300">
+                Zurück zum Login
+            </a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -54,6 +54,25 @@ final class SicherheitsLogger
         $this->logger->info('Passwort-Reset angefordert', ['username' => $username]);
     }
 
+    public function passwortResetDurchgefuehrt(string $username): void
+    {
+        $this->logger->info('Passwort per Reset-Link geändert', ['username' => $username]);
+    }
+
+    public function passwortResetTokenUngueltig(string $grund): void
+    {
+        // Kein Username: zu diesem Zeitpunkt ist der Token nicht auflösbar.
+        $this->logger->warning('Passwort-Reset-Token ungültig', ['grund' => $grund]);
+    }
+
+    public function passwortResetVersandFehlgeschlagen(string $username, string $fehler): void
+    {
+        $this->logger->error('Versand der Passwort-Reset-Mail fehlgeschlagen', [
+            'username' => $username,
+            'fehler'   => $fehler,
+        ]);
+    }
+
     public function zugriffVerweigert(string $username, string $ressource): void
     {
         $this->logger->warning('Zugriff verweigert', [

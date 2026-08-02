@@ -10,7 +10,7 @@
         {% if gesendet %}
             <div class="flash-success mt-6">
                 Falls ein Konto mit dieser E-Mail-Adresse existiert, haben wir dir einen Link zum Zurücksetzen zugeschickt.
-                Bitte prüfe auch deinen Spam-Ordner.
+                Er ist {{ gueltigkeitInMin }} Minuten gültig. Bitte prüfe auch deinen Spam-Ordner.
             </div>
             <div class="mt-6 text-center">
                 <a href="{{ path('app_login') }}" class="text-tisch-700 dark:text-tisch-400 hover:text-tisch-900 dark:hover:text-tisch-300 text-sm font-medium">
@@ -23,6 +23,7 @@
             </p>
 
             <form method="post" class="space-y-5">
+                <input type="hidden" name="_token" value="{{ csrf_token('passwort_vergessen') }}">
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail-Adresse</label>
                     <input type="email" id="email" name="email"
