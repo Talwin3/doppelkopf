@@ -41,7 +41,9 @@ final class EngineStrategie implements SimulierteStrategie
     {
         $name = $this->staerke->value;
         if ($this->staerke === BotStaerke::PROFI) {
-            $name .= sprintf('(r=%d, t=%.2gs)', $this->rollouts, $this->zeitbudgetSek);
+            $name .= $this->zeitbudgetSek >= 100.0
+                ? sprintf('(r=%d)', $this->rollouts)
+                : sprintf('(r=%d, t=%.2fs)', $this->rollouts, $this->zeitbudgetSek);
         }
 
         return $this->ansagenAktiv ? $name : $name . ' ohne Ansagen';
