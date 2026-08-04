@@ -54,6 +54,9 @@ final class Partie
 
     private int $stichNr = 1;
 
+    /** @var array<int, Karte[]> Sitzplatz → ausgeteilte Hand (unverändert) */
+    private array $starthaende;
+
     /**
      * @param array<int, Karte[]> $starthaende      Sitzplatz 1–4 → Handkarten
      * @param array<int, Team>    $teamProSitzplatz Sitzplatz → Team (Spiel-Wahrheit)
@@ -69,6 +72,7 @@ final class Partie
         $universum    = [];
         foreach ($starthaende as $sitz => $karten) {
             $this->haende[$sitz]        = array_values($karten);
+            $this->starthaende[$sitz]   = array_values($karten);
             $this->startGroessen[$sitz] = count($karten);
             foreach ($karten as $karte) {
                 $universum[$karte->id()] = $karte;
@@ -164,6 +168,12 @@ final class Partie
     public function hand(int $sitzplatz): array
     {
         return $this->haende[$sitzplatz] ?? [];
+    }
+
+    /** Die ausgeteilte Hand – für Blattbewertungen, die sich nicht am Restblatt messen. @return Karte[] */
+    public function starthand(int $sitzplatz): array
+    {
+        return $this->starthaende[$sitzplatz] ?? [];
     }
 
     public function kartenInHand(int $sitzplatz): int

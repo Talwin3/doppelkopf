@@ -7,6 +7,7 @@ namespace App\Application\Doppelkopf\Bot;
 use App\Application\Doppelkopf\AnsageService;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
+use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
 use App\Entity\SpielAnsage;
 use App\Entity\SpielTeilnehmer;
@@ -49,6 +50,11 @@ final class BotAnsage
             $ordnung,
             null,
             $this->teamAnsagen($spiel, $teilnehmer),
+            fn(AnsageTyp $typ): int => $this->ansageService->mindestKarten($spiel, $typ),
+            // Bewertet wird die ausgeteilte Hand: Wer bis zum letztmöglichen Zeitpunkt
+            // wartet, hat schon eine Karte gespielt – zählte nur das Restblatt, fielen
+            // Ansagen aus einem sachfremden Grund weg (im Benchmark 6 %).
+            array_map(static fn(string $id) => Karte::vonId($id), $teilnehmer->getStartkartenIds()),
         );
         if ($typ === null) {
             return;

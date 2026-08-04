@@ -27,6 +27,11 @@ final class AnsageHeuristik
      * @param Karte[]      $hand         Aktuelle Handkarten
      * @param ?AnsageSchwellen $schwellen Mindeststärke je Partei (null = Standard)
      * @param AnsageTyp[]  $teamAnsagen  Was das eigene Team bereits angesagt hat
+     * @param ?callable(AnsageTyp): int $fristFuer Mindestzahl Handkarten für eine Ansage.
+     *        Nur damit kann die Heuristik den letztmöglichen Zeitpunkt erkennen; fehlt sie,
+     *        wird wie früher zum frühestmöglichen Zeitpunkt angesagt. Der Aufrufer liefert
+     *        sie aus seiner eigenen Quelle, damit die Fristen nicht ein drittes Mal im Code
+     *        stehen (Produktivpfad rechnet dabei den Hochzeits-Nachlass mit ein).
      * @return ?AnsageTyp Nächste sinnvolle Ansage, oder null
      */
     public function willAnsagen(
@@ -36,6 +41,8 @@ final class AnsageHeuristik
         TrumpfOrdnung $ordnung,
         ?AnsageSchwellen $schwellen = null,
         array $teamAnsagen = [],
+        ?callable $fristFuer = null,
+        ?array $bewertungsHand = null,
     ): ?AnsageTyp {
         if ($staerke === BotStaerke::ANFAENGER || $team === null) {
             return null;
@@ -46,7 +53,7 @@ final class AnsageHeuristik
         $truempfe = 0;
         $damen    = 0;
         $kreuzDamen = 0;
-        foreach ($hand as $k) {
+        foreach ($bewertungsHand ?? $hand as $k) {
             if ($ordnung->istTrumpf($k)) {
                 $truempfe++;
             }
@@ -66,7 +73,10 @@ final class AnsageHeuristik
         $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
 
         if (!in_array($grundansage, $teamAnsagen, true)) {
-            return $truempfe >= $schwellen->minTruempfe($team) ? $grundansage : null;
+            return $truempfe >= $schwellen->minTruempfe($team)
+                && $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer)
+                    ? $grundansage
+                    : null;
         }
 
         // Grundansage steht – die Absagen der Reihe nach anbieten. Jede setzt die vorige
@@ -76,9 +86,36 @@ final class AnsageHeuristik
                 continue;
             }
 
-            return $truempfe >= $schwellen->minTruempfeFuerAbsage($absage) ? $absage : null;
+            return $truempfe >= $schwellen->minTruempfeFuerAbsage($absage)
+                && $this->zeitpunktPasst($absage, $hand, $schwellen, $fristFuer)
+                    ? $absage
+                    : null;
         }
 
         return null;
+    }
+
+    /**
+     * Ist jetzt der richtige Moment für diese Ansage?
+     *
+     * Nach dem Essener System wartet man in der Regel bis zum **letztmöglichen** Zeitpunkt:
+     * jede früher gemachte Ansage verschenkt die Information, die der laufende Stich noch
+     * bringt – und verrät der Gegenpartei früher, woran sie ist. Der Bot sagt deshalb erst
+     * an, wenn seine Hand auf die Frist abgeschmolzen ist.
+     *
+     * @param Karte[] $hand
+     * @param ?callable(AnsageTyp): int $fristFuer
+     */
+    private function zeitpunktPasst(
+        AnsageTyp $typ,
+        array $hand,
+        AnsageSchwellen $schwellen,
+        ?callable $fristFuer,
+    ): bool {
+        if (!$schwellen->letztmoeglich || $fristFuer === null) {
+            return true; // frühestmöglich – das alte Verhalten
+        }
+
+        return count($hand) <= $fristFuer($typ);
     }
 }

@@ -76,8 +76,14 @@ final class AnsageService
         return max(0, ($spiel->getHochzeitKlaerungsStichNr() ?? 1) - 1);
     }
 
-    /** Mindestzahl der Handkarten für eine Ansage, inklusive Hochzeits-Nachlass. */
-    private function mindestKarten(Spiel $spiel, AnsageTyp $typ): int
+    /**
+     * Mindestzahl der Handkarten für eine Ansage, inklusive Hochzeits-Nachlass.
+     *
+     * Öffentlich, weil auch die Bot-Heuristik den letztmöglichen Ansagezeitpunkt kennen
+     * muss ({@see \App\Domain\Doppelkopf\Service\AnsageHeuristik}) – sie soll die Fristen
+     * nicht ein zweites Mal führen.
+     */
+    public function mindestKarten(Spiel $spiel, AnsageTyp $typ): int
     {
         return (self::TIMING[$typ->value] ?? 0) - $this->klaerungsNachlass($spiel);
     }

@@ -64,10 +64,30 @@ final readonly class AnsageSchwellen
     /**
      * @param array<string, int> $minTruempfeAbsage AnsageTyp-Wert → Mindest-Trümpfe
      */
+    /**
+     * Bis zum letztmöglichen Zeitpunkt mit der Ansage warten, statt sie sofort zu machen?
+     *
+     * Das Essener System empfiehlt das Warten, weil jede frühe Ansage die Information des
+     * laufenden Stichs verschenkt. **Gemessen bringt es bei uns nichts** (gegen ANFAENGER,
+     * je 4540 Blätter, gleiche Karten): frühestmöglich +0,1458 · letztmöglich +0,1488 –
+     * die Intervalle überlappen fast vollständig.
+     *
+     * Der Grund ist die heutige Frist: Re/Contra verlangen ≥ 11 Handkarten, zwischen
+     * frühestem und letztem Zeitpunkt liegt also **genau ein Stich**. Das Essener System
+     * spricht dagegen von Ansagen „im ersten bis dritten Stich" – es setzt ein viel
+     * größeres Fenster voraus, als die heutige TSR lässt. So wenig Zusatzinformation
+     * verändert die Entscheidung kaum.
+     *
+     * Trotzdem als Default an: Es kostet nichts, verrät der Gegenpartei später, woran sie
+     * ist, und ist die **Voraussetzung** dafür, die bis dahin erspielten Augen in die
+     * Blattbewertung aufzunehmen (Essener: „bis zur Ansage erzielte Augenzahl plus Summe
+     * der Erwartungswerte") – ohne Warten gibt es gar nichts nachzubewerten.
+     */
     public function __construct(
         public int $minTruempfeRe = 7,
         public int $minTruempfeContra = 8,
         public array $minTruempfeAbsage = [],
+        public bool $letztmoeglich = true,
     ) {}
 
     /** Wie vor der Essener Auswertung: beide Parteien gleich behandelt, keine Absagen. */
@@ -100,7 +120,12 @@ final readonly class AnsageSchwellen
 
     public function beschreibung(): string
     {
-        $text = sprintf('Ansage ab %d/%d Trümpfen (Re/Contra)', $this->minTruempfeRe, $this->minTruempfeContra);
+        $text = sprintf(
+            'Ansage ab %d/%d Trümpfen (Re/Contra), %s',
+            $this->minTruempfeRe,
+            $this->minTruempfeContra,
+            $this->letztmoeglich ? 'letztmöglich' : 'frühestmöglich',
+        );
         if (!$this->machtAbsagen()) {
             return $text . ', ohne Absagen';
         }

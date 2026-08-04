@@ -91,6 +91,63 @@ final class AnsageHeuristikTest extends TestCase
         self::assertNull($this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung));
     }
 
+    /**
+     * Mit Fristfunktion sagt der Bot erst an, wenn seine Hand auf die Frist abgeschmolzen
+     * ist (Re/Contra: 11 Karten) – nicht schon mit voller Hand.
+     */
+    public function testWartetBisZumLetztmoeglichenZeitpunkt(): void
+    {
+        $frist = static fn(AnsageTyp $typ): int => $typ === AnsageTyp::RE || $typ === AnsageTyp::CONTRA ? 11 : 10;
+        $voll  = $this->starkeHand();
+
+        // Frist künstlich über die Handgröße legen → noch zu früh.
+        $zuFrueh = static fn(AnsageTyp $typ): int => 5;
+        self::assertNull(
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $voll, Team::RE, $this->ordnung, null, [], $zuFrueh),
+            'Mit voller Hand ist der letztmögliche Zeitpunkt noch nicht erreicht.',
+        );
+
+        // Frist erreicht → jetzt wird angesagt.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $voll, Team::RE, $this->ordnung, null, [], $frist),
+        );
+
+        // Ohne Fristfunktion bleibt es beim alten Sofort-Ansagen.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $voll, Team::RE, $this->ordnung, null, [], null),
+        );
+
+        // Abgeschaltet über die Schwellen → ebenfalls sofort.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $voll, Team::RE, $this->ordnung,
+                new AnsageSchwellen(7, 8, [], false), [], $zuFrueh,
+            ),
+        );
+    }
+
+    /**
+     * Beim Warten darf die geschrumpfte Hand die Bewertung nicht verfälschen: gespielte
+     * Trümpfe zählen weiter mit, sonst fällt ein Teil der Ansagen aus einem sachfremden
+     * Grund weg (im Benchmark 6 % der Ansagen).
+     */
+    public function testBewertungsHandSchlaegtAktuelleHand(): void
+    {
+        $stark   = $this->starkeHand();
+        $schwach = $this->schwacheHand();
+
+        // Aktuelle Hand zu schwach, ausgeteilte Hand stark → Ansage.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $schwach, Team::RE, $this->ordnung, null, [], null, $stark,
+            ),
+        );
+    }
+
     public function testOhneKonfigurierteSchwelleKeineAbsage(): void
     {
         // Selbst mit Traumblatt und stehendem "Re": Absagen sind per Default abgeschaltet.
