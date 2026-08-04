@@ -66,6 +66,8 @@ final class BotTurnierCommand extends Command
             ->addOption('ohne-ansagen-b', null, InputOption::VALUE_NONE, 'B macht keine Ansagen')
             ->addOption('regeln-a', null, InputOption::VALUE_REQUIRED, 'Aktive FORTGESCHRITTEN-Regeln für A: alle|keine|"a,b"|"-a,-b"', 'alle')
             ->addOption('regeln-b', null, InputOption::VALUE_REQUIRED, 'Aktive FORTGESCHRITTEN-Regeln für B', 'alle')
+            ->addOption('sicherheit-a', null, InputOption::VALUE_REQUIRED, 'A hält einen Stich ab dieser Wahrscheinlichkeit für sicher (1 = nur bei Gewissheit)')
+            ->addOption('sicherheit-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -100,6 +102,7 @@ final class BotTurnierCommand extends Command
                 (float) $input->getOption('zeitbudget-a'),
                 !$input->getOption('ohne-ansagen-a'),
                 (string) $input->getOption('regeln-a'),
+                $input->getOption('sicherheit-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -107,6 +110,7 @@ final class BotTurnierCommand extends Command
                 (float) $input->getOption('zeitbudget-b'),
                 !$input->getOption('ohne-ansagen-b'),
                 (string) $input->getOption('regeln-b'),
+                $input->getOption('sicherheit-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -200,6 +204,7 @@ final class BotTurnierCommand extends Command
         float $zeitbudget,
         bool $ansagenAktiv,
         string $regelListe,
+        ?string $sicherheit,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -207,6 +212,11 @@ final class BotTurnierCommand extends Command
                 $name,
                 implode(', ', array_map(fn(BotStaerke $s) => $s->value, BotStaerke::cases())),
             ));
+
+        $regeln = FortgeschritteneRegeln::ausListe($regelListe);
+        if ($sicherheit !== null && $sicherheit !== '') {
+            $regeln = $regeln->mitSicherheitsSchwelle((float) $sicherheit);
+        }
 
         return new EngineStrategie(
             $staerke,
@@ -217,7 +227,7 @@ final class BotTurnierCommand extends Command
             max(1, $rollouts),
             max(0.001, $zeitbudget),
             $ansagenAktiv,
-            FortgeschritteneRegeln::ausListe($regelListe),
+            $regeln,
         );
     }
 }

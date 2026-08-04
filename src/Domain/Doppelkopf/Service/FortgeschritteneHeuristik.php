@@ -15,13 +15,17 @@ use App\Enum\Team;
  *
  * Gegenüber der {@see BotHeuristik} (Anfänger) zieht diese Engine zusätzlich in Betracht,
  * welche Karten noch im Spiel sind und welche Gegner in welcher Farbe frei sind:
- *  - **Anspielen:** sichere Stiche kassieren (Karte, die niemand mehr überbieten kann);
- *    Fehlfarben-Ass nur, wenn kein Gegner in der Farbe frei ist (sonst wird es gestochen);
- *    beim Abwerfen Farben meiden, in denen ein Gegner frei ist.
- *  - **Partner führt:** nur schmieren, wenn der Stich sicher ist (letzter Spieler oder
- *    unschlagbare Karte), sonst sparsam.
+ *  - **Anspielen:** Stiche kassieren, die kein Gegner mehr holen dürfte; Fehlfarben-Ass nur,
+ *    wenn kein Gegner in der Farbe frei ist (sonst wird es gestochen); beim Abwerfen Farben
+ *    meiden, in denen ein Gegner frei ist.
+ *  - **Partner führt:** nur schmieren, wenn der Stich sicher genug ist (letzter Spieler oder
+ *    kaum noch zu kippen), sonst sparsam.
  *  - **Gegner führt:** am letzten Platz nur überstechen, wenn es sich lohnt; sonst
  *    augenarm abwerfen.
+ *
+ * „Sicher genug" heißt hier nicht mehr „gewiss": {@see self::sicherheit()} schätzt, wie
+ * wahrscheinlich eine überbietende Karte überhaupt bei jemandem liegt, der noch gefährlich
+ * werden kann.
  *
  * Welche dieser Regeln aktiv sind, steuert {@see FortgeschritteneRegeln} – so lässt sich
  * jede einzeln im Self-Play-Benchmark vermessen. Zwei Regeln wurden dabei als schädlich
@@ -82,7 +86,8 @@ final class FortgeschritteneHeuristik
         if ($regeln->sichereStiche) {
             $sichereMitAugen = array_values(array_filter(
                 $fehlfarben,
-                fn(Karte $k) => $k->augen() > 0 && $this->fehlfarbeSicher($k, $gegnerSitze, $ordnung, $gedaechtnis),
+                fn(Karte $k) => $k->augen() > 0
+                    && $this->fehlfarbeSicher($k, $gegnerSitze, $ordnung, $gedaechtnis, $regeln->sicherheitsSchwelle),
             ));
             if ($sichereMitAugen !== []) {
                 return $this->hoechsteAugen($sichereMitAugen, $ordnung);
@@ -146,10 +151,13 @@ final class FortgeschritteneHeuristik
         $stichAugen    = array_sum(array_map(fn(Karte $k) => $k->augen(), $stich));
 
         if ($partnerFuehrt) {
-            // Nur schmieren, wenn der Stich für den Partner sicher ist. Ohne Regel gilt –
-            // wie beim Anfänger – nur der letzte Platz als sicher.
-            $sicher = $istLetzter || ($regeln->schmierSicherheit
-                && !$this->kannUeberbotenWerden($gewinnerKarte, $angespielt, $ordnung, $gedaechtnis));
+            // Nur schmieren, wenn der Stich für den Partner sicher genug ist. Ohne Regel gilt –
+            // wie beim Anfänger – nur der letzte Platz als sicher. Der Partner führt bereits,
+            // also sind alle Nachfolger Gegner; wer im Stich schon gespielt hat, zählt nicht.
+            $sicher = $istLetzter || ($regeln->schmierSicherheit && $this->sicherheit(
+                $this->zaehleUeberbietende($gewinnerKarte, $angespielt, $ordnung, $gedaechtnis),
+                3 - count($stich),
+            ) >= $regeln->sicherheitsSchwelle);
 
             return $sicher
                 ? $this->hoechsteAugen($erlaubte, $ordnung)
@@ -218,39 +226,72 @@ final class FortgeschritteneHeuristik
     }
 
     /**
-     * Ist diese Fehlfarben-Karte ein sicherer Stich beim Anspielen? Sicher, wenn keine
-     * ungesehene Karte derselben Farbe höher ist UND kein Gegner in der Farbe frei ist
-     * (sonst könnte gestochen werden).
+     * Ist diese Fehlfarben-Karte ein sicherer Stich beim Anspielen? Sicher, wenn kein Gegner
+     * in der Farbe frei ist (sonst würde gestochen) und die Farbe höchstwahrscheinlich bei
+     * keinem Gegner höher liegt.
+     *
+     * Beim Anspielen kommen noch alle drei Mitspieler dran – gefährlich sind aber nur die
+     * beiden Gegner: eine höhere Karte beim **Partner** holt die Augen ebenfalls ins eigene
+     * Team. Deshalb zählen nur zwei der drei fremden Hände.
      */
-    private function fehlfarbeSicher(Karte $karte, array $gegnerSitze, TrumpfOrdnung $ordnung, SpielGedaechtnis $g): bool
-    {
+    private function fehlfarbeSicher(
+        Karte $karte,
+        array $gegnerSitze,
+        TrumpfOrdnung $ordnung,
+        SpielGedaechtnis $g,
+        float $schwelle,
+    ): bool {
         if ($this->gegnerFreiInFarbe($karte, $gegnerSitze, $ordnung, $g)) {
             return false;
         }
 
-        $farbe = $ordnung->fehlfarbe($karte);
+        $farbe   = $ordnung->fehlfarbe($karte);
+        $hoehere = 0;
         foreach ($g->ungesehene() as $u) {
             if (!$ordnung->istTrumpf($u)
                 && $ordnung->fehlfarbe($u) === $farbe
                 && $ordnung->fehlfarbenRang($u) > $ordnung->fehlfarbenRang($karte)
             ) {
-                return false;
+                $hoehere++;
             }
         }
 
-        return true;
+        return $this->sicherheit($hoehere, 2) >= $schwelle;
     }
 
-    /** Kann die (aktuell führende/kandidierende) Karte von einer ungesehenen Karte überboten werden? */
-    private function kannUeberbotenWerden(Karte $karte, Karte $angespielt, TrumpfOrdnung $ordnung, SpielGedaechtnis $g): bool
+    /**
+     * Wahrscheinlichkeit, dass keine der $hoehere überbietenden Karten in einer der
+     * $gefaehrliche fremden Hände liegt.
+     *
+     * {@see SpielGedaechtnis::ungesehene()} kennt keine Zuordnung zu Sitzen; ohne weiteres
+     * Wissen liegt jede ungesehene Karte mit gleicher Wahrscheinlichkeit in jeder der drei
+     * fremden Hände. Gefährlich sind je nach Lage nur ein oder zwei davon – die Karten des
+     * Partners und die der Spieler, die im Stich schon gespielt haben, können nichts mehr
+     * anrichten.
+     *
+     * Die alte Prüfung „liegt *irgendwo* eine höhere Karte?" entspricht dem Sonderfall
+     * `$gefaehrliche = 3` und ist deshalb fast immer negativ ausgefallen.
+     */
+    private function sicherheit(int $hoehere, int $gefaehrliche): float
     {
+        if ($hoehere === 0 || $gefaehrliche <= 0) {
+            return 1.0;
+        }
+
+        return ((3 - $gefaehrliche) / 3) ** $hoehere;
+    }
+
+    /** Wie viele ungesehene Karten schlagen die aktuell führende Karte? */
+    private function zaehleUeberbietende(Karte $karte, Karte $angespielt, TrumpfOrdnung $ordnung, SpielGedaechtnis $g): int
+    {
+        $hoehere = 0;
         foreach ($g->ungesehene() as $u) {
             if ($this->schlaegt($u, $karte, $angespielt, $ordnung)) {
-                return true;
+                $hoehere++;
             }
         }
 
-        return false;
+        return $hoehere;
     }
 
     private function hatHoheAugen(array $karten): bool

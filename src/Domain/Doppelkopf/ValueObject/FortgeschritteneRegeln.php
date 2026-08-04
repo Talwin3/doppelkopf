@@ -17,7 +17,9 @@ namespace App\Domain\Doppelkopf\ValueObject;
  * sich nur messen, wenn man sie einzeln abschalten kann (`app:bot:turnier --regeln-a=…`).
  *
  * Zwei Regeln sind so bereits als schädlich überführt und **entfernt** worden:
- * `nur-unschlagbar` (kostete 0,159 Punkte je Partie) und `trumpf-ziehen` (0,025).
+ * `nur-unschlagbar` (kostete 0,159 Punkte je Partie) und `trumpf-ziehen` (0,025). Bei zwei
+ * weiteren war nicht die Regel falsch, sondern ihre Sicherheitsprüfung zu pessimistisch —
+ * siehe {@see self::SICHERHEIT_STANDARD}.
  */
 final readonly class FortgeschritteneRegeln
 {
@@ -30,13 +32,43 @@ final readonly class FortgeschritteneRegeln
         'stich-lohnt-sich'    => 'Gegner führt, letzter Platz: nur stechen, wenn der Stich Augen bringt',
     ];
 
+    /**
+     * Ab welcher Sicherheit ein Stich als „sicher" gilt (`sichere-stiche`,
+     * `schmier-sicherheit`). 1.0 = nur bei absoluter Gewissheit; das war die ursprüngliche
+     * Fassung, die dafür gegen *alle* ungesehenen Karten prüfte und deshalb praktisch nie
+     * zuschlug.
+     */
+    public const SICHERHEIT_GEWISS = 1.0;
+
+    /**
+     * Gemessenes Optimum: 0,1 schlägt die Gewissheits-Fassung um +0,025 Punkte je Partie
+     * (6140 Blätter, gepaart, auf einem zweiten Seed bestätigt). Nach unten läuft die Kurve
+     * flach aus — 0,05 und 0,0 sind gleich gut; 0,1 behält die Vorsicht in wirklich
+     * aussichtslosen Lagen, ohne etwas zu kosten.
+     */
+    public const SICHERHEIT_STANDARD = 0.1;
+
     public function __construct(
         public bool $sichereStiche = true,
         public bool $assNurSicher = true,
         public bool $sicheresAbwerfen = true,
         public bool $schmierSicherheit = true,
         public bool $stichLohntSich = true,
+        public float $sicherheitsSchwelle = self::SICHERHEIT_STANDARD,
     ) {}
+
+    /** Kopie mit anderer Sicherheitsschwelle (siehe {@see self::SICHERHEIT_GEWISS}). */
+    public function mitSicherheitsSchwelle(float $schwelle): self
+    {
+        return new self(
+            $this->sichereStiche,
+            $this->assNurSicher,
+            $this->sicheresAbwerfen,
+            $this->schmierSicherheit,
+            $this->stichLohntSich,
+            $schwelle,
+        );
+    }
 
     /** Alle Regeln an (Produktivverhalten der Stufe FORTGESCHRITTEN). */
     public static function alle(): self
@@ -102,12 +134,16 @@ final readonly class FortgeschritteneRegeln
             : self::nur(...$teile);
     }
 
-    /** Kurzform für die Benchmark-Ausgabe, z. B. „ohne sichere-stiche“. */
+    /** Kurzform für die Benchmark-Ausgabe, z. B. „ohne sichere-stiche, Sicherheit ab 0,50“. */
     public function beschreibung(): string
     {
+        $zusatz = $this->sicherheitsSchwelle !== self::SICHERHEIT_STANDARD
+            ? sprintf(', Sicherheit ab %.2f', $this->sicherheitsSchwelle)
+            : '';
+
         $aus = array_keys(array_filter($this->alsFlags(), fn(bool $an) => !$an));
         if ($aus === []) {
-            return 'alle Regeln';
+            return 'alle Regeln' . $zusatz;
         }
 
         $an = array_keys(array_filter($this->alsFlags()));
@@ -115,9 +151,9 @@ final readonly class FortgeschritteneRegeln
             return 'keine Regeln';
         }
 
-        return count($aus) <= count($an)
+        return (count($aus) <= count($an)
             ? 'ohne ' . implode(', ', $aus)
-            : 'nur ' . implode(', ', $an);
+            : 'nur ' . implode(', ', $an)) . $zusatz;
     }
 
     /** @return array<string, bool> Regelname => an? */
