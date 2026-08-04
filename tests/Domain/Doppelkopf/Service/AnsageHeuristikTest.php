@@ -6,6 +6,7 @@ namespace App\Tests\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
+use App\Domain\Doppelkopf\Service\BlattBewertung;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
@@ -85,10 +86,40 @@ final class AnsageHeuristikTest extends TestCase
      */
     public function testContraBrauchtMehrAlsRe(): void
     {
-        $hand = $this->mittlereHand();
+        $hand       = $this->mittlereHand();
+        $trumpfzahl = AnsageSchwellen::nachTrumpfzahl();
 
-        self::assertSame(AnsageTyp::RE, $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::RE, $this->ordnung));
-        self::assertNull($this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung));
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $trumpfzahl),
+        );
+        self::assertNull(
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung, $trumpfzahl),
+        );
+    }
+
+    /** Dieselbe Asymmetrie gilt für die Blattbewertung in Augen (Default). */
+    public function testContraBrauchtMehrAlsReAuchNachAugen(): void
+    {
+        // Schwelle so gelegt, dass das Blatt genau dazwischen liegt.
+        $augen     = (new BlattBewertung())->augen($this->mittlereHand(), $this->ordnung);
+        $schwellen = (new AnsageSchwellen())->mitAugenSchwellen($augen - 1, $augen + 1);
+
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $this->mittlereHand(), Team::RE, $this->ordnung, $schwellen),
+        );
+        self::assertNull(
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $this->mittlereHand(), Team::KONTRA, $this->ordnung, $schwellen),
+        );
+    }
+
+    /** Ein schwaches Blatt reicht auch nach Augen nicht. */
+    public function testSchwachesBlattReichtAuchNachAugenNicht(): void
+    {
+        self::assertNull(
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung),
+        );
     }
 
     /**

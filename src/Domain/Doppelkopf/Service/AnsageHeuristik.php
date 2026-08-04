@@ -23,6 +23,10 @@ use App\Enum\Team;
  */
 final class AnsageHeuristik
 {
+    public function __construct(
+        private readonly BlattBewertung $blattBewertung = new BlattBewertung(),
+    ) {}
+
     /**
      * @param Karte[]      $hand         Aktuelle Handkarten
      * @param ?AnsageSchwellen $schwellen Mindeststärke je Partei (null = Standard)
@@ -73,7 +77,7 @@ final class AnsageHeuristik
         $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
 
         if (!in_array($grundansage, $teamAnsagen, true)) {
-            return $truempfe >= $schwellen->minTruempfe($team)
+            return $this->blattReicht($bewertungsHand ?? $hand, $truempfe, $team, $ordnung, $schwellen)
                 && $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer)
                     ? $grundansage
                     : null;
@@ -93,6 +97,30 @@ final class AnsageHeuristik
         }
 
         return null;
+    }
+
+    /**
+     * Ist das Blatt stark genug für die Erstansage?
+     *
+     * Wahlweise über die Trumpfzahl (grob, historisch) oder über eine Blattbewertung in
+     * Augen nach dem Essener System ({@see BlattBewertung}) – dort sind auch die Schwellen
+     * her (Re ab 75, Kontra ab 85 Augen).
+     *
+     * @param Karte[] $bewertungsHand
+     */
+    private function blattReicht(
+        array $bewertungsHand,
+        int $truempfe,
+        Team $team,
+        TrumpfOrdnung $ordnung,
+        AnsageSchwellen $schwellen,
+    ): bool {
+        $minAugen = $schwellen->minAugen($team);
+        if ($minAugen === null) {
+            return $truempfe >= $schwellen->minTruempfe($team);
+        }
+
+        return $this->blattBewertung->augen($bewertungsHand, $ordnung) >= $minAugen;
     }
 
     /**

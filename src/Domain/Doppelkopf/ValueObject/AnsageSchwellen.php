@@ -53,6 +53,27 @@ final readonly class AnsageSchwellen
      */
     public const NIE = 13;
 
+    /**
+     * Mindest-Blattstärke in Augen für die Erstansage ({@see \App\Domain\Doppelkopf\Service\BlattBewertung}).
+     *
+     * Das Essener System nennt Re ab 75, Kontra ab 85. Gemessen ist bei uns **lockerer
+     * besser** – gegen ANFAENGER, je 4540 Blätter, Mittel aus zwei Seeds:
+     *
+     *     Trumpfzahl 7/8 (alt)   +0,1614
+     *     Augen 62/72            +0,1803
+     *     Augen 65/75            +0,1842   ← gewählt
+     *     Augen 68/78            +0,1799
+     *     Augen 75/85            +0,1550   (die Werte des Systems)
+     *     Augen 85/95            +0,1245
+     *
+     * Der Abstand zu 75/85 erklärt sich aus der Bewertung selbst: sie liegt gegenüber der
+     * Vorlage rund 15 % zu hoch (Beispielblatt 2 des Originals: 52,5 dort, ~62 hier), weil
+     * die Quelle an der Erwartungswert-Tabelle beschädigt ist. Die Schwelle fängt das ab –
+     * gemessen statt geglaubt.
+     */
+    public const AUGEN_RE = 65.0;
+    public const AUGEN_CONTRA = 75.0;
+
     /** Die Absagen in ihrer Voraussetzungsreihenfolge – jede setzt die vorige voraus. */
     public const ABSAGE_KETTE = [
         AnsageTyp::KEINE_NEUN,
@@ -63,9 +84,9 @@ final readonly class AnsageSchwellen
 
     /**
      * @param array<string, int> $minTruempfeAbsage AnsageTyp-Wert → Mindest-Trümpfe
-     */
-    /**
-     * Bis zum letztmöglichen Zeitpunkt mit der Ansage warten, statt sie sofort zu machen?
+     *
+     * `$letztmoeglich`: bis zum letztmöglichen Zeitpunkt mit der Ansage warten, statt sie
+     * sofort zu machen?
      *
      * Das Essener System empfiehlt das Warten, weil jede frühe Ansage die Information des
      * laufenden Stichs verschenkt. **Gemessen bringt es bei uns nichts** (gegen ANFAENGER,
@@ -88,12 +109,42 @@ final readonly class AnsageSchwellen
         public int $minTruempfeContra = 8,
         public array $minTruempfeAbsage = [],
         public bool $letztmoeglich = true,
+        public ?float $minAugenRe = self::AUGEN_RE,
+        public ?float $minAugenContra = self::AUGEN_CONTRA,
     ) {}
+
+    /**
+     * Mindest-Blattstärke in Augen ({@see \App\Domain\Doppelkopf\Service\BlattBewertung}),
+     * oder null, solange nach der gröberen Trumpfzahl entschieden wird. Das Essener System
+     * nennt Re ab 75, Kontra ab 85.
+     */
+    public function minAugen(Team $team): ?float
+    {
+        return $team === Team::RE ? $this->minAugenRe : $this->minAugenContra;
+    }
+
+    public function mitAugenSchwellen(float $re, float $contra): self
+    {
+        return new self(
+            $this->minTruempfeRe,
+            $this->minTruempfeContra,
+            $this->minTruempfeAbsage,
+            $this->letztmoeglich,
+            $re,
+            $contra,
+        );
+    }
 
     /** Wie vor der Essener Auswertung: beide Parteien gleich behandelt, keine Absagen. */
     public static function gleich(int $minTruempfe = 7): self
     {
-        return new self($minTruempfe, $minTruempfe);
+        return self::nachTrumpfzahl($minTruempfe, $minTruempfe);
+    }
+
+    /** Ältere, gröbere Entscheidung allein über die Trumpfzahl – für Vergleichsmessungen. */
+    public static function nachTrumpfzahl(int $re = 7, int $contra = 8): self
+    {
+        return new self($re, $contra, [], true, null, null);
     }
 
     public function minTruempfe(Team $team): int
@@ -121,9 +172,10 @@ final readonly class AnsageSchwellen
     public function beschreibung(): string
     {
         $text = sprintf(
-            'Ansage ab %d/%d Trümpfen (Re/Contra), %s',
-            $this->minTruempfeRe,
-            $this->minTruempfeContra,
+            'Ansage ab %s (Re/Contra), %s',
+            $this->minAugenRe !== null
+                ? sprintf('%.0f/%.0f Augen', $this->minAugenRe, $this->minAugenContra ?? $this->minAugenRe)
+                : sprintf('%d/%d Trümpfen', $this->minTruempfeRe, $this->minTruempfeContra),
             $this->letztmoeglich ? 'letztmöglich' : 'frühestmöglich',
         );
         if (!$this->machtAbsagen()) {

@@ -77,6 +77,8 @@ final class BotTurnierCommand extends Command
             ->addOption('frueh-ansagen-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('restblatt-a', null, InputOption::VALUE_NONE, 'A bewertet für die Ansage das Restblatt statt der ausgeteilten Hand')
             ->addOption('restblatt-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('ansage-augen-a', null, InputOption::VALUE_REQUIRED, 'A entscheidet die Ansage über die Blattbewertung in Augen: "re,contra" (z. B. "75,85")')
+            ->addOption('ansage-augen-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -113,6 +115,7 @@ final class BotTurnierCommand extends Command
                 (string) $input->getOption('regeln-a'),
                 $input->getOption('sicherheit-a'),
                 $input->getOption('ansage-truempfe-a'),
+                $input->getOption('ansage-augen-a'),
                 $input->getOption('absage-truempfe-a'),
                 !$input->getOption('frueh-ansagen-a'),
                 !$input->getOption('restblatt-a'),
@@ -125,6 +128,7 @@ final class BotTurnierCommand extends Command
                 (string) $input->getOption('regeln-b'),
                 $input->getOption('sicherheit-b'),
                 $input->getOption('ansage-truempfe-b'),
+                $input->getOption('ansage-augen-b'),
                 $input->getOption('absage-truempfe-b'),
                 !$input->getOption('frueh-ansagen-b'),
                 !$input->getOption('restblatt-b'),
@@ -223,6 +227,7 @@ final class BotTurnierCommand extends Command
         string $regelListe,
         ?string $sicherheit,
         ?string $ansageTruempfe,
+        ?string $ansageAugen,
         ?string $absageTruempfe,
         bool $letztmoeglich,
         bool $bewerteStarthand,
@@ -261,7 +266,17 @@ final class BotTurnierCommand extends Command
                 $absagen[$typ->value] = $werte[$i];
             }
         }
-        $schwellen = new AnsageSchwellen($re, $contra, $absagen, $letztmoeglich);
+        // Explizite Trumpfzahl-Vorgabe heißt: nach Trumpfzahl entscheiden (alter Stand).
+        $schwellen = $ansageTruempfe !== null && $ansageTruempfe !== ''
+            ? new AnsageSchwellen($re, $contra, $absagen, $letztmoeglich, null, null)
+            : new AnsageSchwellen($re, $contra, $absagen, $letztmoeglich);
+        if ($ansageAugen !== null && $ansageAugen !== '') {
+            $werte = array_map('floatval', array_map('trim', explode(',', $ansageAugen)));
+            if (count($werte) !== 2) {
+                throw new \InvalidArgumentException('Ansage-Augen erwarten zwei Werte: "re,contra".');
+            }
+            $schwellen = $schwellen->mitAugenSchwellen($werte[0], $werte[1]);
+        }
 
         return new EngineStrategie(
             $staerke,
