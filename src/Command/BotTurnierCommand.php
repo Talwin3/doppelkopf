@@ -71,6 +71,8 @@ final class BotTurnierCommand extends Command
             ->addOption('sicherheit-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('ansage-truempfe-a', null, InputOption::VALUE_REQUIRED, 'Mindest-Trümpfe für A als "re,contra" (z. B. "7,8")')
             ->addOption('ansage-truempfe-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
+            ->addOption('absage-truempfe-a', null, InputOption::VALUE_REQUIRED, 'Mindest-Trümpfe für A je Absage als "90,60,30,schwarz" (z. B. "10,11,12,13"); ohne Angabe keine Absagen')
+            ->addOption('absage-truempfe-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -107,6 +109,7 @@ final class BotTurnierCommand extends Command
                 (string) $input->getOption('regeln-a'),
                 $input->getOption('sicherheit-a'),
                 $input->getOption('ansage-truempfe-a'),
+                $input->getOption('absage-truempfe-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -116,6 +119,7 @@ final class BotTurnierCommand extends Command
                 (string) $input->getOption('regeln-b'),
                 $input->getOption('sicherheit-b'),
                 $input->getOption('ansage-truempfe-b'),
+                $input->getOption('absage-truempfe-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -211,6 +215,7 @@ final class BotTurnierCommand extends Command
         string $regelListe,
         ?string $sicherheit,
         ?string $ansageTruempfe,
+        ?string $absageTruempfe,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -224,14 +229,29 @@ final class BotTurnierCommand extends Command
             $regeln = $regeln->mitSicherheitsSchwelle((float) $sicherheit);
         }
 
-        $schwellen = null;
+        $re      = 7;
+        $contra  = 8;
+        $absagen = [];
         if ($ansageTruempfe !== null && $ansageTruempfe !== '') {
             $werte = array_map('intval', array_map('trim', explode(',', $ansageTruempfe)));
             if (count($werte) !== 2) {
                 throw new \InvalidArgumentException('Ansage-Trümpfe erwarten zwei Werte: "re,contra".');
             }
-            $schwellen = new AnsageSchwellen($werte[0], $werte[1]);
+            [$re, $contra] = $werte;
         }
+        if ($absageTruempfe !== null && $absageTruempfe !== '') {
+            $werte = array_map('intval', array_map('trim', explode(',', $absageTruempfe)));
+            if (count($werte) !== count(AnsageSchwellen::ABSAGE_KETTE)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Absage-Trümpfe erwarten %d Werte (keine 90, 60, 30, schwarz).',
+                    count(AnsageSchwellen::ABSAGE_KETTE),
+                ));
+            }
+            foreach (AnsageSchwellen::ABSAGE_KETTE as $i => $typ) {
+                $absagen[$typ->value] = $werte[$i];
+            }
+        }
+        $schwellen = new AnsageSchwellen($re, $contra, $absagen);
 
         return new EngineStrategie(
             $staerke,

@@ -116,6 +116,30 @@ final class EngineStrategie implements SimulierteStrategie
             $partie->eigenesTeam($sitzplatz),
             $partie->ordnung(),
             $this->ansageSchwellen,
+            $this->teamAnsagen($partie, $sitzplatz),
         );
+    }
+
+    /**
+     * Was das eigene Team bereits angesagt hat – die Absagen bauen aufeinander auf.
+     *
+     * @return AnsageTyp[]
+     */
+    private function teamAnsagen(Partie $partie, int $sitzplatz): array
+    {
+        $team = $partie->eigenesTeam($sitzplatz);
+        if ($team === null) {
+            return [];
+        }
+
+        $teams   = $partie->teamProSitzplatz();
+        $ansagen = [];
+        foreach ($partie->ansagen() as $ansage) {
+            if (($teams[$ansage['sitzplatz']] ?? null) === $team) {
+                $ansagen[] = $ansage['typ'];
+            }
+        }
+
+        return $ansagen;
     }
 }

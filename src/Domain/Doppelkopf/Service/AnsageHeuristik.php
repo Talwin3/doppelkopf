@@ -24,9 +24,10 @@ use App\Enum\Team;
 final class AnsageHeuristik
 {
     /**
-     * @param Karte[] $hand Aktuelle Handkarten
+     * @param Karte[]      $hand         Aktuelle Handkarten
      * @param ?AnsageSchwellen $schwellen Mindeststärke je Partei (null = Standard)
-     * @return ?AnsageTyp RE/CONTRA, oder null wenn (noch) nicht ansagen
+     * @param AnsageTyp[]  $teamAnsagen  Was das eigene Team bereits angesagt hat
+     * @return ?AnsageTyp Nächste sinnvolle Ansage, oder null
      */
     public function willAnsagen(
         BotStaerke $staerke,
@@ -34,6 +35,7 @@ final class AnsageHeuristik
         ?Team $team,
         TrumpfOrdnung $ordnung,
         ?AnsageSchwellen $schwellen = null,
+        array $teamAnsagen = [],
     ): ?AnsageTyp {
         if ($staerke === BotStaerke::ANFAENGER || $team === null) {
             return null;
@@ -56,12 +58,27 @@ final class AnsageHeuristik
             }
         }
 
-        // Starke Hand: genügend Trümpfe und hohe Trümpfe (Kreuz-Dame oder mehrere Damen).
-        $stark = $truempfe >= $schwellen->minTruempfe($team) && ($kreuzDamen >= 1 || $damen >= 2);
-        if (!$stark) {
+        // Hohe Trümpfe sind Voraussetzung für jede Ansage.
+        if ($kreuzDamen < 1 && $damen < 2) {
             return null;
         }
 
-        return $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
+        $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
+
+        if (!in_array($grundansage, $teamAnsagen, true)) {
+            return $truempfe >= $schwellen->minTruempfe($team) ? $grundansage : null;
+        }
+
+        // Grundansage steht – die Absagen der Reihe nach anbieten. Jede setzt die vorige
+        // voraus, deshalb zählt nur die erste noch offene Stufe.
+        foreach (AnsageSchwellen::ABSAGE_KETTE as $absage) {
+            if (in_array($absage, $teamAnsagen, true)) {
+                continue;
+            }
+
+            return $truempfe >= $schwellen->minTruempfeFuerAbsage($absage) ? $absage : null;
+        }
+
+        return null;
     }
 }

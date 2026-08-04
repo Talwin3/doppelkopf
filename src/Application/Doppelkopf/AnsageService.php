@@ -166,16 +166,19 @@ final class AnsageService
     }
 
     /**
-     * Bot-Variante für Re/Contra: prüft die Regeln (Team, Timing, Dopplung) und macht
+     * Bot-Variante: prüft dieselben Regeln wie {@see self::machen()} (Team, Klärungsstich,
+     * Timing inkl. Hochzeits-Nachlass, Dopplung, Voraussetzungskette der Absagen) und macht
      * die Ansage, sofern zulässig. Gibt true zurück, wenn angesagt wurde.
+     *
+     * Anders als {@see self::machen()} wird nicht geworfen – der Bot fragt spekulativ an.
      */
     public function machenAlsBot(Spiel $spiel, int $sitzplatz, AnsageTyp $typ): bool
     {
         if ($spiel->getStatus() !== SpielStatus::LAUFEND) {
             return false;
         }
-        if ($typ !== AnsageTyp::RE && $typ !== AnsageTyp::CONTRA) {
-            return false; // Bots machen aktuell nur Re/Contra
+        if (!isset(self::TIMING[$typ->value])) {
+            return false; // HOCHZEIT/SOLO sind keine Ansagen im Wertungssinn
         }
 
         $teilnehmer = $spiel->getTeilnehmerBySitzplatz($sitzplatz);
@@ -195,10 +198,30 @@ final class AnsageService
             return false;
         }
 
+        // Bei angemeldeter Hochzeit ist vor dem Klärungsstich gar nichts möglich (TSR 6.4.2).
+        if ($this->wartetAufKlaerungsstich($spiel)) {
+            return false;
+        }
+
         $gespielteIds     = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $sitzplatz);
         $verbleibenKarten = count($teilnehmer->getStartkartenIds()) - count($gespielteIds);
-        if ($verbleibenKarten < (self::TIMING[$typ->value] ?? 0)) {
+        if ($verbleibenKarten < $this->mindestKarten($spiel, $typ)) {
             return false; // zu spät
+        }
+
+        // Absagen setzen die Ansage der Vorstufe durch das eigene Team voraus.
+        if (isset(self::VORAUSSETZUNG[$typ->value])) {
+            $teamSitzplaetze = $this->teamSitzplaetze($spiel, $team);
+            $erfuellt        = false;
+            foreach (self::VORAUSSETZUNG[$typ->value] as $vorWert) {
+                if ($this->ansageRepo->teamHatAngesagt($spiel, $teamSitzplaetze, AnsageTyp::from($vorWert))) {
+                    $erfuellt = true;
+                    break;
+                }
+            }
+            if (!$erfuellt) {
+                return false;
+            }
         }
 
         $ansage = new SpielAnsage();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Doppelkopf\ValueObject;
 
+use App\Enum\AnsageTyp;
 use App\Enum\Team;
 
 /**
@@ -33,12 +34,43 @@ use App\Enum\Team;
  */
 final readonly class AnsageSchwellen
 {
+    /**
+     * Unerreichbare Schwelle – ein Blatt hat höchstens 12 Karten.
+     *
+     * **Die Absagen sind damit bewusst abgeschaltet.** Die Mechanik steht (Heuristik,
+     * Voraussetzungskette, Produktivpfad), aber die Trumpfzahl taugt nicht als Auslöser.
+     * Gemessen gegen dieselbe Engine ohne Absagen, je 6140 Blätter:
+     *
+     *     keine 90 ab  9 Trümpfen   −0,1056   −0,1249 … −0,0863
+     *     keine 90 ab 10 Trümpfen   −0,0112   −0,0179 … −0,0046
+     *     keine 90 ab 11 Trümpfen   −0,0020   −0,0042 … +0,0003
+     *     keine 90 ab 12 Trümpfen   ±0,0000   (feuert nie)
+     *
+     * Je häufiger die Absage fällt, desto teurer – ein Optimum gibt es nur bei „nie".
+     * Das deckt sich mit dem Essener System: „keine 90" verlangt 88,89 % Sicherheit, und
+     * neun Trümpfe sagen darüber schlicht nichts. Sinnvoll wird die Absage erst mit einer
+     * echten Schätzung von P(Gegner unter 90) aus Rollouts.
+     */
+    public const NIE = 13;
+
+    /** Die Absagen in ihrer Voraussetzungsreihenfolge – jede setzt die vorige voraus. */
+    public const ABSAGE_KETTE = [
+        AnsageTyp::KEINE_NEUN,
+        AnsageTyp::KEINE_SECHS,
+        AnsageTyp::KEINE_DREI,
+        AnsageTyp::SCHWARZ,
+    ];
+
+    /**
+     * @param array<string, int> $minTruempfeAbsage AnsageTyp-Wert → Mindest-Trümpfe
+     */
     public function __construct(
         public int $minTruempfeRe = 7,
         public int $minTruempfeContra = 8,
+        public array $minTruempfeAbsage = [],
     ) {}
 
-    /** Wie vor der Essener Auswertung: beide Parteien gleich behandelt. */
+    /** Wie vor der Essener Auswertung: beide Parteien gleich behandelt, keine Absagen. */
     public static function gleich(int $minTruempfe = 7): self
     {
         return new self($minTruempfe, $minTruempfe);
@@ -49,8 +81,36 @@ final readonly class AnsageSchwellen
         return $team === Team::RE ? $this->minTruempfeRe : $this->minTruempfeContra;
     }
 
+    /** Mindest-Trümpfe für eine Absage; {@see self::NIE}, wenn nicht konfiguriert. */
+    public function minTruempfeFuerAbsage(AnsageTyp $typ): int
+    {
+        return $this->minTruempfeAbsage[$typ->value] ?? self::NIE;
+    }
+
+    public function machtAbsagen(): bool
+    {
+        foreach ($this->minTruempfeAbsage as $min) {
+            if ($min < self::NIE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function beschreibung(): string
     {
-        return sprintf('Ansage ab %d/%d Trümpfen (Re/Contra)', $this->minTruempfeRe, $this->minTruempfeContra);
+        $text = sprintf('Ansage ab %d/%d Trümpfen (Re/Contra)', $this->minTruempfeRe, $this->minTruempfeContra);
+        if (!$this->machtAbsagen()) {
+            return $text . ', ohne Absagen';
+        }
+
+        $teile = [];
+        foreach (self::ABSAGE_KETTE as $typ) {
+            $min = $this->minTruempfeFuerAbsage($typ);
+            $teile[] = sprintf('%s ab %s', $typ->label(), $min >= self::NIE ? 'nie' : (string) $min);
+        }
+
+        return $text . ', ' . implode(', ', $teile);
     }
 }

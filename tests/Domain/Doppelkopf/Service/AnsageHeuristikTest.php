@@ -91,6 +91,57 @@ final class AnsageHeuristikTest extends TestCase
         self::assertNull($this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung));
     }
 
+    public function testOhneKonfigurierteSchwelleKeineAbsage(): void
+    {
+        // Selbst mit Traumblatt und stehendem "Re": Absagen sind per Default abgeschaltet.
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI,
+            $this->starkeHand(),
+            Team::RE,
+            $this->ordnung,
+            null,
+            [AnsageTyp::RE],
+        ));
+    }
+
+    public function testAbsagenFolgenDerKette(): void
+    {
+        $schwellen = new AnsageSchwellen(7, 8, [
+            AnsageTyp::KEINE_NEUN->value  => 8,
+            AnsageTyp::KEINE_SECHS->value => 8,
+        ]);
+        $hand = $this->starkeHand(); // 8 Trümpfe
+
+        // Ohne "Re" kommt zuerst die Grundansage.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, []),
+        );
+
+        // Mit "Re" die erste offene Absagestufe …
+        self::assertSame(
+            AnsageTyp::KEINE_NEUN,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, [AnsageTyp::RE]),
+        );
+
+        // … dann die nächste …
+        self::assertSame(
+            AnsageTyp::KEINE_SECHS,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen,
+                [AnsageTyp::RE, AnsageTyp::KEINE_NEUN],
+            ),
+        );
+
+        // … und Schluss, weil "keine 30" keine Schwelle hat.
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen,
+                [AnsageTyp::RE, AnsageTyp::KEINE_NEUN, AnsageTyp::KEINE_SECHS],
+            ),
+        );
+    }
+
     public function testGleicheSchwellenStellenDasAlteVerhaltenHer(): void
     {
         $hand = $this->mittlereHand();

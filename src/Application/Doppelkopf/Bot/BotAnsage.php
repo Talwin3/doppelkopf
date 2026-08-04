@@ -8,13 +8,16 @@ use App\Application\Doppelkopf\AnsageService;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Entity\Spiel;
+use App\Entity\SpielAnsage;
 use App\Entity\SpielTeilnehmer;
+use App\Enum\AnsageTyp;
 use App\Repository\GespielteKarteRepository;
+use App\Repository\SpielAnsageRepository;
 use Psr\Log\LoggerInterface;
 
 /**
- * Prüft vor dem Zug eines Bots, ob er "Re"/"Contra" ansagen sollte, und macht die
- * Ansage regelkonform. Kapselt die Entscheidung ({@see AnsageHeuristik}) und den
+ * Prüft vor dem Zug eines Bots, ob er ansagen sollte (Re/Contra und darauf aufbauend die
+ * Absagen), und macht die Ansage regelkonform. Kapselt die Entscheidung ({@see AnsageHeuristik}) und den
  * Aufruf des {@see AnsageService}, damit der {@see \App\Application\Doppelkopf\BotZugService}
  * schlank bleibt.
  */
@@ -25,6 +28,7 @@ final class BotAnsage
         private readonly AnsageService $ansageService,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
+        private readonly SpielAnsageRepository $ansageRepo,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -38,7 +42,14 @@ final class BotAnsage
         $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
         $hand = $teilnehmer->aktuelleHand($gespielteIds);
 
-        $typ = $this->ansageHeuristik->willAnsagen($teilnehmer->getBotStaerke(), $hand, $teilnehmer->getTeam(), $ordnung);
+        $typ = $this->ansageHeuristik->willAnsagen(
+            $teilnehmer->getBotStaerke(),
+            $hand,
+            $teilnehmer->getTeam(),
+            $ordnung,
+            null,
+            $this->teamAnsagen($spiel, $teilnehmer),
+        );
         if ($typ === null) {
             return;
         }
@@ -53,5 +64,30 @@ final class BotAnsage
                 'fehler'    => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Was das eigene Team bereits angesagt hat – die Absagen bauen aufeinander auf, der
+     * Bot muss also wissen, auf welcher Stufe sein Team steht.
+     *
+     * @return AnsageTyp[]
+     */
+    private function teamAnsagen(Spiel $spiel, SpielTeilnehmer $teilnehmer): array
+    {
+        $sitzplaetze = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if ($t->getTeam() === $teilnehmer->getTeam()) {
+                $sitzplaetze[] = $t->getSitzplatz();
+            }
+        }
+
+        if ($sitzplaetze === []) {
+            return [];
+        }
+
+        return array_map(
+            fn(SpielAnsage $a) => $a->getAnsageTyp(),
+            $this->ansageRepo->findFuerTeam($spiel, $sitzplaetze),
+        );
     }
 }

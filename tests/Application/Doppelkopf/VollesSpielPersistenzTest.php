@@ -249,13 +249,34 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         self::assertNotNull($reSitz, 'Es sollte einen RE-Spieler geben');
 
         $ansageService = static::getContainer()->get(\App\Application\Doppelkopf\AnsageService::class);
-        self::assertTrue($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+        $ansageRepo    = static::getContainer()->get(\App\Repository\SpielAnsageRepository::class);
 
-        $ansageRepo = static::getContainer()->get(\App\Repository\SpielAnsageRepository::class);
+        // Bei einer angemeldeten Hochzeit ist vor dem Klärungsstich gar keine Ansage
+        // erlaubt (TSR 6.4.2) – auch nicht für Bots. Die Karten werden zufällig verteilt,
+        // beide Fälle müssen also abgedeckt sein.
+        $vorKlaerung = $spiel->getVariante() === \App\Enum\SpielVariante::HOCHZEIT
+            && $spiel->getHochzeitKlaerungsStichNr() === null;
+
+        if ($vorKlaerung) {
+            self::assertFalse(
+                $ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE),
+                'Vor dem Klärungsstich einer Hochzeit darf auch ein Bot nicht ansagen.',
+            );
+            self::assertFalse($ansageRepo->hatBereitsAngesagt($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+
+            return;
+        }
+
+        self::assertTrue($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
         self::assertTrue($ansageRepo->hatBereitsAngesagt($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
 
         // Nicht zweimal dieselbe Ansage.
         self::assertFalse($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::RE));
+
+        // "keine 90" setzt "Re" voraus – das steht jetzt, also greift die Kette.
+        self::assertTrue($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::KEINE_NEUN));
+        // "keine 30" ohne vorheriges "keine 60" bleibt gesperrt.
+        self::assertFalse($ansageService->machenAlsBot($spiel, $reSitz, \App\Enum\AnsageTyp::KEINE_DREI));
 
         self::assertNotNull($spielId);
     }
