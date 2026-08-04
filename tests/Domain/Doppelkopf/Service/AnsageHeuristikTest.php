@@ -6,6 +6,7 @@ namespace App\Tests\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
+use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
 use App\Enum\BotStaerke;
@@ -38,6 +39,16 @@ final class AnsageHeuristikTest extends TestCase
         ]);
     }
 
+    /** Genau 7 Trümpfe inkl. Kreuz-Dame – reicht für Re, nicht für Contra. */
+    private function mittlereHand(): array
+    {
+        return $this->karten([
+            'KREUZ_DAME_1', 'PIK_DAME_1', 'HERZ_DAME_1', 'KARO_DAME_1',
+            'KREUZ_BUBE_1', 'PIK_BUBE_1', 'KARO_ASS_1',
+            'KREUZ_ASS_1', 'PIK_ASS_1',
+        ]);
+    }
+
     private function schwacheHand(): array
     {
         return $this->karten(['KREUZ_ASS_1', 'PIK_ASS_1', 'HERZ_ASS_1', 'KREUZ_KOENIG_1', 'PIK_KOENIG_1']);
@@ -66,5 +77,27 @@ final class AnsageHeuristikTest extends TestCase
     public function testSchwacheHandKeineAnsage(): void
     {
         self::assertNull($this->heuristik->willAnsagen(BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung));
+    }
+
+    /**
+     * Kern der Essener Asymmetrie: dasselbe Blatt reicht für Re, aber nicht für Contra.
+     * KONTRA steht strukturell schwächer und braucht deshalb mehr.
+     */
+    public function testContraBrauchtMehrAlsRe(): void
+    {
+        $hand = $this->mittlereHand();
+
+        self::assertSame(AnsageTyp::RE, $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::RE, $this->ordnung));
+        self::assertNull($this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung));
+    }
+
+    public function testGleicheSchwellenStellenDasAlteVerhaltenHer(): void
+    {
+        $hand = $this->mittlereHand();
+
+        self::assertSame(
+            AnsageTyp::CONTRA,
+            $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung, AnsageSchwellen::gleich(7)),
+        );
     }
 }

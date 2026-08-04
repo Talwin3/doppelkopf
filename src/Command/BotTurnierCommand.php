@@ -11,6 +11,7 @@ use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Simulation\EngineStrategie;
 use App\Domain\Doppelkopf\Simulation\SimulierteStrategie;
 use App\Domain\Doppelkopf\Simulation\TurnierLauf;
+use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Enum\BotStaerke;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -68,6 +69,8 @@ final class BotTurnierCommand extends Command
             ->addOption('regeln-b', null, InputOption::VALUE_REQUIRED, 'Aktive FORTGESCHRITTEN-Regeln für B', 'alle')
             ->addOption('sicherheit-a', null, InputOption::VALUE_REQUIRED, 'A hält einen Stich ab dieser Wahrscheinlichkeit für sicher (1 = nur bei Gewissheit)')
             ->addOption('sicherheit-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
+            ->addOption('ansage-truempfe-a', null, InputOption::VALUE_REQUIRED, 'Mindest-Trümpfe für A als "re,contra" (z. B. "7,8")')
+            ->addOption('ansage-truempfe-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -103,6 +106,7 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('ohne-ansagen-a'),
                 (string) $input->getOption('regeln-a'),
                 $input->getOption('sicherheit-a'),
+                $input->getOption('ansage-truempfe-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -111,6 +115,7 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('ohne-ansagen-b'),
                 (string) $input->getOption('regeln-b'),
                 $input->getOption('sicherheit-b'),
+                $input->getOption('ansage-truempfe-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -205,6 +210,7 @@ final class BotTurnierCommand extends Command
         bool $ansagenAktiv,
         string $regelListe,
         ?string $sicherheit,
+        ?string $ansageTruempfe,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -218,6 +224,15 @@ final class BotTurnierCommand extends Command
             $regeln = $regeln->mitSicherheitsSchwelle((float) $sicherheit);
         }
 
+        $schwellen = null;
+        if ($ansageTruempfe !== null && $ansageTruempfe !== '') {
+            $werte = array_map('intval', array_map('trim', explode(',', $ansageTruempfe)));
+            if (count($werte) !== 2) {
+                throw new \InvalidArgumentException('Ansage-Trümpfe erwarten zwei Werte: "re,contra".');
+            }
+            $schwellen = new AnsageSchwellen($werte[0], $werte[1]);
+        }
+
         return new EngineStrategie(
             $staerke,
             $this->anfaenger,
@@ -228,6 +243,7 @@ final class BotTurnierCommand extends Command
             max(0.001, $zeitbudget),
             $ansagenAktiv,
             $regeln,
+            $schwellen,
         );
     }
 }
