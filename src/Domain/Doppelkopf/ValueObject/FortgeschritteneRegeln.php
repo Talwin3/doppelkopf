@@ -15,6 +15,9 @@ namespace App\Domain\Doppelkopf\ValueObject;
  * Zweck: Der Self-Play-Benchmark hat gezeigt, dass FORTGESCHRITTEN die Karten **schlechter**
  * spielt als ANFAENGER (−0,24 Punkte je Partie). Welche der Regeln das verursacht, lässt
  * sich nur messen, wenn man sie einzeln abschalten kann (`app:bot:turnier --regeln-a=…`).
+ *
+ * Zwei Regeln sind so bereits als schädlich überführt und **entfernt** worden:
+ * `nur-unschlagbar` (kostete 0,159 Punkte je Partie) und `trumpf-ziehen` (0,025).
  */
 final readonly class FortgeschritteneRegeln
 {
@@ -22,21 +25,17 @@ final readonly class FortgeschritteneRegeln
     public const BESCHREIBUNGEN = [
         'sichere-stiche'      => 'Anspielen: sichere Fehlfarbe mit Augen kassieren',
         'ass-nur-sicher'      => 'Anspielen: Fehlfarben-Ass nur, wenn kein Gegner in der Farbe frei ist',
-        'trumpf-ziehen'       => 'Anspielen: höchsten Trumpf ziehen, solange Gegner Trumpf haben',
         'sicheres-abwerfen'   => 'Anspielen: beim Abwerfen Farben meiden, in denen ein Gegner frei ist',
         'schmier-sicherheit'  => 'Partner führt: auch vor dem letzten Platz schmieren, wenn der Stich unschlagbar ist',
         'stich-lohnt-sich'    => 'Gegner führt, letzter Platz: nur stechen, wenn der Stich Augen bringt',
-        'nur-unschlagbar'     => 'Gegner führt, nicht letzter Platz: nur mit unüberbietbarer Karte stechen',
     ];
 
     public function __construct(
         public bool $sichereStiche = true,
         public bool $assNurSicher = true,
-        public bool $trumpfZiehen = true,
         public bool $sicheresAbwerfen = true,
         public bool $schmierSicherheit = true,
         public bool $stichLohntSich = true,
-        public bool $nurUnschlagbar = true,
     ) {}
 
     /** Alle Regeln an (Produktivverhalten der Stufe FORTGESCHRITTEN). */
@@ -48,7 +47,7 @@ final readonly class FortgeschritteneRegeln
     /** Keine Regel an — verhält sich exakt wie die Anfänger-Heuristik. */
     public static function keine(): self
     {
-        return new self(false, false, false, false, false, false, false);
+        return new self(false, false, false, false, false);
     }
 
     /** Nur die genannten Regeln an. */
@@ -75,8 +74,8 @@ final readonly class FortgeschritteneRegeln
 
     /**
      * Kommandozeilen-Schreibweise:
-     *   `alle` · `keine` · `sichere-stiche,trumpf-ziehen` (nur diese)
-     *   · `-trumpf-ziehen,-nur-unschlagbar` (alle außer diesen).
+     *   `alle` · `keine` · `sichere-stiche,stich-lohnt-sich` (nur diese)
+     *   · `-sichere-stiche,-ass-nur-sicher` (alle außer diesen).
      * Mischen von An- und Abwahl ist nicht erlaubt.
      */
     public static function ausListe(string $liste): self
@@ -103,7 +102,7 @@ final readonly class FortgeschritteneRegeln
             : self::nur(...$teile);
     }
 
-    /** Kurzform für die Benchmark-Ausgabe, z. B. „ohne trumpf-ziehen“. */
+    /** Kurzform für die Benchmark-Ausgabe, z. B. „ohne sichere-stiche“. */
     public function beschreibung(): string
     {
         $aus = array_keys(array_filter($this->alsFlags(), fn(bool $an) => !$an));
@@ -127,11 +126,9 @@ final readonly class FortgeschritteneRegeln
         return [
             'sichere-stiche'     => $this->sichereStiche,
             'ass-nur-sicher'     => $this->assNurSicher,
-            'trumpf-ziehen'      => $this->trumpfZiehen,
             'sicheres-abwerfen'  => $this->sicheresAbwerfen,
             'schmier-sicherheit' => $this->schmierSicherheit,
             'stich-lohnt-sich'   => $this->stichLohntSich,
-            'nur-unschlagbar'    => $this->nurUnschlagbar,
         ];
     }
 
@@ -141,11 +138,9 @@ final readonly class FortgeschritteneRegeln
         return new self(
             $flags['sichere-stiche'],
             $flags['ass-nur-sicher'],
-            $flags['trumpf-ziehen'],
             $flags['sicheres-abwerfen'],
             $flags['schmier-sicherheit'],
             $flags['stich-lohnt-sich'],
-            $flags['nur-unschlagbar'],
         );
     }
 

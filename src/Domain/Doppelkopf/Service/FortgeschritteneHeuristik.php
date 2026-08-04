@@ -17,11 +17,16 @@ use App\Enum\Team;
  * welche Karten noch im Spiel sind und welche Gegner in welcher Farbe frei sind:
  *  - **Anspielen:** sichere Stiche kassieren (Karte, die niemand mehr überbieten kann);
  *    Fehlfarben-Ass nur, wenn kein Gegner in der Farbe frei ist (sonst wird es gestochen);
- *    hohen Trumpf ziehen, wenn man den höchsten hält.
+ *    beim Abwerfen Farben meiden, in denen ein Gegner frei ist.
  *  - **Partner führt:** nur schmieren, wenn der Stich sicher ist (letzter Spieler oder
  *    unschlagbare Karte), sonst sparsam.
- *  - **Gegner führt:** nur überstechen, wenn es sich lohnt und nicht selbst überstochen
- *    werden kann; sonst augenarm abwerfen.
+ *  - **Gegner führt:** am letzten Platz nur überstechen, wenn es sich lohnt; sonst
+ *    augenarm abwerfen.
+ *
+ * Welche dieser Regeln aktiv sind, steuert {@see FortgeschritteneRegeln} – so lässt sich
+ * jede einzeln im Self-Play-Benchmark vermessen. Zwei Regeln wurden dabei als schädlich
+ * überführt und entfernt: „nur mit unüberbietbarer Karte stechen" (kostete 0,159 Punkte je
+ * Partie) und „höchsten Trumpf ziehen" (0,025).
  *
  * Reine Logik ohne Datenbankzugriff; das Sammeln des Verlaufs übernimmt
  * {@see \App\Application\Doppelkopf\Bot\FortgeschritteneStrategie}.
@@ -95,20 +100,7 @@ final class FortgeschritteneHeuristik
             }
         }
 
-        // 3. Höchsten Trumpf ziehen, wenn er sicher ist und Gegner noch Trumpf haben.
-        if ($regeln->trumpfZiehen) {
-            $truempfe = array_values(array_filter($erlaubte, fn(Karte $k) => $ordnung->istTrumpf($k)));
-            if (count($truempfe) >= 2) {
-                $hoechster = $this->hoechsterTrumpf($truempfe, $ordnung);
-                if ($this->istHoechsterTrumpfImSpiel($hoechster, $ordnung, $gedaechtnis)
-                    && $this->gegnerHabenTrumpf($ordnung, $gedaechtnis)
-                ) {
-                    return $hoechster;
-                }
-            }
-        }
-
-        // 4. Niedrige Fehlfarbe abwerfen – mit Regel bevorzugt in einer Farbe, in der kein
+        // 3. Niedrige Fehlfarbe abwerfen – mit Regel bevorzugt in einer Farbe, in der kein
         //    Gegner frei ist.
         if ($fehlfarben !== []) {
             $auswahl = $fehlfarben;
@@ -123,7 +115,7 @@ final class FortgeschritteneHeuristik
             return $this->niedrigsteAugen($auswahl, $ordnung);
         }
 
-        // 5. Nur noch Trumpf – niedrigsten spielen.
+        // 4. Nur noch Trumpf – niedrigsten spielen.
         return $this->niedrigsterTrumpf($erlaubte, $ordnung);
     }
 
@@ -178,19 +170,10 @@ final class FortgeschritteneHeuristik
                     return $this->billigsteSchlagende($schlagende, $ordnung);
                 }
             } elseif ($stichAugen >= self::STECH_SCHWELLE) {
-                // Nicht letzter: mit Regel nur mit einer Karte stechen, die selbst nicht mehr
-                // überboten werden kann (sonst verpufft der hohe Trumpf).
-                if (!$regeln->nurUnschlagbar) {
-                    return $this->billigsteSchlagende($schlagende, $ordnung);
-                }
-
-                $unschlagbar = array_values(array_filter(
-                    $schlagende,
-                    fn(Karte $k) => !$this->kannUeberbotenWerden($k, $angespielt, $ordnung, $gedaechtnis),
-                ));
-                if ($unschlagbar !== []) {
-                    return $this->billigsteSchlagende($unschlagbar, $ordnung);
-                }
+                // Nicht letzter: billig stechen, sobald genug Augen im Stich liegen. Hier
+                // stand einmal die Regel, nur mit einer selbst unüberbietbaren Karte zu
+                // stechen – sie hat den Bot 0,159 Punkte je Partie gekostet und ist entfernt.
+                return $this->billigsteSchlagende($schlagende, $ordnung);
             }
         }
 
@@ -263,30 +246,6 @@ final class FortgeschritteneHeuristik
     {
         foreach ($g->ungesehene() as $u) {
             if ($this->schlaegt($u, $karte, $angespielt, $ordnung)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** Ist dieser Trumpf der höchste noch im Spiel befindliche (kein ungesehener Trumpf höher)? */
-    private function istHoechsterTrumpfImSpiel(Karte $trumpf, TrumpfOrdnung $ordnung, SpielGedaechtnis $g): bool
-    {
-        foreach ($g->ungesehene() as $u) {
-            if ($ordnung->istTrumpf($u) && $ordnung->trumpfRang($u) > $ordnung->trumpfRang($trumpf)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /** Halten die Gegner/andere Spieler überhaupt noch Trumpf? */
-    private function gegnerHabenTrumpf(TrumpfOrdnung $ordnung, SpielGedaechtnis $g): bool
-    {
-        foreach ($g->ungesehene() as $u) {
-            if ($ordnung->istTrumpf($u)) {
                 return true;
             }
         }
@@ -380,10 +339,4 @@ final class FortgeschritteneHeuristik
         return $karten[0];
     }
 
-    private function hoechsterTrumpf(array $karten, TrumpfOrdnung $ordnung): Karte
-    {
-        usort($karten, fn(Karte $a, Karte $b) => $ordnung->trumpfRang($b) <=> $ordnung->trumpfRang($a));
-
-        return $karten[0];
-    }
 }

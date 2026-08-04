@@ -135,22 +135,22 @@ final class FortgeschritteneRegelnTest extends TestCase
 
     public function testListeWaehltAusUndAb(): void
     {
-        $nur = FortgeschritteneRegeln::ausListe('trumpf-ziehen, sichere-stiche');
-        self::assertTrue($nur->trumpfZiehen);
+        $nur = FortgeschritteneRegeln::ausListe('stich-lohnt-sich, sichere-stiche');
+        self::assertTrue($nur->stichLohntSich);
         self::assertTrue($nur->sichereStiche);
         self::assertFalse($nur->assNurSicher);
-        self::assertSame('nur sichere-stiche, trumpf-ziehen', $nur->beschreibung());
+        self::assertSame('nur sichere-stiche, stich-lohnt-sich', $nur->beschreibung());
 
-        $ohne = FortgeschritteneRegeln::ausListe('-nur-unschlagbar');
-        self::assertFalse($ohne->nurUnschlagbar);
-        self::assertTrue($ohne->trumpfZiehen);
-        self::assertSame('ohne nur-unschlagbar', $ohne->beschreibung());
+        $ohne = FortgeschritteneRegeln::ausListe('-stich-lohnt-sich');
+        self::assertFalse($ohne->stichLohntSich);
+        self::assertTrue($ohne->sichereStiche);
+        self::assertSame('ohne stich-lohnt-sich', $ohne->beschreibung());
     }
 
     public function testGemischteListeWirdAbgelehnt(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        FortgeschritteneRegeln::ausListe('trumpf-ziehen,-sichere-stiche');
+        FortgeschritteneRegeln::ausListe('stich-lohnt-sich,-sichere-stiche');
     }
 
     public function testUnbekannteRegelWirdAbgelehnt(): void
