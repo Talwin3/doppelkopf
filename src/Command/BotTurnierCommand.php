@@ -11,6 +11,7 @@ use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Simulation\EngineStrategie;
 use App\Domain\Doppelkopf\Simulation\SimulierteStrategie;
 use App\Domain\Doppelkopf\Simulation\TurnierLauf;
+use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Enum\BotStaerke;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -63,6 +64,9 @@ final class BotTurnierCommand extends Command
             ->addOption('zeitbudget-b', null, InputOption::VALUE_REQUIRED, 'PIMC-Zeitbudget für B in Sekunden', '999')
             ->addOption('ohne-ansagen-a', null, InputOption::VALUE_NONE, 'A macht keine Ansagen (misst den Wert der Ansage-Heuristik)')
             ->addOption('ohne-ansagen-b', null, InputOption::VALUE_NONE, 'B macht keine Ansagen')
+            ->addOption('regeln-a', null, InputOption::VALUE_REQUIRED, 'Aktive FORTGESCHRITTEN-Regeln für A: alle|keine|"a,b"|"-a,-b"', 'alle')
+            ->addOption('regeln-b', null, InputOption::VALUE_REQUIRED, 'Aktive FORTGESCHRITTEN-Regeln für B', 'alle')
+            ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
     }
@@ -70,6 +74,21 @@ final class BotTurnierCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+
+        if ($input->getOption('regeln-liste')) {
+            $io->title('FORTGESCHRITTEN-Regeln');
+            $io->table(
+                ['Name', 'Wirkung'],
+                array_map(
+                    static fn(string $name, string $text) => [$name, $text],
+                    array_keys(FortgeschritteneRegeln::BESCHREIBUNGEN),
+                    array_values(FortgeschritteneRegeln::BESCHREIBUNGEN),
+                ),
+            );
+            $io->writeln('Mit <info>--regeln-a=keine</info> spielt die Engine exakt wie ANFAENGER.');
+
+            return Command::SUCCESS;
+        }
 
         $anzahl = max(1, (int) $input->getOption('spiele'));
         $seed   = (int) $input->getOption('seed');
@@ -80,12 +99,14 @@ final class BotTurnierCommand extends Command
                 (int) $input->getOption('rollouts-a'),
                 (float) $input->getOption('zeitbudget-a'),
                 !$input->getOption('ohne-ansagen-a'),
+                (string) $input->getOption('regeln-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
                 (int) $input->getOption('rollouts-b'),
                 (float) $input->getOption('zeitbudget-b'),
                 !$input->getOption('ohne-ansagen-b'),
+                (string) $input->getOption('regeln-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -173,8 +194,13 @@ final class BotTurnierCommand extends Command
         return Command::SUCCESS;
     }
 
-    private function baueStrategie(string $name, int $rollouts, float $zeitbudget, bool $ansagenAktiv): SimulierteStrategie
-    {
+    private function baueStrategie(
+        string $name,
+        int $rollouts,
+        float $zeitbudget,
+        bool $ansagenAktiv,
+        string $regelListe,
+    ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
                 'Unbekannte Strategie "%s". Erlaubt: %s',
@@ -191,6 +217,7 @@ final class BotTurnierCommand extends Command
             max(1, $rollouts),
             max(0.001, $zeitbudget),
             $ansagenAktiv,
+            FortgeschritteneRegeln::ausListe($regelListe),
         );
     }
 }

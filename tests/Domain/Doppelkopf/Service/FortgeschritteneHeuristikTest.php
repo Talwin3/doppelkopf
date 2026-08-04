@@ -8,6 +8,7 @@ use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\SpielGedaechtnis;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
+use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\Team;
 use PHPUnit\Framework\TestCase;
@@ -77,6 +78,29 @@ final class FortgeschritteneHeuristikTest extends TestCase
         self::assertSame('PIK_NEUN_1', $gewaehlt->id());
     }
 
+    /**
+     * Dieselbe Stellung mit abgeschalteter Regel: der Bot spielt das Ass wieder wie ein
+     * Anfänger. Der Schalter wird hier gezielt geprüft, weil die Regel im Spiel extrem
+     * selten greift (~0,2 % der Blätter) und in einer Partie-Ablation untergeht.
+     */
+    public function testSpieltAssWennDieRegelAbgeschaltetIst(): void
+    {
+        $hand = [$this->k('KREUZ_ASS_1'), $this->k('PIK_NEUN_1')];
+        $g = $this->gedaechtnis($this->kreuzVoidStich(), $hand);
+
+        $gewaehlt = $this->heuristik->entscheide(
+            $hand,
+            [],
+            Team::RE,
+            $this->teams,
+            $this->ordnung,
+            $g,
+            FortgeschritteneRegeln::ohne('ass-nur-sicher'),
+        );
+
+        self::assertSame('KREUZ_ASS_1', $gewaehlt->id());
+    }
+
     public function testSpieltAssWennFarbeSicherIst(): void
     {
         // Kein Vorstich → niemand ist frei; Kreuz-Ass ist ein sicherer Stich.
@@ -115,5 +139,52 @@ final class FortgeschritteneHeuristikTest extends TestCase
         $gewaehlt = $this->heuristik->entscheide($hand, $stich, Team::RE, $this->teams, $this->ordnung, $g);
 
         self::assertSame('KREUZ_ASS_1', $gewaehlt->id(), 'Als letzter Spieler die 11 Augen schmieren.');
+    }
+
+    /**
+     * Vor dem letzten Platz schmieren, weil der Partner mit der höchsten Karte führt.
+     * Einzeln geschaltet, damit wirklich nur diese Regel den Ausschlag gibt – in ganzen
+     * Partien greift sie nur in ~0,4 % der Blätter.
+     */
+    public function testSchmiertVorDemLetztenPlatzWennDerStichUnschlagbarIst(): void
+    {
+        $stich = [3 => $this->k('KREUZ_DAME_1')]; // höchster Trumpf → nicht mehr zu überbieten
+        $hand  = [$this->k('PIK_ASS_1'), $this->k('PIK_NEUN_1')];
+        $g = $this->gedaechtnis([], $hand);
+
+        $mitRegel = $this->heuristik->entscheide(
+            $hand, $stich, Team::RE, $this->teams, $this->ordnung, $g,
+            FortgeschritteneRegeln::nur('schmier-sicherheit'),
+        );
+        self::assertSame('PIK_ASS_1', $mitRegel->id(), 'Sicherer Partnerstich → 11 Augen schmieren.');
+
+        $ohneRegel = $this->heuristik->entscheide(
+            $hand, $stich, Team::RE, $this->teams, $this->ordnung, $g,
+            FortgeschritteneRegeln::keine(),
+        );
+        self::assertSame('PIK_NEUN_1', $ohneRegel->id(), 'Ohne Regel schmiert nur der letzte Spieler.');
+    }
+
+    /**
+     * Beim Abwerfen die Farbe meiden, in der ein Gegner frei ist – auch wenn dort die
+     * augenärmere Karte läge. Ebenfalls einzeln geschaltet (~0,3 % der Blätter).
+     */
+    public function testWirftInEineUngefaehrlicheFarbeAb(): void
+    {
+        // Sitz 2 (Gegner) ist frei in Kreuz; Pik ist unverbraucht.
+        $hand = [$this->k('KREUZ_NEUN_1'), $this->k('PIK_KOENIG_1')];
+        $g = $this->gedaechtnis($this->kreuzVoidStich(), $hand);
+
+        $mitRegel = $this->heuristik->entscheide(
+            $hand, [], Team::RE, $this->teams, $this->ordnung, $g,
+            FortgeschritteneRegeln::nur('sicheres-abwerfen'),
+        );
+        self::assertSame('PIK_KOENIG_1', $mitRegel->id(), 'Kreuz nicht anspielen – Sitz 2 sticht.');
+
+        $ohneRegel = $this->heuristik->entscheide(
+            $hand, [], Team::RE, $this->teams, $this->ordnung, $g,
+            FortgeschritteneRegeln::keine(),
+        );
+        self::assertSame('KREUZ_NEUN_1', $ohneRegel->id(), 'Ohne Regel zählen nur die Augen.');
     }
 }

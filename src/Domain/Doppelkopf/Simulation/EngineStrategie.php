@@ -8,6 +8,7 @@ use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\BotHeuristik;
 use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
+use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
 use App\Enum\BotStaerke;
@@ -35,6 +36,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly int $rollouts = 60,
         private readonly float $zeitbudgetSek = 0.8,
         private readonly bool $ansagenAktiv = true,
+        private readonly ?FortgeschritteneRegeln $regeln = null,
     ) {}
 
     public function name(): string
@@ -44,6 +46,9 @@ final class EngineStrategie implements SimulierteStrategie
             $name .= $this->zeitbudgetSek >= 100.0
                 ? sprintf('(r=%d)', $this->rollouts)
                 : sprintf('(r=%d, t=%.2fs)', $this->rollouts, $this->zeitbudgetSek);
+        }
+        if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {
+            $name .= sprintf(' [%s]', $this->regeln->beschreibung());
         }
 
         return $this->ansagenAktiv ? $name : $name . ' ohne Ansagen';
@@ -70,6 +75,7 @@ final class EngineStrategie implements SimulierteStrategie
                 $teams,
                 $ordnung,
                 $gedaechtnis,
+                $this->regeln,
             );
         }
 

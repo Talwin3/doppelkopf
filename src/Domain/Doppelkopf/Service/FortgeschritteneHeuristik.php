@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Doppelkopf\Service;
 
+use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Domain\Doppelkopf\ValueObject\Karte;
-use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
 use App\Enum\Team;
 
@@ -36,6 +36,7 @@ final class FortgeschritteneHeuristik
      * @param array<int, Karte> $stich     Sitzplatz → Karte in Spielreihenfolge (leer = Bot spielt an)
      * @param ?Team             $eigenesTeam Team des Bots (null = unbekannt)
      * @param array<int, ?Team> $teams     Sitzplatz → Team aller Mitspieler
+     * @param ?FortgeschritteneRegeln $regeln Einzelne Regeln abschaltbar (null = alle an)
      */
     public function entscheide(
         array $erlaubte,
@@ -44,17 +45,20 @@ final class FortgeschritteneHeuristik
         array $teams,
         TrumpfOrdnung $ordnung,
         SpielGedaechtnis $gedaechtnis,
+        ?FortgeschritteneRegeln $regeln = null,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
             throw new \InvalidArgumentException('Es muss mindestens eine erlaubte Karte geben.');
         }
 
+        $regeln ??= FortgeschritteneRegeln::alle();
+
         if ($stich === []) {
-            return $this->anspielen($erlaubte, $eigenesTeam, $teams, $ordnung, $gedaechtnis);
+            return $this->anspielen($erlaubte, $eigenesTeam, $teams, $ordnung, $gedaechtnis, $regeln);
         }
 
-        return $this->bedienen($erlaubte, $stich, $eigenesTeam, $teams, $ordnung, $gedaechtnis);
+        return $this->bedienen($erlaubte, $stich, $eigenesTeam, $teams, $ordnung, $gedaechtnis, $regeln);
     }
 
     /** Bot eröffnet den Stich. */
@@ -64,45 +68,59 @@ final class FortgeschritteneHeuristik
         array $teams,
         TrumpfOrdnung $ordnung,
         SpielGedaechtnis $gedaechtnis,
+        FortgeschritteneRegeln $regeln,
     ): Karte {
         $fehlfarben = array_values(array_filter($erlaubte, fn(Karte $k) => !$ordnung->istTrumpf($k)));
         $gegnerSitze = $this->gegnerSitze($eigenesTeam, $teams);
 
         // 1. Sichere Fehlfarbe mit Augen kassieren (kann von niemandem mehr überboten werden).
-        $sichereMitAugen = array_values(array_filter(
-            $fehlfarben,
-            fn(Karte $k) => $k->augen() > 0 && $this->fehlfarbeSicher($k, $gegnerSitze, $ordnung, $gedaechtnis),
-        ));
-        if ($sichereMitAugen !== []) {
-            return $this->hoechsteAugen($sichereMitAugen, $ordnung);
+        if ($regeln->sichereStiche) {
+            $sichereMitAugen = array_values(array_filter(
+                $fehlfarben,
+                fn(Karte $k) => $k->augen() > 0 && $this->fehlfarbeSicher($k, $gegnerSitze, $ordnung, $gedaechtnis),
+            ));
+            if ($sichereMitAugen !== []) {
+                return $this->hoechsteAugen($sichereMitAugen, $ordnung);
+            }
         }
 
-        // 2. Fehlfarben-Ass nur anspielen, wenn kein Gegner in der Farbe frei ist (sonst gestochen).
+        // 2. Fehlfarben-Ass anspielen – mit Regel nur, wenn kein Gegner in der Farbe frei ist
+        //    (sonst wird es gestochen); ohne Regel wie beim Anfänger jedes Ass.
         foreach ($fehlfarben as $k) {
-            if ($k->wert === Kartenwert::ASS && !$this->gegnerFreiInFarbe($k, $gegnerSitze, $ordnung, $gedaechtnis)) {
+            if ($k->wert !== Kartenwert::ASS) {
+                continue;
+            }
+            if (!$regeln->assNurSicher || !$this->gegnerFreiInFarbe($k, $gegnerSitze, $ordnung, $gedaechtnis)) {
                 return $k;
             }
         }
 
         // 3. Höchsten Trumpf ziehen, wenn er sicher ist und Gegner noch Trumpf haben.
-        $truempfe = array_values(array_filter($erlaubte, fn(Karte $k) => $ordnung->istTrumpf($k)));
-        if (count($truempfe) >= 2) {
-            $hoechster = $this->hoechsterTrumpf($truempfe, $ordnung);
-            if ($this->istHoechsterTrumpfImSpiel($hoechster, $ordnung, $gedaechtnis)
-                && $this->gegnerHabenTrumpf($ordnung, $gedaechtnis)
-            ) {
-                return $hoechster;
+        if ($regeln->trumpfZiehen) {
+            $truempfe = array_values(array_filter($erlaubte, fn(Karte $k) => $ordnung->istTrumpf($k)));
+            if (count($truempfe) >= 2) {
+                $hoechster = $this->hoechsterTrumpf($truempfe, $ordnung);
+                if ($this->istHoechsterTrumpfImSpiel($hoechster, $ordnung, $gedaechtnis)
+                    && $this->gegnerHabenTrumpf($ordnung, $gedaechtnis)
+                ) {
+                    return $hoechster;
+                }
             }
         }
 
-        // 4. Niedrige Fehlfarbe abwerfen – bevorzugt in einer Farbe, in der kein Gegner frei ist.
+        // 4. Niedrige Fehlfarbe abwerfen – mit Regel bevorzugt in einer Farbe, in der kein
+        //    Gegner frei ist.
         if ($fehlfarben !== []) {
-            $ungefaehrlich = array_values(array_filter(
-                $fehlfarben,
-                fn(Karte $k) => !$this->gegnerFreiInFarbe($k, $gegnerSitze, $ordnung, $gedaechtnis),
-            ));
+            $auswahl = $fehlfarben;
+            if ($regeln->sicheresAbwerfen) {
+                $ungefaehrlich = array_values(array_filter(
+                    $fehlfarben,
+                    fn(Karte $k) => !$this->gegnerFreiInFarbe($k, $gegnerSitze, $ordnung, $gedaechtnis),
+                ));
+                $auswahl = $ungefaehrlich !== [] ? $ungefaehrlich : $fehlfarben;
+            }
 
-            return $this->niedrigsteAugen($ungefaehrlich !== [] ? $ungefaehrlich : $fehlfarben, $ordnung);
+            return $this->niedrigsteAugen($auswahl, $ordnung);
         }
 
         // 5. Nur noch Trumpf – niedrigsten spielen.
@@ -117,6 +135,7 @@ final class FortgeschritteneHeuristik
         array $teams,
         TrumpfOrdnung $ordnung,
         SpielGedaechtnis $gedaechtnis,
+        FortgeschritteneRegeln $regeln,
     ): Karte {
         $angespielt = array_values($stich)[0];
 
@@ -135,8 +154,10 @@ final class FortgeschritteneHeuristik
         $stichAugen    = array_sum(array_map(fn(Karte $k) => $k->augen(), $stich));
 
         if ($partnerFuehrt) {
-            // Nur schmieren, wenn der Stich für den Partner sicher ist.
-            $sicher = $istLetzter || !$this->kannUeberbotenWerden($gewinnerKarte, $angespielt, $ordnung, $gedaechtnis);
+            // Nur schmieren, wenn der Stich für den Partner sicher ist. Ohne Regel gilt –
+            // wie beim Anfänger – nur der letzte Platz als sicher.
+            $sicher = $istLetzter || ($regeln->schmierSicherheit
+                && !$this->kannUeberbotenWerden($gewinnerKarte, $angespielt, $ordnung, $gedaechtnis));
 
             return $sicher
                 ? $this->hoechsteAugen($erlaubte, $ordnung)
@@ -151,19 +172,23 @@ final class FortgeschritteneHeuristik
 
         if ($schlagende !== []) {
             if ($istLetzter) {
-                // Letzter Spieler: sicherer Stich – billigste schlagende Karte nehmen,
-                // sofern sich der Stich lohnt.
-                if ($stichAugen >= self::STECH_SCHWELLE || $this->hatHoheAugen($schlagende)) {
+                // Letzter Spieler: sicherer Stich – billigste schlagende Karte nehmen. Mit
+                // Regel nur, sofern sich der Stich lohnt; ohne Regel sticht der Anfänger immer.
+                if (!$regeln->stichLohntSich || $stichAugen >= self::STECH_SCHWELLE || $this->hatHoheAugen($schlagende)) {
                     return $this->billigsteSchlagende($schlagende, $ordnung);
                 }
-            } else {
-                // Nicht letzter: nur mit einer Karte stechen, die selbst nicht mehr
+            } elseif ($stichAugen >= self::STECH_SCHWELLE) {
+                // Nicht letzter: mit Regel nur mit einer Karte stechen, die selbst nicht mehr
                 // überboten werden kann (sonst verpufft der hohe Trumpf).
+                if (!$regeln->nurUnschlagbar) {
+                    return $this->billigsteSchlagende($schlagende, $ordnung);
+                }
+
                 $unschlagbar = array_values(array_filter(
                     $schlagende,
                     fn(Karte $k) => !$this->kannUeberbotenWerden($k, $angespielt, $ordnung, $gedaechtnis),
                 ));
-                if ($unschlagbar !== [] && $stichAugen >= self::STECH_SCHWELLE) {
+                if ($unschlagbar !== []) {
                     return $this->billigsteSchlagende($unschlagbar, $ordnung);
                 }
             }
