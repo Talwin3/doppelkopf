@@ -54,25 +54,31 @@ final readonly class AnsageSchwellen
     public const NIE = 13;
 
     /**
-     * Mindest-Blattstärke in Augen für die Erstansage ({@see \App\Domain\Doppelkopf\Service\BlattBewertung}).
+     * Mindest-Blattstärke in Augen für die Erstansage ({@see \App\Domain\Doppelkopf\Service\BlattBewertung}),
+     * gerechnet als erspielte Augen **plus** Blattbewertung ({@see self::$mitErspieltenAugen}).
      *
-     * Das Essener System nennt Re ab 75, Kontra ab 85. Gemessen ist bei uns **lockerer
-     * besser** – gegen ANFAENGER, je 4540 Blätter, Mittel aus zwei Seeds:
+     * Das sind **genau die Werte des Essener Systems** (Re ab 75, Kontra ab 85). Solange nur
+     * die Karten bewertet wurden, wirkten sie zu streng und das Optimum lag bei 65/75; mit
+     * dem ersten Summanden der Originalformel stimmen sie. Gemessen gegen ANFAENGER, je
+     * ~4580 Blätter, Mittel aus zwei Seeds (777/4242):
      *
-     *     Trumpfzahl 7/8 (alt)   +0,1614
-     *     Augen 62/72            +0,1803
-     *     Augen 65/75            +0,1842   ← gewählt
-     *     Augen 68/78            +0,1799
-     *     Augen 75/85            +0,1550   (die Werte des Systems)
-     *     Augen 85/95            +0,1245
+     *     Restblatt 55/65   +0,1357
+     *     Restblatt 60/70   +0,1454
+     *     Restblatt 65/75   +0,1597
+     *     Restblatt 70/80   +0,1652
+     *     Restblatt 75/85   +0,1680   ← gewählt
+     *     Restblatt 80/90   +0,1639
+     *     Restblatt 85/95   +0,1605
+     *     Restblatt 90/100  +0,1484
      *
-     * Der Abstand zu 75/85 erklärt sich aus der Bewertung selbst: sie liegt gegenüber der
-     * Vorlage rund 15 % zu hoch (Beispielblatt 2 des Originals: 52,5 dort, ~62 hier), weil
-     * die Quelle an der Erwartungswert-Tabelle beschädigt ist. Die Schwelle fängt das ab –
-     * gemessen statt geglaubt.
+     * Das Maximum ist damit nach beiden Seiten eingegrenzt und auf beiden Seeds
+     * gleichgerichtet. Gegenüber dem vorherigen Stand (Starthand, ohne erspielte Augen,
+     * 65/75: +0,1620) sind das **+0,006** – weniger als das Konfidenzintervall eines
+     * einzelnen Laufs (±0,025), also kein einzeln nachgewiesener Gewinn, sondern die
+     * Entscheidung für die theoretisch richtige Rechnung unter mehreren gleich guten.
      */
-    public const AUGEN_RE = 65.0;
-    public const AUGEN_CONTRA = 75.0;
+    public const AUGEN_RE = 75.0;
+    public const AUGEN_CONTRA = 85.0;
 
     /** Die Absagen in ihrer Voraussetzungsreihenfolge – jede setzt die vorige voraus. */
     public const ABSAGE_KETTE = [
@@ -103,6 +109,30 @@ final readonly class AnsageSchwellen
      * ist, und ist die **Voraussetzung** dafür, die bis dahin erspielten Augen in die
      * Blattbewertung aufzunehmen (Essener: „bis zur Ansage erzielte Augenzahl plus Summe
      * der Erwartungswerte") – ohne Warten gibt es gar nichts nachzubewerten.
+     *
+     * `$mitErspieltenAugen`: die von der eigenen Partei bereits geholten Stichaugen zur
+     * Blattbewertung addieren?
+     *
+     * Das vervollständigt die Essener Formel („bis zur Ansage erzielte Augenzahl plus Summe
+     * der Erwartungswerte") – bis dahin bewertete der Bot nur seine Karten. Sinnvoll ist es
+     * nur zusammen mit `$letztmoeglich`: wer sofort ansagt, hat noch nichts erspielt.
+     *
+     * `$bewerteRestblatt`: die verbleibenden Handkarten bewerten – oder die ausgeteilte Hand?
+     *
+     * Nur zusammen mit `$mitErspieltenAugen` sinnvoll, und dann zwingend: die gespielte Karte
+     * ist in den erspielten Augen schon abgerechnet, sie noch einmal als Erwartungswert zu
+     * zählen wäre doppelt. Umgekehrt gilt dasselbe – ohne die erspielten Augen fällt der
+     * Beitrag der gespielten Karte ganz weg, und die ausgeteilte Hand ist die bessere Basis.
+     * Gemessen (gegen ANFAENGER, je ~4580 Blätter, Mittel aus zwei Seeds, jeweils an der
+     * eigenen optimalen Schwelle):
+     *
+     *     Starthand, ohne erspielte   +0,1620   (Stand vor Teil B, 65/75)
+     *     Restblatt, ohne erspielte   +0,1574   (65/75)
+     *     Starthand, mit erspielten   +0,1642   (75/85 – zählt die gespielte Karte doppelt)
+     *     Restblatt, mit erspielten   +0,1680   (75/85 – gewählt)
+     *
+     * Die zweite Zeile ist die Kontrollgruppe: Das Restblatt allein ist **schlechter**. Der
+     * Vorsprung kommt also von den erspielten Augen, nicht vom Wechsel der bewerteten Hand.
      */
     public function __construct(
         public int $minTruempfeRe = 7,
@@ -111,6 +141,8 @@ final readonly class AnsageSchwellen
         public bool $letztmoeglich = true,
         public ?float $minAugenRe = self::AUGEN_RE,
         public ?float $minAugenContra = self::AUGEN_CONTRA,
+        public bool $mitErspieltenAugen = true,
+        public bool $bewerteRestblatt = true,
     ) {}
 
     /**
@@ -125,13 +157,35 @@ final readonly class AnsageSchwellen
 
     public function mitAugenSchwellen(float $re, float $contra): self
     {
+        return $this->abgewandelt(minAugenRe: $re, minAugenContra: $contra);
+    }
+
+    public function mitErspieltenAugen(bool $an): self
+    {
+        return $this->abgewandelt(mitErspieltenAugen: $an);
+    }
+
+    public function mitBewerteRestblatt(bool $an): self
+    {
+        return $this->abgewandelt(bewerteRestblatt: $an);
+    }
+
+    /** Kopie mit einzelnen geänderten Werten – PHP 8.4 kennt noch kein `clone with`. */
+    private function abgewandelt(
+        ?float $minAugenRe = null,
+        ?float $minAugenContra = null,
+        ?bool $mitErspieltenAugen = null,
+        ?bool $bewerteRestblatt = null,
+    ): self {
         return new self(
-            $this->minTruempfeRe,
-            $this->minTruempfeContra,
-            $this->minTruempfeAbsage,
-            $this->letztmoeglich,
-            $re,
-            $contra,
+            minTruempfeRe: $this->minTruempfeRe,
+            minTruempfeContra: $this->minTruempfeContra,
+            minTruempfeAbsage: $this->minTruempfeAbsage,
+            letztmoeglich: $this->letztmoeglich,
+            minAugenRe: $minAugenRe ?? $this->minAugenRe,
+            minAugenContra: $minAugenContra ?? $this->minAugenContra,
+            mitErspieltenAugen: $mitErspieltenAugen ?? $this->mitErspieltenAugen,
+            bewerteRestblatt: $bewerteRestblatt ?? $this->bewerteRestblatt,
         );
     }
 
@@ -172,10 +226,12 @@ final readonly class AnsageSchwellen
     public function beschreibung(): string
     {
         $text = sprintf(
-            'Ansage ab %s (Re/Contra), %s',
+            'Ansage ab %s%s (Re/Contra), %s, %s',
             $this->minAugenRe !== null
                 ? sprintf('%.0f/%.0f Augen', $this->minAugenRe, $this->minAugenContra ?? $this->minAugenRe)
                 : sprintf('%d/%d Trümpfen', $this->minTruempfeRe, $this->minTruempfeContra),
+            $this->minAugenRe !== null && $this->mitErspieltenAugen ? ' inkl. erspielter' : '',
+            $this->bewerteRestblatt ? 'Restblatt' : 'Starthand',
             $this->letztmoeglich ? 'letztmöglich' : 'frühestmöglich',
         );
         if (!$this->machtAbsagen()) {

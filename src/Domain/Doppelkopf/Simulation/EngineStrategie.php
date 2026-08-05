@@ -39,7 +39,6 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $ansagenAktiv = true,
         private readonly ?FortgeschritteneRegeln $regeln = null,
         private readonly ?AnsageSchwellen $ansageSchwellen = null,
-        private readonly bool $bewerteStarthand = true,
     ) {}
 
     public function name(): string
@@ -119,7 +118,8 @@ final class EngineStrategie implements SimulierteStrategie
             $this->ansageSchwellen,
             $this->teamAnsagen($partie, $sitzplatz),
             static fn(AnsageTyp $typ): int => AnsageRegeln::TIMING[$typ->value] ?? 0,
-            $this->bewerteStarthand ? $partie->starthand($sitzplatz) : null,
+            $partie->starthand($sitzplatz),
+            $partie->erspielteAugen($partie->eigenesTeam($sitzplatz)),
         );
     }
 

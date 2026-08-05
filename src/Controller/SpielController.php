@@ -423,28 +423,10 @@ class SpielController extends AbstractController
             return [];
         }
 
-        $sticheRoh = [];
-        foreach ($spiel->getGespielteKarten() as $gk) {
-            $sticheRoh[$gk->getStichNr()][] = $gk;
-        }
-
-        $vollstaendige = [];
-        foreach ($sticheRoh as $stichKarten) {
-            if (count($stichKarten) < 4) {
-                continue; // laufender Stich noch nicht abgeschlossen
-            }
-            usort($stichKarten, fn($a, $b) => $a->getPositionImStich() <=> $b->getPositionImStich());
-            $eintraege = [];
-            foreach ($stichKarten as $gk) {
-                $eintraege[] = ['sitzplatz' => $gk->getSitzplatz(), 'karte' => $gk->alsKarte()];
-            }
-            $vollstaendige[] = $eintraege;
-        }
-
         $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
         $zweiteDulleSticht = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
-        return $this->stichStatistik->gewonneneStiche($vollstaendige, $ordnung, $zweiteDulleSticht);
+        return $this->stichStatistik->gewonneneStiche($spiel->vollstaendigeStiche(), $ordnung, $zweiteDulleSticht);
     }
 
     /** Hilfsmethode: Spiel-Kontextdaten für ein Template aufbereiten. */

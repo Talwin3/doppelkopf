@@ -253,4 +253,35 @@ class Spiel
         $vorherigeNr = $this->aktuellerStichNr - 1;
         return $this->gespielteKarten->filter(fn(GespielteKarte $gk) => $gk->getStichNr() === $vorherigeNr);
     }
+
+    /**
+     * Die abgeschlossenen Stiche (4 Karten) in Spielreihenfolge – die Eingabeform, die
+     * {@see \App\Domain\Doppelkopf\Service\StichStatistik} und
+     * {@see \App\Domain\Doppelkopf\Service\WertungsRechner} erwarten. Der laufende,
+     * unvollständige Stich bleibt außen vor.
+     *
+     * @return list<list<array{sitzplatz: int, karte: Karte}>>
+     */
+    public function vollstaendigeStiche(): array
+    {
+        $nachStich = [];
+        foreach ($this->gespielteKarten as $gk) {
+            $nachStich[$gk->getStichNr()][] = $gk;
+        }
+        ksort($nachStich);
+
+        $stiche = [];
+        foreach ($nachStich as $karten) {
+            if (count($karten) < 4) {
+                continue;
+            }
+            usort($karten, static fn(GespielteKarte $a, GespielteKarte $b) => $a->getPositionImStich() <=> $b->getPositionImStich());
+            $stiche[] = array_map(
+                static fn(GespielteKarte $gk) => ['sitzplatz' => $gk->getSitzplatz(), 'karte' => $gk->alsKarte()],
+                $karten,
+            );
+        }
+
+        return $stiche;
+    }
 }

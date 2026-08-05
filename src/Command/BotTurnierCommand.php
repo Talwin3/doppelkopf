@@ -75,10 +75,12 @@ final class BotTurnierCommand extends Command
             ->addOption('absage-truempfe-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('frueh-ansagen-a', null, InputOption::VALUE_NONE, 'A sagt zum frühestmöglichen statt zum letztmöglichen Zeitpunkt an (altes Verhalten)')
             ->addOption('frueh-ansagen-b', null, InputOption::VALUE_NONE, 'dito für B')
-            ->addOption('restblatt-a', null, InputOption::VALUE_NONE, 'A bewertet für die Ansage das Restblatt statt der ausgeteilten Hand')
-            ->addOption('restblatt-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('starthand-a', null, InputOption::VALUE_NONE, 'A bewertet für die Ansage die ausgeteilte Hand statt des Restblatts')
+            ->addOption('starthand-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('ansage-augen-a', null, InputOption::VALUE_REQUIRED, 'A entscheidet die Ansage über die Blattbewertung in Augen: "re,contra" (z. B. "75,85")')
             ->addOption('ansage-augen-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
+            ->addOption('ohne-erspielte-a', null, InputOption::VALUE_NONE, 'A zählt die schon erspielten Team-Augen NICHT zur Blattbewertung (bewertet nur die Karten)')
+            ->addOption('ohne-erspielte-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -118,7 +120,8 @@ final class BotTurnierCommand extends Command
                 $input->getOption('ansage-augen-a'),
                 $input->getOption('absage-truempfe-a'),
                 !$input->getOption('frueh-ansagen-a'),
-                !$input->getOption('restblatt-a'),
+                !$input->getOption('starthand-a'),
+                !$input->getOption('ohne-erspielte-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -131,7 +134,8 @@ final class BotTurnierCommand extends Command
                 $input->getOption('ansage-augen-b'),
                 $input->getOption('absage-truempfe-b'),
                 !$input->getOption('frueh-ansagen-b'),
-                !$input->getOption('restblatt-b'),
+                !$input->getOption('starthand-b'),
+                !$input->getOption('ohne-erspielte-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -230,7 +234,8 @@ final class BotTurnierCommand extends Command
         ?string $ansageAugen,
         ?string $absageTruempfe,
         bool $letztmoeglich,
-        bool $bewerteStarthand,
+        bool $bewerteRestblatt,
+        bool $mitErspieltenAugen,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -277,6 +282,7 @@ final class BotTurnierCommand extends Command
             }
             $schwellen = $schwellen->mitAugenSchwellen($werte[0], $werte[1]);
         }
+        $schwellen = $schwellen->mitErspieltenAugen($mitErspieltenAugen)->mitBewerteRestblatt($bewerteRestblatt);
 
         return new EngineStrategie(
             $staerke,
@@ -289,7 +295,6 @@ final class BotTurnierCommand extends Command
             $ansagenAktiv,
             $regeln,
             $schwellen,
-            $bewerteStarthand,
         );
     }
 }

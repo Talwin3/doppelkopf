@@ -157,6 +157,41 @@ final class VollesSpielPersistenzTest extends DoppelkopfIntegrationTestCase
         self::assertInstanceOf(Spiel::class, $gespeichert);
         self::assertSame(SpielStatus::BEENDET, $gespeichert->getStatus(), 'Fortgeschrittenes Bot-Spiel sollte beendet sein');
         self::assertCount(48, $karteRepo->findBy(['spiel' => $gespeichert]), 'Alle 48 Karten sollten gespielt sein');
+
+        $this->pruefeErspielteAugenGegenAbrechnung($gespeichert);
+    }
+
+    /**
+     * Die Team-Augen, die {@see \App\Application\Doppelkopf\Bot\BotAnsage} für die
+     * Ansage-Entscheidung aus den Stichen zählt (Essener: „bis zur Ansage erzielte
+     * Augenzahl plus Summe der Erwartungswerte"), müssen dieselben sein, die am Ende auch
+     * die Abrechnung sieht. Sonst sagt der Bot nach einer falschen Zwischenbilanz an.
+     */
+    private function pruefeErspielteAugenGegenAbrechnung(Spiel $spiel): void
+    {
+        $statistik = static::getContainer()->get(\App\Domain\Doppelkopf\Service\StichStatistik::class);
+        $ordnung   = static::getContainer()->get(\App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory::class)->fuerSpiel($spiel);
+
+        $teams = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            $teams[$t->getSitzplatz()] = $t->getTeam();
+        }
+        $stiche            = $spiel->vollstaendigeStiche();
+        $zweiteDulleSticht = (bool) $spiel->getRegelEinstellung('zweite_dulle_sticht', false);
+
+        self::assertCount(12, $stiche, 'Nach dem Spiel sollten alle 12 Stiche abgeschlossen sein');
+
+        $augen = [];
+        foreach ([\App\Enum\Team::RE, \App\Enum\Team::KONTRA] as $team) {
+            $augen[$team->value] = $statistik->augenFuerTeam($stiche, $teams, $team, $ordnung, $zweiteDulleSticht);
+        }
+
+        self::assertSame(240, array_sum($augen), 'Beide Parteien zusammen halten immer 240 Augen');
+        self::assertSame(
+            $spiel->getWertungDetails()['augen'],
+            $augen,
+            'Die für die Ansage gezählten Team-Augen müssen der Abrechnung entsprechen',
+        );
     }
 
     /**

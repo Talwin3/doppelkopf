@@ -57,6 +57,9 @@ final class Partie
     /** @var array<int, Karte[]> Sitzplatz → ausgeteilte Hand (unverändert) */
     private array $starthaende;
 
+    /** @var array<string, int> Team-Wert → Augen aus den bereits abgeschlossenen Stichen */
+    private array $erspielteAugen = [];
+
     /**
      * @param array<int, Karte[]> $starthaende      Sitzplatz 1–4 → Handkarten
      * @param array<int, Team>    $teamProSitzplatz Sitzplatz → Team (Spiel-Wahrheit)
@@ -227,6 +230,19 @@ final class Partie
         );
     }
 
+    /**
+     * Augen, die eine Partei in den bereits abgeschlossenen Stichen geholt hat.
+     *
+     * Das Essener System bewertet ein Blatt vor der Ansage als „bis zur Ansage erzielte
+     * Augenzahl plus Summe der Erwartungswerte" – dieser Zähler liefert den ersten
+     * Summanden ({@see \App\Domain\Doppelkopf\Service\AnsageHeuristik}). Der Bot darf ihn
+     * kennen: die eigenen Stiche liegen offen auf dem Tisch.
+     */
+    public function erspielteAugen(?Team $team): int
+    {
+        return $team === null ? 0 : ($this->erspielteAugen[$team->value] ?? 0);
+    }
+
     /** Kartengedächtnis aus Sicht dieses Sitzplatzes. */
     public function gedaechtnisFuer(int $sitzplatz): SpielGedaechtnis
     {
@@ -284,12 +300,25 @@ final class Partie
         return count($this->offenerStich) === 4;
     }
 
-    /** Schließt den laufenden Stich ab und beginnt den nächsten. */
-    public function schliesseStich(): void
+    /**
+     * Schließt den laufenden Stich ab und beginnt den nächsten.
+     *
+     * @param int $gewinner Sitzplatz, der den Stich geholt hat – der Aufrufer hat ihn
+     *                      ohnehin schon bestimmt, um zu wissen, wer als nächstes anspielt.
+     *                      Damit wandern die Augen in das Konto der Partei.
+     */
+    public function schliesseStich(int $gewinner): void
     {
         $stich = [];
+        $augen = 0;
         foreach ($this->offenerStich as $sitz => $karte) {
             $stich[] = ['sitzplatz' => $sitz, 'karte' => $karte];
+            $augen += $karte->augen();
+        }
+
+        $team = $this->teamProSitzplatz[$gewinner] ?? null;
+        if ($team !== null) {
+            $this->erspielteAugen[$team->value] = ($this->erspielteAugen[$team->value] ?? 0) + $augen;
         }
 
         $this->abgeschlosseneStiche[] = $stich;

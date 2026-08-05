@@ -161,22 +161,81 @@ final class AnsageHeuristikTest extends TestCase
     }
 
     /**
-     * Beim Warten darf die geschrumpfte Hand die Bewertung nicht verfälschen: gespielte
-     * Trümpfe zählen weiter mit, sonst fällt ein Teil der Ansagen aus einem sachfremden
-     * Grund weg (im Benchmark 6 % der Ansagen).
+     * Welche Hand bewertet wird, entscheiden die Schwellen – nicht der Aufrufer. Im Default
+     * (Restblatt, weil die gespielte Karte über die erspielten Augen schon abgerechnet ist)
+     * bleibt die mitgegebene Starthand unbeachtet.
      */
-    public function testBewertungsHandSchlaegtAktuelleHand(): void
+    public function testDefaultBewertetDasRestblatt(): void
     {
-        $stark   = $this->starkeHand();
-        $schwach = $this->schwacheHand();
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung,
+            null, [], null, $this->starkeHand(),
+        ));
+    }
 
-        // Aktuelle Hand zu schwach, ausgeteilte Hand stark → Ansage.
+    /**
+     * Ohne erspielte Augen fällt der Beitrag der gespielten Karte sonst ganz weg – dann ist
+     * die ausgeteilte Hand die bessere Basis (Stand vor P5.8 Teil B, weiter messbar).
+     */
+    public function testOhneRestblattZaehltDieAusgeteilteHand(): void
+    {
+        $schwellen = (new AnsageSchwellen())
+            ->mitErspieltenAugen(false)
+            ->mitBewerteRestblatt(false);
+
         self::assertSame(
             AnsageTyp::RE,
             $this->heuristik->willAnsagen(
-                BotStaerke::PROFI, $schwach, Team::RE, $this->ordnung, null, [], null, $stark,
+                BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung,
+                $schwellen, [], null, $this->starkeHand(),
             ),
         );
+    }
+
+    /**
+     * Essener Formel: „bis zur Ansage erzielte Augenzahl plus Summe der Erwartungswerte".
+     * Ein Blatt knapp unter der Schwelle reicht, sobald die eigene Partei den fehlenden
+     * Rest schon im Stich liegen hat.
+     */
+    public function testErspielteAugenHebenDasBlattUeberDieSchwelle(): void
+    {
+        $hand      = $this->mittlereHand();
+        $augen     = (new BlattBewertung())->augen($hand, $this->ordnung);
+        $schwellen = (new AnsageSchwellen())->mitAugenSchwellen($augen + 10, $augen + 10);
+
+        // Blatt allein reicht nicht …
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, [], null, null, 0,
+        ));
+
+        // … mit 15 schon erspielten Augen dagegen schon.
+        self::assertSame(AnsageTyp::RE, $this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, [], null, null, 15,
+        ));
+    }
+
+    /** Abschaltbar für Vergleichsmessungen – dann zählen nur die Karten. */
+    public function testOhneErspielteAugenZaehltNurDasBlatt(): void
+    {
+        $hand      = $this->mittlereHand();
+        $augen     = (new BlattBewertung())->augen($hand, $this->ordnung);
+        $schwellen = (new AnsageSchwellen())
+            ->mitAugenSchwellen($augen + 10, $augen + 10)
+            ->mitErspieltenAugen(false);
+
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, [], null, null, 15,
+        ));
+    }
+
+    /** Die gröbere Trumpfzahl-Entscheidung kennt keine Augen – erspielte ändern dort nichts. */
+    public function testTrumpfzahlIgnoriertErspielteAugen(): void
+    {
+        $trumpfzahl = AnsageSchwellen::nachTrumpfzahl(8, 8);
+
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $this->mittlereHand(), Team::RE, $this->ordnung, $trumpfzahl, [], null, null, 60,
+        ));
     }
 
     public function testOhneKonfigurierteSchwelleKeineAbsage(): void

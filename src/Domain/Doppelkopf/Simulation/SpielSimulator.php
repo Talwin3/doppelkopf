@@ -99,7 +99,7 @@ final class SpielSimulator
 
             if ($partie->stichVollstaendig()) {
                 $amZug = $this->stichGewinner->bestimme($partie->offenerStich(), $ordnung, $zweiteDulleSticht);
-                $partie->schliesseStich();
+                $partie->schliesseStich($amZug);
                 continue;
             }
 

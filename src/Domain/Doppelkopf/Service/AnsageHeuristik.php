@@ -36,6 +36,12 @@ final class AnsageHeuristik
      *        wird wie früher zum frühestmöglichen Zeitpunkt angesagt. Der Aufrufer liefert
      *        sie aus seiner eigenen Quelle, damit die Fristen nicht ein drittes Mal im Code
      *        stehen (Produktivpfad rechnet dabei den Hochzeits-Nachlass mit ein).
+     * @param ?Karte[] $starthand Die ausgeteilte Hand. Ob sie oder das Restblatt bewertet
+     *        wird, entscheidet {@see AnsageSchwellen::$bewerteRestblatt} – die Wahl hängt
+     *        daran, ob die erspielten Augen mitgezählt werden, und gehört deshalb zur
+     *        Schwellen-Konfiguration, nicht zum Aufrufer.
+     * @param int $erspielteAugen Augen, die die eigene Partei in den abgeschlossenen Stichen
+     *        schon geholt hat – der erste Summand der Essener Formel.
      * @return ?AnsageTyp Nächste sinnvolle Ansage, oder null
      */
     public function willAnsagen(
@@ -46,18 +52,20 @@ final class AnsageHeuristik
         ?AnsageSchwellen $schwellen = null,
         array $teamAnsagen = [],
         ?callable $fristFuer = null,
-        ?array $bewertungsHand = null,
+        ?array $starthand = null,
+        int $erspielteAugen = 0,
     ): ?AnsageTyp {
         if ($staerke === BotStaerke::ANFAENGER || $team === null) {
             return null;
         }
 
         $schwellen ??= new AnsageSchwellen();
+        $bewertungsHand = $schwellen->bewerteRestblatt ? $hand : ($starthand ?? $hand);
 
         $truempfe = 0;
         $damen    = 0;
         $kreuzDamen = 0;
-        foreach ($bewertungsHand ?? $hand as $k) {
+        foreach ($bewertungsHand as $k) {
             if ($ordnung->istTrumpf($k)) {
                 $truempfe++;
             }
@@ -77,7 +85,7 @@ final class AnsageHeuristik
         $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
 
         if (!in_array($grundansage, $teamAnsagen, true)) {
-            return $this->blattReicht($bewertungsHand ?? $hand, $truempfe, $team, $ordnung, $schwellen)
+            return $this->blattReicht($bewertungsHand, $truempfe, $team, $ordnung, $schwellen, $erspielteAugen)
                 && $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer)
                     ? $grundansage
                     : null;
@@ -106,6 +114,10 @@ final class AnsageHeuristik
      * Augen nach dem Essener System ({@see BlattBewertung}) – dort sind auch die Schwellen
      * her (Re ab 75, Kontra ab 85 Augen).
      *
+     * Das System rechnet dabei „die bis zur Ansage erzielte Augenzahl **plus** die Summe der
+     * Erwartungswerte": Wer den ersten Stich schon geholt hat, braucht vom Blatt weniger zu
+     * erwarten. Deshalb geht das Augenkonto der eigenen Partei mit in die Summe.
+     *
      * @param Karte[] $bewertungsHand
      */
     private function blattReicht(
@@ -114,13 +126,16 @@ final class AnsageHeuristik
         Team $team,
         TrumpfOrdnung $ordnung,
         AnsageSchwellen $schwellen,
+        int $erspielteAugen,
     ): bool {
         $minAugen = $schwellen->minAugen($team);
         if ($minAugen === null) {
             return $truempfe >= $schwellen->minTruempfe($team);
         }
 
-        return $this->blattBewertung->augen($bewertungsHand, $ordnung) >= $minAugen;
+        $bereits = $schwellen->mitErspieltenAugen ? (float) $erspielteAugen : 0.0;
+
+        return $this->blattBewertung->augen($bewertungsHand, $ordnung) + $bereits >= $minAugen;
     }
 
     /**

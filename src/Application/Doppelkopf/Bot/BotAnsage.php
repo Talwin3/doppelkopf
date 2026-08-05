@@ -6,6 +6,8 @@ namespace App\Application\Doppelkopf\Bot;
 
 use App\Application\Doppelkopf\AnsageService;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
+use App\Domain\Doppelkopf\Service\StichStatistik;
+use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
@@ -30,6 +32,7 @@ final class BotAnsage
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielAnsageRepository $ansageRepo,
+        private readonly StichStatistik $stichStatistik,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -51,10 +54,11 @@ final class BotAnsage
             null,
             $this->teamAnsagen($spiel, $teilnehmer),
             fn(AnsageTyp $typ): int => $this->ansageService->mindestKarten($spiel, $typ),
-            // Bewertet wird die ausgeteilte Hand: Wer bis zum letztmöglichen Zeitpunkt
-            // wartet, hat schon eine Karte gespielt – zählte nur das Restblatt, fielen
-            // Ansagen aus einem sachfremden Grund weg (im Benchmark 6 %).
+            // Die ausgeteilte Hand als Alternative zum Restblatt; welche bewertet wird,
+            // entscheiden die Schwellen ({@see AnsageSchwellen::$bewerteRestblatt}).
             array_map(static fn(string $id) => Karte::vonId($id), $teilnehmer->getStartkartenIds()),
+            // Essener: „bis zur Ansage erzielte Augenzahl plus Summe der Erwartungswerte".
+            $this->erspielteTeamAugen($spiel, $teilnehmer, $ordnung),
         );
         if ($typ === null) {
             return;
@@ -70,6 +74,31 @@ final class BotAnsage
                 'fehler'    => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Augen, die die Partei dieses Teilnehmers in den abgeschlossenen Stichen bereits geholt
+     * hat. Liegt offen auf dem Tisch (die Stich-Stapel), ist also kein verdecktes Wissen.
+     */
+    private function erspielteTeamAugen(Spiel $spiel, SpielTeilnehmer $teilnehmer, TrumpfOrdnung $ordnung): int
+    {
+        $team = $teilnehmer->getTeam();
+        if ($team === null) {
+            return 0;
+        }
+
+        $teams = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            $teams[$t->getSitzplatz()] = $t->getTeam();
+        }
+
+        return $this->stichStatistik->augenFuerTeam(
+            $spiel->vollstaendigeStiche(),
+            $teams,
+            $team,
+            $ordnung,
+            (bool) $spiel->getRegelEinstellung('zweite_dulle_sticht', false),
+        );
     }
 
     /**
