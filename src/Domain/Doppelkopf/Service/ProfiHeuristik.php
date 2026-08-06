@@ -87,8 +87,8 @@ final class ProfiHeuristik
                 $stich[$eigenerSitz] = $kandidat;
                 $amZug = ($eigenerSitz % 4) + 1;
 
-                $augen = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
-                $summe[$i] += $augen[$eigenesTeam->value];
+                $stiche = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
+                $summe[$i] += $this->augenFuer($stiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
             }
             $anzahl++;
         }
@@ -202,19 +202,26 @@ final class ProfiHeuristik
     /**
      * Spielt eine Welt ab dem aktuellen Zustand mit Greedy-Politik zu Ende.
      *
+     * Geliefert werden die dabei abgeschlossenen Stiche – in genau der Form, die der
+     * {@see WertungsRechner} erwartet, damit die Bewertung die volle Abrechnung nutzen kann.
+     *
      * @param array<int, Karte[]> $haende Sitzplatz → Handkarten (Karte des Bots bereits gespielt)
      * @param array<int, Karte>   $stich  Sitzplatz → Karte des laufenden Stichs
      * @param array<int, Team>    $teams  Sitzplatz → Team
-     * @return array<string, int> Team-Wert ('RE'/'KONTRA') → Augen
+     * @return list<list<array{sitzplatz: int, karte: Karte}>> Stiche in Spielreihenfolge
      */
     private function ausspielen(array $haende, array $stich, int $amZug, array $teams, TrumpfOrdnung $ordnung, bool $zweiteDulle): array
     {
-        $augen = [Team::RE->value => 0, Team::KONTRA->value => 0];
+        $stiche = [];
 
         while (true) {
             if (count($stich) === 4) {
                 $gewinner = $this->stichGewinner->bestimme($stich, $ordnung, $zweiteDulle);
-                $augen[$teams[$gewinner]->value] += array_sum(array_map(fn(Karte $k) => $k->augen(), $stich));
+                $eintraege = [];
+                foreach ($stich as $sitz => $karte) {
+                    $eintraege[] = ['sitzplatz' => $sitz, 'karte' => $karte];
+                }
+                $stiche[] = $eintraege;
                 $stich = [];
                 $amZug = $gewinner;
                 if ($this->alleLeer($haende)) {
@@ -234,6 +241,33 @@ final class ProfiHeuristik
             $haende[$amZug] = $this->ohne($hand, $karte);
             $stich[$amZug]  = $karte;
             $amZug = ($amZug % 4) + 1;
+        }
+
+        return $stiche;
+    }
+
+    /**
+     * Augen, die eine Partei in den übergebenen Stichen holt.
+     *
+     * @param list<list<array{sitzplatz: int, karte: Karte}>> $stiche
+     * @param array<int, Team>                                $teams
+     */
+    private function augenFuer(array $stiche, array $teams, Team $team, TrumpfOrdnung $ordnung, bool $zweiteDulle): int
+    {
+        $augen = 0;
+
+        foreach ($stiche as $stich) {
+            $karten = [];
+            $summe  = 0;
+            foreach ($stich as $eintrag) {
+                $karten[$eintrag['sitzplatz']] = $eintrag['karte'];
+                $summe += $eintrag['karte']->augen();
+            }
+
+            $gewinner = $this->stichGewinner->bestimme($karten, $ordnung, $zweiteDulle);
+            if (($teams[$gewinner] ?? null) === $team) {
+                $augen += $summe;
+            }
         }
 
         return $augen;
