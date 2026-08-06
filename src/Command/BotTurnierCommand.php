@@ -81,8 +81,10 @@ final class BotTurnierCommand extends Command
             ->addOption('ansage-augen-b', null, InputOption::VALUE_REQUIRED, 'dito für B')
             ->addOption('ohne-erspielte-a', null, InputOption::VALUE_NONE, 'A zählt die schon erspielten Team-Augen NICHT zur Blattbewertung (bewertet nur die Karten)')
             ->addOption('ohne-erspielte-b', null, InputOption::VALUE_NONE, 'dito für B')
-            ->addOption('profi-augen-a', null, InputOption::VALUE_NONE, 'A bewertet die PIMC-Welten nach Ø-Augen statt nach Turnierpunkten (alter Maßstab)')
-            ->addOption('profi-augen-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('profi-punkte-a', null, InputOption::VALUE_NONE, 'A bewertet die PIMC-Welten nach Turnierpunkten (v = 500*s + e) statt nach Ø-Augen')
+            ->addOption('profi-punkte-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('profi-2gegen2-a', null, InputOption::VALUE_NONE, 'A verwirft Welten mit stiller Hochzeit (1 gegen 3) bei der Determinisierung')
+            ->addOption('profi-2gegen2-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -124,7 +126,8 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('frueh-ansagen-a'),
                 !$input->getOption('starthand-a'),
                 !$input->getOption('ohne-erspielte-a'),
-                !$input->getOption('profi-augen-a'),
+                (bool) $input->getOption('profi-punkte-a'),
+                (bool) $input->getOption('profi-2gegen2-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -139,7 +142,8 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('frueh-ansagen-b'),
                 !$input->getOption('starthand-b'),
                 !$input->getOption('ohne-erspielte-b'),
-                !$input->getOption('profi-augen-b'),
+                (bool) $input->getOption('profi-punkte-b'),
+                (bool) $input->getOption('profi-2gegen2-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -241,6 +245,7 @@ final class BotTurnierCommand extends Command
         bool $bewerteRestblatt,
         bool $mitErspieltenAugen,
         bool $punkteBewertung,
+        bool $nurZweiGegenZwei,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -301,6 +306,7 @@ final class BotTurnierCommand extends Command
             $regeln,
             $schwellen,
             $punkteBewertung,
+            $nurZweiGegenZwei,
         );
     }
 }

@@ -20,13 +20,14 @@ use App\Enum\Team;
  * Spiels mit einer schnellen Greedy-Politik ausgespielt. Rollout-Zahl und Zeitbudget sind
  * gedeckelt.
  *
- * Bewertet wird eine Welt mit `v = 500 · s + e` (s = Turnierpunkte aus dem produktiven
- * {@see WertungsRechner}, e = Augen des eigenen Teams) – die Reward-Formel aus Sievers/Obenaus.
- * Doppelkopf wird an Schwellen gewertet (121, keine 90/60/30, Fuchs/Karlchen/Doppelkopf,
- * Ansage-Verdopplung); reine Augen-Maximierung überschätzt deshalb das 130. Auge und
- * unterschätzt das 121. Die Augen bleiben als Feinabstimmung zwischen sonst gleichwertigen
- * Zügen im Term. Der alte Augen-Maßstab ist über `$bewertePunkte` weiter erreichbar
- * (Vergleichsmessungen).
+ * Bewertet wird eine Welt standardmäßig nach den **Augen** des eigenen Teams. Über
+ * `$bewertePunkte` steht die Reward-Formel aus Sievers/Obenaus zur Verfügung:
+ * `v = 500 · s + e` mit s = Turnierpunkte aus dem produktiven {@see WertungsRechner}
+ * (121er-Schwelle, keine 90/60/30/schwarz, Fuchs/Karlchen/Doppelkopf, Ansage-Verdopplung)
+ * und e = Augen als Feinabstimmung. Der Schwellen-Maßstab ist der sachlich richtigere –
+ * **gemessen (2026-08-06) ist er bei r=60 aber schlechter** (gepaart gegen die Augen-Fassung:
+ * −0,23 bzw. −0,12 Punkte je Spieler und Partie über je ~195 Blätter). Deshalb bleibt er
+ * vorerst ausgeschaltet; die Formel steht als Messgegenstand bereit.
  *
  * Kein neuronales Netz (die FU-Arbeit von Obenaus zeigte dafür +0,04 Punkte/Spiel – nicht lohnend);
  * PIMC ist der tragende Ansatz. Reine Logik ohne DB; die Fakten sammelt
@@ -42,6 +43,9 @@ final class ProfiHeuristik
      * entscheiden nur noch zwischen sonst punktgleichen Zügen.
      */
     private const PUNKT_GEWICHT = 500;
+
+    /** Wie oft eine Welt neu gezogen wird, bis sie konsistent (und ggf. 2-gegen-2) ist. */
+    private const WELT_VERSUCHE = 8;
 
     public function __construct(
         private readonly StichGewinner $stichGewinner,
@@ -60,7 +64,8 @@ final class ProfiHeuristik
      *        die Wertungsschwellen gelten fürs ganze Spiel, nicht erst ab der aktuellen Stellung
      * @param list<array{sitzplatz: int, typ: AnsageTyp}>     $ansagen         Bisherige Ansagen (verdoppeln den Spielwert)
      * @param int|null           $solistSitzplatz  gesetzt bei Solo/Hochzeit-als-Solo
-     * @param bool               $bewertePunkte    false = alter Maßstab (nur Ø-Augen), für Vergleichsmessungen
+     * @param bool               $bewertePunkte    true = `v = 500·s + e` statt reiner Ø-Augen
+     * @param bool               $nurZweiGegenZwei true = Welten mit stiller Hochzeit (1 gegen 3) verwerfen
      */
     public function entscheide(
         array $erlaubte,
@@ -79,7 +84,8 @@ final class ProfiHeuristik
         array $bisherigeStiche = [],
         array $ansagen = [],
         ?int $solistSitzplatz = null,
-        bool $bewertePunkte = true,
+        bool $bewertePunkte = false,
+        bool $nurZweiGegenZwei = false,
         int $rollouts = 60,
         float $zeitbudgetSek = 0.8,
     ): Karte {
@@ -101,11 +107,26 @@ final class ProfiHeuristik
                 break;
             }
 
-            $welt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
-            if ($welt === null) {
-                continue; // keine konsistente Verteilung gefunden – Welt überspringen
+            $welt  = null;
+            $teams = null;
+            for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
+                $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
+                if ($kandidatWelt === null) {
+                    continue; // keine konsistente Verteilung gefunden
+                }
+
+                $kandidatTeams = $this->teamsAbleiten($kandidatWelt, $variante, $bekannteTeams, $eigenesTeam, $eigenerSitz, $kreuzDameGespieltVon);
+                if ($nurZweiGegenZwei && !$this->istZweiGegenZwei($kandidatTeams, $variante)) {
+                    continue; // stille Hochzeit – in einem angemeldeten Normalspiel praktisch ausgeschlossen
+                }
+
+                $welt  = $kandidatWelt;
+                $teams = $kandidatTeams;
+                break;
             }
-            $teams = $this->teamsAbleiten($welt, $variante, $bekannteTeams, $eigenesTeam, $eigenerSitz, $kreuzDameGespieltVon);
+            if ($welt === null || $teams === null) {
+                continue; // Welt überspringen
+            }
 
             foreach ($erlaubte as $i => $kandidat) {
                 $haende = $welt;
@@ -233,6 +254,34 @@ final class ProfiHeuristik
         }
 
         return $teams;
+    }
+
+    /**
+     * Steht in dieser Welt eine reguläre 2-gegen-2-Partie?
+     *
+     * Hält der Bot selbst keine Kreuz-Dame, landen beide ungesehenen in rund 30 % der
+     * Determinisierungen beim selben Sitz – die Welt ist dann eine **stille Hochzeit**
+     * (einer gegen drei). In einem Spiel, das als Normalspiel läuft, ist das aber der
+     * seltene Ausnahmefall: wer beide Kreuz-Damen hält, meldet üblicherweise Hochzeit an
+     * (Bots immer). Solche Welten so häufig zu ziehen, verzerrt jede Bewertung, die an der
+     * Teamform hängt – 121er-Schwelle, „Gegen die Alten", keine 90/60/30.
+     *
+     * @param array<int, Team> $teams
+     */
+    private function istZweiGegenZwei(array $teams, ?SpielVariante $variante): bool
+    {
+        if ($variante !== null && $variante !== SpielVariante::NORMALSPIEL) {
+            return true; // Solo/Hochzeit sind gar nicht 2-gegen-2 gemeint
+        }
+
+        $re = 0;
+        foreach ($teams as $team) {
+            if ($team === Team::RE) {
+                $re++;
+            }
+        }
+
+        return $re === 2;
     }
 
     // ── Rollout ──────────────────────────────────────────────────────────────

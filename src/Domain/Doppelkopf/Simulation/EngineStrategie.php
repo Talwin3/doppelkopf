@@ -39,7 +39,8 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $ansagenAktiv = true,
         private readonly ?FortgeschritteneRegeln $regeln = null,
         private readonly ?AnsageSchwellen $ansageSchwellen = null,
-        private readonly bool $punkteBewertung = true,
+        private readonly bool $punkteBewertung = false,
+        private readonly bool $nurZweiGegenZwei = false,
     ) {}
 
     public function name(): string
@@ -50,6 +51,9 @@ final class EngineStrategie implements SimulierteStrategie
                 ? sprintf('(r=%d)', $this->rollouts)
                 : sprintf('(r=%d, t=%.2fs)', $this->rollouts, $this->zeitbudgetSek);
             $name .= $this->punkteBewertung ? ' [Punkte]' : ' [Augen]';
+            if ($this->nurZweiGegenZwei) {
+                $name .= ' [2-gegen-2]';
+            }
         }
         if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {
             $name .= sprintf(' [%s]', $this->regeln->beschreibung());
@@ -108,6 +112,7 @@ final class EngineStrategie implements SimulierteStrategie
             // Der Benchmark simuliert nur Normalspiele, also nie einen Solisten.
             solistSitzplatz: null,
             bewertePunkte: $this->punkteBewertung,
+            nurZweiGegenZwei: $this->nurZweiGegenZwei,
             rollouts: $this->rollouts,
             zeitbudgetSek: $this->zeitbudgetSek,
         );

@@ -117,14 +117,14 @@ final class ProfiHeuristikTest extends TestCase
 
         self::assertSame(
             'KARO_ZEHN_1',
-            $this->profi->entscheide(...$argumente)->id(),
-            'Bei gleicher Augenzahl muss die Bewertung den Doppelkopf mitnehmen.',
+            $this->profi->entscheide(...[...$argumente, 'bewertePunkte' => true])->id(),
+            'Die Punkte-Bewertung muss bei gleicher Augenzahl den Doppelkopf mitnehmen.',
         );
 
         self::assertSame(
             'KARO_NEUN_1',
-            $this->profi->entscheide(...[...$argumente, 'bewertePunkte' => false])->id(),
-            'Der alte Augen-Maßstab sieht hier keinen Unterschied – das ist genau die Lücke.',
+            $this->profi->entscheide(...$argumente)->id(),
+            'Der Augen-Maßstab (Default) sieht hier keinen Unterschied – das ist genau die Lücke.',
         );
     }
 
