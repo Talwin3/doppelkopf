@@ -51,7 +51,7 @@ final class FortgeschritteneRegelnTest extends TestCase
             $staerke,
             new BotHeuristik(),
             new FortgeschritteneHeuristik(),
-            new ProfiHeuristik(new StichGewinner()),
+            new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner())),
             new AnsageHeuristik(),
             20,
             0.2,

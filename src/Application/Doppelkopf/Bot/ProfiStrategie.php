@@ -11,7 +11,9 @@ use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
 use App\Enum\BotStaerke;
+use App\Enum\Team;
 use App\Repository\GespielteKarteRepository;
+use App\Repository\SpielAnsageRepository;
 
 /**
  * Stufe {@see BotStaerke::PROFI}: Kartenwahl per Perfect-Information Monte Carlo.
@@ -25,6 +27,7 @@ final class ProfiStrategie implements BotStrategie
         private readonly ProfiHeuristik $heuristik,
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
+        private readonly SpielAnsageRepository $ansageRepo,
         private readonly OeffentlicheTeams $oeffentlicheTeams,
     ) {}
 
@@ -86,20 +89,56 @@ final class ProfiStrategie implements BotStrategie
         $bekannteTeams = $this->oeffentlicheTeams->ermitteln($spiel, $eigenerSitz);
         $zweiteDulle   = (bool) ($spiel->getRegelEinstellungen()['zweite_dulle_sticht'] ?? false);
 
+        $ansagen = [];
+        foreach ($this->ansageRepo->findFuerSpiel($spiel) as $a) {
+            $ansagen[] = ['sitzplatz' => $a->getSitzplatz(), 'typ' => $a->getAnsageTyp()];
+        }
+
         return $this->heuristik->entscheide(
-            $erlaubte,
-            $eigeneHand,
-            $eigenerSitz,
-            $teilnehmer->getTeam(),
-            $offenerStich,
-            $restHandGroessen,
-            $gedaechtnis->ungesehene(),
-            $gedaechtnis,
-            $spiel->getVariante(),
-            $bekannteTeams,
-            array_values(array_unique($kreuzDameGespieltVon)),
-            $ordnung,
-            $zweiteDulle,
+            erlaubte: $erlaubte,
+            eigeneHand: $eigeneHand,
+            eigenerSitz: $eigenerSitz,
+            eigenesTeam: $teilnehmer->getTeam(),
+            offenerStich: $offenerStich,
+            restHandGroessen: $restHandGroessen,
+            ungesehene: $gedaechtnis->ungesehene(),
+            gedaechtnis: $gedaechtnis,
+            variante: $spiel->getVariante(),
+            bekannteTeams: $bekannteTeams,
+            kreuzDameGespieltVon: array_values(array_unique($kreuzDameGespieltVon)),
+            ordnung: $ordnung,
+            zweiteDulle: $zweiteDulle,
+            // Die Wertungsschwellen (121, keine 90 …) gelten fürs ganze Spiel, die Engine
+            // bewertet aber nur den Rest – die gelaufenen Stiche und Ansagen gehören dazu.
+            bisherigeStiche: $spiel->vollstaendigeStiche(),
+            ansagen: $ansagen,
+            solistSitzplatz: $this->solistSitzplatz($spiel),
         );
+    }
+
+    /**
+     * Der Solist zählt in der Abrechnung dreifach – für die Bewertung zählt nur, dass der
+     * {@see \App\Domain\Doppelkopf\Service\WertungsRechner} dann die Sonderpunkte
+     * (Fuchs/Karlchen/Doppelkopf) und „Gegen die Alten" weglässt. Gleiche Ermittlung wie in
+     * {@see \App\Application\Doppelkopf\SpielAbschlussService}: die ungeklärte Hochzeit
+     * rechnet ebenfalls wie ein Solo ab.
+     */
+    private function solistSitzplatz(Spiel $spiel): ?int
+    {
+        $variante = $spiel->getVariante();
+        $istSolo  = $spiel->isHochzeitAlsSolo()
+            || ($variante !== null && str_starts_with($variante->value, 'SOLO_'));
+
+        if (!$istSolo) {
+            return null;
+        }
+
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if ($t->getTeam() === Team::RE) {
+                return $t->getSitzplatz();
+            }
+        }
+
+        return null;
     }
 }

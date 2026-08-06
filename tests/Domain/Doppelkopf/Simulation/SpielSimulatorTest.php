@@ -53,7 +53,7 @@ final class SpielSimulatorTest extends TestCase
             $staerke,
             new BotHeuristik(),
             new FortgeschritteneHeuristik(),
-            new ProfiHeuristik(new StichGewinner()),
+            new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner())),
             new AnsageHeuristik(),
             $rollouts,
             0.2,

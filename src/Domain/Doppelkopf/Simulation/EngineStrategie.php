@@ -39,6 +39,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $ansagenAktiv = true,
         private readonly ?FortgeschritteneRegeln $regeln = null,
         private readonly ?AnsageSchwellen $ansageSchwellen = null,
+        private readonly bool $punkteBewertung = true,
     ) {}
 
     public function name(): string
@@ -48,6 +49,7 @@ final class EngineStrategie implements SimulierteStrategie
             $name .= $this->zeitbudgetSek >= 100.0
                 ? sprintf('(r=%d)', $this->rollouts)
                 : sprintf('(r=%d, t=%.2fs)', $this->rollouts, $this->zeitbudgetSek);
+            $name .= $this->punkteBewertung ? ' [Punkte]' : ' [Augen]';
         }
         if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {
             $name .= sprintf(' [%s]', $this->regeln->beschreibung());
@@ -86,21 +88,28 @@ final class EngineStrategie implements SimulierteStrategie
         }
 
         return $this->profi->entscheide(
-            $erlaubte,
-            $partie->hand($sitzplatz),
-            $sitzplatz,
-            $team,
-            $partie->offenerStich(),
-            $partie->restHandGroessen($sitzplatz),
-            $gedaechtnis->ungesehene(),
-            $gedaechtnis,
-            $partie->variante(),
-            $teams,
-            $partie->kreuzDameGespieltVon(),
-            $ordnung,
-            $partie->zweiteDulleSticht(),
-            $this->rollouts,
-            $this->zeitbudgetSek,
+            erlaubte: $erlaubte,
+            eigeneHand: $partie->hand($sitzplatz),
+            eigenerSitz: $sitzplatz,
+            eigenesTeam: $team,
+            offenerStich: $partie->offenerStich(),
+            restHandGroessen: $partie->restHandGroessen($sitzplatz),
+            ungesehene: $gedaechtnis->ungesehene(),
+            gedaechtnis: $gedaechtnis,
+            variante: $partie->variante(),
+            bekannteTeams: $teams,
+            kreuzDameGespieltVon: $partie->kreuzDameGespieltVon(),
+            ordnung: $ordnung,
+            zweiteDulle: $partie->zweiteDulleSticht(),
+            // Die Wertungsschwellen gelten fürs ganze Spiel – die schon gelaufenen
+            // Stiche und Ansagen gehören deshalb in die Bewertung der Welt.
+            bisherigeStiche: $partie->abgeschlosseneStiche(),
+            ansagen: $partie->ansagen(),
+            // Der Benchmark simuliert nur Normalspiele, also nie einen Solisten.
+            solistSitzplatz: null,
+            bewertePunkte: $this->punkteBewertung,
+            rollouts: $this->rollouts,
+            zeitbudgetSek: $this->zeitbudgetSek,
         );
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\AnsageTyp;
 use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
 use App\Enum\SpielVariante;
@@ -16,8 +17,16 @@ use App\Enum\Team;
  * Für jede erlaubte Karte werden mehrere "Welten" durchgespielt: die ungesehenen Karten
  * werden konsistent (Handgrößen + bekannte Farb-Freiheiten) an die Mitspieler verteilt
  * (Determinisierung), die Teams pro Welt aus den Kreuz-Damen abgeleitet, und der Rest des
- * Spiels mit einer schnellen Greedy-Politik ausgespielt. Gewählt wird die Karte mit den im
- * Schnitt meisten Augen für das eigene Team. Rollout-Zahl und Zeitbudget sind gedeckelt.
+ * Spiels mit einer schnellen Greedy-Politik ausgespielt. Rollout-Zahl und Zeitbudget sind
+ * gedeckelt.
+ *
+ * Bewertet wird eine Welt mit `v = 500 · s + e` (s = Turnierpunkte aus dem produktiven
+ * {@see WertungsRechner}, e = Augen des eigenen Teams) – die Reward-Formel aus Sievers/Obenaus.
+ * Doppelkopf wird an Schwellen gewertet (121, keine 90/60/30, Fuchs/Karlchen/Doppelkopf,
+ * Ansage-Verdopplung); reine Augen-Maximierung überschätzt deshalb das 130. Auge und
+ * unterschätzt das 121. Die Augen bleiben als Feinabstimmung zwischen sonst gleichwertigen
+ * Zügen im Term. Der alte Augen-Maßstab ist über `$bewertePunkte` weiter erreichbar
+ * (Vergleichsmessungen).
  *
  * Kein neuronales Netz (die FU-Arbeit von Obenaus zeigte dafür +0,04 Punkte/Spiel – nicht lohnend);
  * PIMC ist der tragende Ansatz. Reine Logik ohne DB; die Fakten sammelt
@@ -27,7 +36,17 @@ final class ProfiHeuristik
 {
     private const STECH_SCHWELLE = 10;
 
-    public function __construct(private readonly StichGewinner $stichGewinner) {}
+    /**
+     * Gewicht der Turnierpunkte gegenüber den Augen in `v = 500 · s + e`. Aus Sievers/Obenaus:
+     * bei realistischen Werten (s ≈ −8…+8, e = 0…240) dominieren die Punkte, die Augen
+     * entscheiden nur noch zwischen sonst punktgleichen Zügen.
+     */
+    private const PUNKT_GEWICHT = 500;
+
+    public function __construct(
+        private readonly StichGewinner $stichGewinner,
+        private readonly WertungsRechner $wertungsRechner,
+    ) {}
 
     /**
      * @param Karte[]            $erlaubte         Spielbare Karten (mind. eine)
@@ -37,6 +56,11 @@ final class ProfiHeuristik
      * @param Karte[]            $ungesehene       Karten, die bei den anderen liegen (Universum − gespielt − eigene Hand)
      * @param list<int>          $kreuzDameGespieltVon Sitze, die bereits eine Kreuz-Dame gespielt haben
      * @param array<int, ?Team>  $bekannteTeams    Sitzplatz → öffentlich bekanntes Team (für Solo/Hochzeit)
+     * @param list<list<array{sitzplatz: int, karte: Karte}>> $bisherigeStiche Abgeschlossene Stiche dieses Spiels –
+     *        die Wertungsschwellen gelten fürs ganze Spiel, nicht erst ab der aktuellen Stellung
+     * @param list<array{sitzplatz: int, typ: AnsageTyp}>     $ansagen         Bisherige Ansagen (verdoppeln den Spielwert)
+     * @param int|null           $solistSitzplatz  gesetzt bei Solo/Hochzeit-als-Solo
+     * @param bool               $bewertePunkte    false = alter Maßstab (nur Ø-Augen), für Vergleichsmessungen
      */
     public function entscheide(
         array $erlaubte,
@@ -52,6 +76,10 @@ final class ProfiHeuristik
         array $kreuzDameGespieltVon,
         TrumpfOrdnung $ordnung,
         bool $zweiteDulle,
+        array $bisherigeStiche = [],
+        array $ansagen = [],
+        ?int $solistSitzplatz = null,
+        bool $bewertePunkte = true,
         int $rollouts = 60,
         float $zeitbudgetSek = 0.8,
     ): Karte {
@@ -88,7 +116,17 @@ final class ProfiHeuristik
                 $amZug = ($eigenerSitz % 4) + 1;
 
                 $stiche = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
-                $summe[$i] += $this->augenFuer($stiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+                $summe[$i] += $bewertePunkte
+                    ? $this->bewerteWelt(
+                        array_merge($bisherigeStiche, $stiche),
+                        $teams,
+                        $eigenesTeam,
+                        $ordnung,
+                        $ansagen,
+                        $zweiteDulle,
+                        $solistSitzplatz,
+                    )
+                    : $this->augenFuer($stiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
             }
             $anzahl++;
         }
@@ -244,6 +282,37 @@ final class ProfiHeuristik
         }
 
         return $stiche;
+    }
+
+    /**
+     * Wert einer zu Ende gespielten Welt aus Sicht des eigenen Teams: `v = 500 · s + e`.
+     *
+     * `s` kommt aus dem produktiven {@see WertungsRechner} und enthält damit alles, was
+     * Doppelkopf ausmacht: die 121-Schwelle, keine 90/60/30/schwarz, Fuchs, Karlchen,
+     * Doppelköpfe und die Verdopplung durch Ansagen (inklusive der Verpflichtung, eine
+     * eigene Absage auch zu erfüllen). Der Solisten-Faktor 3 bleibt außen vor – er
+     * skaliert alle Kandidaten gleich und würde nur das Gewicht der Augen verschieben.
+     *
+     * @param list<list<array{sitzplatz: int, karte: Karte}>> $stiche  ganzes Spiel, nicht nur der Rollout
+     * @param array<int, Team>                                $teams
+     * @param list<array{sitzplatz: int, typ: AnsageTyp}>     $ansagen
+     */
+    private function bewerteWelt(
+        array $stiche,
+        array $teams,
+        Team $eigenesTeam,
+        TrumpfOrdnung $ordnung,
+        array $ansagen,
+        bool $zweiteDulle,
+        ?int $solistSitzplatz,
+    ): float {
+        $wertung = $this->wertungsRechner->berechne($stiche, $teams, $ordnung, $ansagen, $zweiteDulle, $solistSitzplatz);
+
+        $punkte = $wertung['punkteEmpfaenger'] === $eigenesTeam->value
+            ? $wertung['spielwert']
+            : -$wertung['spielwert'];
+
+        return self::PUNKT_GEWICHT * $punkte + $wertung['augen'][$eigenesTeam->value];
     }
 
     /**
