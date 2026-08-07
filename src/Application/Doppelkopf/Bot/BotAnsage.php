@@ -6,14 +6,18 @@ namespace App\Application\Doppelkopf\Bot;
 
 use App\Application\Doppelkopf\AnsageService;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
+use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Service\StichStatistik;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
+use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
+use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Entity\Spiel;
 use App\Entity\SpielAnsage;
 use App\Entity\SpielTeilnehmer;
 use App\Enum\AnsageTyp;
+use App\Enum\BotStaerke;
 use App\Repository\GespielteKarteRepository;
 use App\Repository\SpielAnsageRepository;
 use Psr\Log\LoggerInterface;
@@ -33,6 +37,8 @@ final class BotAnsage
         private readonly GespielteKarteRepository $gespielteKarteRepo,
         private readonly SpielAnsageRepository $ansageRepo,
         private readonly StichStatistik $stichStatistik,
+        private readonly ProfiSpielstand $profiSpielstand,
+        private readonly ProfiHeuristik $profiHeuristik,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -42,16 +48,18 @@ final class BotAnsage
             return;
         }
 
-        $ordnung = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        $ordnung   = $this->trumpfOrdnungFactory->fuerSpiel($spiel);
+        $staerke   = $teilnehmer->getBotStaerke();
+        $schwellen = AnsageSchwellen::fuer($staerke);
         $gespielteIds = $this->gespielteKarteRepo->findGespielteKartenIds($spiel, $teilnehmer->getSitzplatz());
         $hand = $teilnehmer->aktuelleHand($gespielteIds);
 
         $typ = $this->ansageHeuristik->willAnsagen(
-            $teilnehmer->getBotStaerke(),
+            $staerke,
             $hand,
             $teilnehmer->getTeam(),
             $ordnung,
-            null,
+            $schwellen,
             $this->teamAnsagen($spiel, $teilnehmer),
             fn(AnsageTyp $typ): int => $this->ansageService->mindestKarten($spiel, $typ),
             // Die ausgeteilte Hand als Alternative zum Restblatt; welche bewertet wird,
@@ -59,6 +67,7 @@ final class BotAnsage
             array_map(static fn(string $id) => Karte::vonId($id), $teilnehmer->getStartkartenIds()),
             // Essener: „bis zur Ansage erzielte Augenzahl plus Summe der Erwartungswerte".
             $this->erspielteTeamAugen($spiel, $teilnehmer, $ordnung),
+            $this->aussichtenGeber($spiel, $teilnehmer, $schwellen),
         );
         if ($typ === null) {
             return;
@@ -74,6 +83,48 @@ final class BotAnsage
                 'fehler'    => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Liefert den Rollout-Schätzer, sofern diese Stufe ihn nutzt – sonst null, dann bleibt
+     * es bei der Blattbewertung.
+     *
+     * Bewusst ein Callback: Der Zustand kostet mehrere DB-Abfragen und die Rollouts spürbar
+     * Rechenzeit. Beides fällt erst an, wenn Frist und Voraussetzungskette eine Ansage
+     * überhaupt zulassen – also höchstens einmal je Ansagetyp und Blatt statt vor jedem Zug.
+     *
+     * @return ?callable(AnsageTyp[]): AnsageAussichten
+     */
+    private function aussichtenGeber(Spiel $spiel, SpielTeilnehmer $teilnehmer, AnsageSchwellen $schwellen): ?callable
+    {
+        $rollout = $schwellen->rollout;
+        if ($rollout === null || $teilnehmer->getBotStaerke() !== BotStaerke::PROFI) {
+            return null;
+        }
+
+        return function (array $kandidaten) use ($spiel, $teilnehmer, $rollout): AnsageAussichten {
+            $z = $this->profiSpielstand->sammeln($spiel, $teilnehmer);
+
+            return $this->profiHeuristik->aussichten(
+                kandidaten: $kandidaten,
+                eigeneHand: $z->eigeneHand,
+                eigenerSitz: $z->eigenerSitz,
+                eigenesTeam: $z->eigenesTeam,
+                offenerStich: $z->offenerStich,
+                restHandGroessen: $z->restHandGroessen,
+                ungesehene: $z->gedaechtnis->ungesehene(),
+                gedaechtnis: $z->gedaechtnis,
+                variante: $z->variante,
+                bekannteTeams: $z->bekannteTeams,
+                kreuzDameGespieltVon: $z->kreuzDameGespieltVon,
+                ordnung: $z->ordnung,
+                zweiteDulle: $z->zweiteDulle,
+                bisherigeStiche: $z->bisherigeStiche,
+                ansagen: $z->ansagen,
+                solistSitzplatz: $z->solistSitzplatz,
+                rollouts: $rollout->welten,
+            );
+        };
     }
 
     /**

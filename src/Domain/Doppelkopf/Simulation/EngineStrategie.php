@@ -8,6 +8,7 @@ use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\BotHeuristik;
 use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
+use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Domain\Doppelkopf\ValueObject\Karte;
@@ -118,6 +119,8 @@ final class EngineStrategie implements SimulierteStrategie
         );
     }
 
+
+
     public function willAnsagen(Partie $partie, int $sitzplatz): ?AnsageTyp
     {
         if (!$this->ansagenAktiv) {
@@ -134,7 +137,47 @@ final class EngineStrategie implements SimulierteStrategie
             static fn(AnsageTyp $typ): int => AnsageRegeln::TIMING[$typ->value] ?? 0,
             $partie->starthand($sitzplatz),
             $partie->erspielteAugen($partie->eigenesTeam($sitzplatz)),
+            $this->aussichtenGeber($partie, $sitzplatz),
         );
+    }
+
+    /**
+     * Rollout-Schätzer für die Ansage – nur PROFI hat die dafür nötige PIMC-Engine.
+     *
+     * @return ?callable(AnsageTyp[]): AnsageAussichten
+     */
+    private function aussichtenGeber(Partie $partie, int $sitzplatz): ?callable
+    {
+        $rollout = $this->ansageSchwellen?->rollout;
+        if ($rollout === null || $this->staerke !== BotStaerke::PROFI) {
+            return null;
+        }
+
+        return function (array $kandidaten) use ($partie, $sitzplatz, $rollout): AnsageAussichten {
+            $gedaechtnis = $partie->gedaechtnisFuer($sitzplatz);
+
+            return $this->profi->aussichten(
+                kandidaten: $kandidaten,
+                eigeneHand: $partie->hand($sitzplatz),
+                eigenerSitz: $sitzplatz,
+                eigenesTeam: $partie->eigenesTeam($sitzplatz),
+                offenerStich: $partie->offenerStich(),
+                restHandGroessen: $partie->restHandGroessen($sitzplatz),
+                ungesehene: $gedaechtnis->ungesehene(),
+                gedaechtnis: $gedaechtnis,
+                variante: $partie->variante(),
+                bekannteTeams: $partie->bekannteTeams($sitzplatz),
+                kreuzDameGespieltVon: $partie->kreuzDameGespieltVon(),
+                ordnung: $partie->ordnung(),
+                zweiteDulle: $partie->zweiteDulleSticht(),
+                bisherigeStiche: $partie->abgeschlosseneStiche(),
+                ansagen: $partie->ansagen(),
+                solistSitzplatz: null,
+                nurZweiGegenZwei: $this->nurZweiGegenZwei,
+                rollouts: $rollout->welten,
+                zeitbudgetSek: $this->zeitbudgetSek,
+            );
+        };
     }
 
     /**

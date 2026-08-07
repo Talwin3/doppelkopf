@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Doppelkopf\ValueObject;
 
 use App\Enum\AnsageTyp;
+use App\Enum\BotStaerke;
 use App\Enum\Team;
 
 /**
@@ -134,6 +135,14 @@ final readonly class AnsageSchwellen
      * Die zweite Zeile ist die Kontrollgruppe: Das Restblatt allein ist **schlechter**. Der
      * Vorsprung kommt also von den erspielten Augen, nicht vom Wechsel der bewerteten Hand.
      */
+    /**
+     * `$rollout`: die Ansage per Monte-Carlo-Rollout entscheiden statt über die
+     * Blattbewertung ({@see AnsageRollout})? null = Blattbewertung wie bisher.
+     *
+     * Wirkt nur bei der Stufe PROFI – nur sie hat eine PIMC-Engine, die die Welten liefern
+     * kann. Für die übrigen Stufen bleibt es bei der Blattbewertung, auch wenn hier etwas
+     * gesetzt ist.
+     */
     public function __construct(
         public int $minTruempfeRe = 7,
         public int $minTruempfeContra = 8,
@@ -143,7 +152,14 @@ final readonly class AnsageSchwellen
         public ?float $minAugenContra = self::AUGEN_CONTRA,
         public bool $mitErspieltenAugen = true,
         public bool $bewerteRestblatt = true,
+        public ?AnsageRollout $rollout = null,
     ) {}
+
+    /** Nicht abschaltbar – wer die Blattbewertung will, setzt `$rollout` gar nicht erst. */
+    public function mitRollout(AnsageRollout $rollout): self
+    {
+        return $this->abgewandelt(rollout: $rollout);
+    }
 
     /**
      * Mindest-Blattstärke in Augen ({@see \App\Domain\Doppelkopf\Service\BlattBewertung}),
@@ -176,6 +192,7 @@ final readonly class AnsageSchwellen
         ?float $minAugenContra = null,
         ?bool $mitErspieltenAugen = null,
         ?bool $bewerteRestblatt = null,
+        ?AnsageRollout $rollout = null,
     ): self {
         return new self(
             minTruempfeRe: $this->minTruempfeRe,
@@ -186,7 +203,25 @@ final readonly class AnsageSchwellen
             minAugenContra: $minAugenContra ?? $this->minAugenContra,
             mitErspieltenAugen: $mitErspieltenAugen ?? $this->mitErspieltenAugen,
             bewerteRestblatt: $bewerteRestblatt ?? $this->bewerteRestblatt,
+            rollout: $rollout ?? $this->rollout,
         );
+    }
+
+    /**
+     * Die im Produktivpfad gültigen Schwellen einer Bot-Stufe.
+     *
+     * Bis hierher teilten sich alle Stufen dieselbe Konfiguration. Dass das nicht stimmt,
+     * zeigte die Messung zu den erspielten Augen: derselbe Schritt senkte die Ansagen bei
+     * PROFI um 27 %, hob sie bei FORTGESCHRITTEN aber um 15 % – gleicher Seed, echter
+     * Unterschied. Die Stufen spielen den ersten Stich verschieden und kommen deshalb mit
+     * verschiedenen Augenkonten an den Ansagezeitpunkt.
+     *
+     * Nur PROFI kann die Rollouts liefern, die {@see AnsageRollout} braucht; hier ist also
+     * der Ort, an dem die Rollout-Ansage nach bestandener Messung scharf geschaltet wird.
+     */
+    public static function fuer(BotStaerke $staerke): self
+    {
+        return new self();
     }
 
     /** Wie vor der Essener Auswertung: beide Parteien gleich behandelt, keine Absagen. */
@@ -225,6 +260,11 @@ final readonly class AnsageSchwellen
 
     public function beschreibung(): string
     {
+        if ($this->rollout !== null) {
+            return $this->rollout->beschreibung()
+                . ($this->letztmoeglich ? ', letztmöglich' : ', frühestmöglich');
+        }
+
         $text = sprintf(
             'Ansage ab %s%s (Re/Contra), %s, %s',
             $this->minAugenRe !== null

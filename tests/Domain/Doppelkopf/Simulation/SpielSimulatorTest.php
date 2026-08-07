@@ -141,6 +141,30 @@ final class SpielSimulatorTest extends TestCase
         self::assertSame($ergebnis->ansagenA, $ergebnis->ansagenB);
     }
 
+    /**
+     * Der Anker gilt auch im Team-Modus: Zwei identische deterministische Strategien
+     * müssen sich exakt aufheben, egal ob nach Sitzplatz oder nach Partei verteilt wird.
+     * Sichert, dass die Spiegelung den RE-Vorteil wirklich herauskürzt – ohne sie würde
+     * hier ein deutlicher Überschuss für die RE-Seite stehen bleiben.
+     */
+    public function testTeamModusHebtGleicheStrategieEbenfallsAuf(): void
+    {
+        $turnier = new TurnierLauf($this->simulator, $this->kartenGeber, $this->trumpfOrdnungFactory);
+
+        $ergebnis = $turnier->spiele(
+            $this->strategie(BotStaerke::FORTGESCHRITTEN),
+            $this->strategie(BotStaerke::FORTGESCHRITTEN),
+            12,
+            seed: 4242,
+            nachTeam: true,
+        );
+
+        self::assertGreaterThan(0, $ergebnis->anzahlBlaetter());
+        self::assertSame(0.0, $ergebnis->mittelwert());
+        self::assertSame(0.0, $ergebnis->standardabweichung());
+        self::assertSame($ergebnis->ansagenA, $ergebnis->ansagenB);
+    }
+
     public function testTurnierIstMitGleichemSeedReproduzierbar(): void
     {
         $turnier = new TurnierLauf($this->simulator, $this->kartenGeber, $this->trumpfOrdnungFactory);

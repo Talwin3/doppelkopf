@@ -23,7 +23,27 @@ final class TurnierErgebnis
         public readonly int $ansagenA,
         public readonly int $ansagenB,
         public readonly float $dauerSek,
+        public readonly int $gehalteneAnsagenA = 0,
+        public readonly int $gehalteneAnsagenB = 0,
+        public readonly int $absagenA = 0,
+        public readonly int $absagenB = 0,
     ) {}
+
+    /**
+     * Anteil der Ansagen, die aufgegangen sind (0…1), oder null ohne jede Ansage.
+     *
+     * Rauschärmer als die Punktdifferenz und deshalb die Zielgröße, wenn sich zwei
+     * Ansage-Verfahren vergleichen lassen sollen.
+     */
+    public function trefferquoteA(): ?float
+    {
+        return $this->ansagenA === 0 ? null : $this->gehalteneAnsagenA / $this->ansagenA;
+    }
+
+    public function trefferquoteB(): ?float
+    {
+        return $this->ansagenB === 0 ? null : $this->gehalteneAnsagenB / $this->ansagenB;
+    }
 
     public function anzahlBlaetter(): int
     {

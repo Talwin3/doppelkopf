@@ -10,7 +10,9 @@ use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Simulation\EngineStrategie;
 use App\Domain\Doppelkopf\Simulation\SimulierteStrategie;
+use App\Domain\Doppelkopf\Simulation\TurnierErgebnis;
 use App\Domain\Doppelkopf\Simulation\TurnierLauf;
+use App\Domain\Doppelkopf\ValueObject\AnsageRollout;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Enum\BotStaerke;
@@ -85,6 +87,21 @@ final class BotTurnierCommand extends Command
             ->addOption('profi-punkte-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('profi-1gegen3-a', null, InputOption::VALUE_NONE, 'A lässt Welten mit stiller Hochzeit (1 gegen 3) bei der Determinisierung zu (Stand vor dem 2026-08-07)')
             ->addOption('profi-1gegen3-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('ansage-rollout-a', null, InputOption::VALUE_NONE, 'A entscheidet die Ansage per Monte-Carlo-Rollout statt über die Blattbewertung (nur PROFI)')
+            ->addOption('ansage-rollout-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('rollout-schwellen-a', null, InputOption::VALUE_NONE, 'A entscheidet die Rollout-Ansage nach den Essener Wahrscheinlichkeitsschwellen statt nach dem Erwartungswert')
+            ->addOption('rollout-schwellen-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('rollout-absagen-a', null, InputOption::VALUE_NONE, 'A entscheidet auch keine 90/60/30/schwarz per Rollout')
+            ->addOption('rollout-absagen-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('rollout-absagen-schwellen-a', null, InputOption::VALUE_NONE, 'A entscheidet NUR die Absagen nach den Essener Schwellen, Re/Contra weiter nach Erwartungswert')
+            ->addOption('rollout-absagen-schwellen-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('rollout-nur-absagen-a', null, InputOption::VALUE_NONE, 'A entscheidet die Erstansage weiter über die Blattbewertung und nutzt die Rollouts nur für die Absagen')
+            ->addOption('rollout-nur-absagen-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('rollout-welten-a', null, InputOption::VALUE_REQUIRED, 'Welten je Ansage-Entscheidung für A', '60')
+            ->addOption('rollout-welten-b', null, InputOption::VALUE_REQUIRED, 'dito für B', '60')
+            ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
+            ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
+            ->addOption('vergleiche', null, InputOption::VALUE_REQUIRED, 'Zwei mit --dump erzeugte Dateien gepaart vergleichen ("x.json,y.json") und beenden')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -93,6 +110,10 @@ final class BotTurnierCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+
+        if (($paar = $input->getOption('vergleiche')) !== null) {
+            return $this->vergleiche($io, (string) $paar);
+        }
 
         if ($input->getOption('regeln-liste')) {
             $io->title('FORTGESCHRITTEN-Regeln');
@@ -128,6 +149,14 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('ohne-erspielte-a'),
                 (bool) $input->getOption('profi-punkte-a'),
                 !$input->getOption('profi-1gegen3-a'),
+                $this->baueRollout(
+                    (bool) $input->getOption('ansage-rollout-a'),
+                    !$input->getOption('rollout-schwellen-a'),
+                    (bool) $input->getOption('rollout-absagen-a'),
+                    (int) $input->getOption('rollout-welten-a'),
+                    (bool) $input->getOption('rollout-absagen-schwellen-a'),
+                    (bool) $input->getOption('rollout-nur-absagen-a'),
+                ),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -144,6 +173,14 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('ohne-erspielte-b'),
                 (bool) $input->getOption('profi-punkte-b'),
                 !$input->getOption('profi-1gegen3-b'),
+                $this->baueRollout(
+                    (bool) $input->getOption('ansage-rollout-b'),
+                    !$input->getOption('rollout-schwellen-b'),
+                    (bool) $input->getOption('rollout-absagen-b'),
+                    (int) $input->getOption('rollout-welten-b'),
+                    (bool) $input->getOption('rollout-absagen-schwellen-b'),
+                    (bool) $input->getOption('rollout-nur-absagen-b'),
+                ),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -161,6 +198,9 @@ final class BotTurnierCommand extends Command
             ['A' => $a->name()],
             ['B' => $b->name()],
             ['Blätter' => (string) $anzahl . ' (je 2 Partien, gespiegelt)'],
+            ['Verteilung' => $input->getOption('nach-team')
+                ? 'nach Partei (A = RE, gespiegelt) – A und B sitzen nie zusammen'
+                : 'nach Sitzplatz (A = 1/3, gespiegelt)'],
             ['Seed' => (string) $seed],
             ['Regeln' => sprintf(
                 'ohne Neuner: %s, zweite Dulle sticht: %s',
@@ -179,6 +219,7 @@ final class BotTurnierCommand extends Command
             $seed,
             $regelEinstellungen,
             static fn(int $blatt) => $fortschritt->setProgress($blatt),
+            (bool) $input->getOption('nach-team'),
         );
 
         $fortschritt->finish();
@@ -196,9 +237,30 @@ final class BotTurnierCommand extends Command
                 ['95-%-Konfidenzintervall', sprintf('%+.4f … %+.4f', $mittel - $halbbreite, $mittel + $halbbreite)],
                 ['Standardabweichung', sprintf('%.4f', $ergebnis->standardabweichung())],
                 ['Ansagen A / B', sprintf('%d / %d', $ergebnis->ansagenA, $ergebnis->ansagenB)],
+                ['davon Absagen A / B', sprintf('%d / %d', $ergebnis->absagenA, $ergebnis->absagenB)],
+                ['davon gehalten A / B', sprintf(
+                    '%d / %d  (%s / %s)',
+                    $ergebnis->gehalteneAnsagenA,
+                    $ergebnis->gehalteneAnsagenB,
+                    $this->quote($ergebnis->trefferquoteA()),
+                    $this->quote($ergebnis->trefferquoteB()),
+                )],
                 ['Dauer', sprintf('%.1f s (%.3f s/Partie)', $ergebnis->dauerSek, $ergebnis->dauerSek / max(1, $ergebnis->anzahlBlaetter() * 2))],
             ],
         );
+
+        if (($ziel = $input->getOption('dump')) !== null) {
+            file_put_contents((string) $ziel, json_encode([
+                'name_a'      => $ergebnis->nameA,
+                'name_b'      => $ergebnis->nameB,
+                'seed'        => $seed,
+                'ansagen_a'   => $ergebnis->ansagenA,
+                'absagen_a'   => $ergebnis->absagenA,
+                'gehalten_a'  => $ergebnis->gehalteneAnsagenA,
+                'differenzen' => $ergebnis->differenzen,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $io->note(sprintf('Differenzen je Blatt nach %s geschrieben.', $ziel));
+        }
 
         if ($ergebnis->anzahlBlaetter() === 0) {
             $io->warning('Keine Blätter gewertet.');
@@ -246,6 +308,7 @@ final class BotTurnierCommand extends Command
         bool $mitErspieltenAugen,
         bool $punkteBewertung,
         bool $nurZweiGegenZwei,
+        ?AnsageRollout $rollout,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -293,6 +356,9 @@ final class BotTurnierCommand extends Command
             $schwellen = $schwellen->mitAugenSchwellen($werte[0], $werte[1]);
         }
         $schwellen = $schwellen->mitErspieltenAugen($mitErspieltenAugen)->mitBewerteRestblatt($bewerteRestblatt);
+        if ($rollout !== null) {
+            $schwellen = $schwellen->mitRollout($rollout);
+        }
 
         return new EngineStrategie(
             $staerke,
@@ -308,5 +374,105 @@ final class BotTurnierCommand extends Command
             $punkteBewertung,
             $nurZweiGegenZwei,
         );
+    }
+
+    private function quote(?float $anteil): string
+    {
+        return $anteil === null ? '–' : sprintf('%.1f %%', $anteil * 100);
+    }
+
+    /**
+     * Vergleicht zwei mit `--dump` erzeugte Läufe **gepaart**.
+     *
+     * Bis hierher galten Ansage-Varianten als nicht gepaart messbar: A gegen B verzerrt die
+     * Ansagen (A und B sitzen oft im selben Team und nehmen einander die Team-Ansage weg),
+     * also muss jede Variante einzeln gegen ANFAENGER laufen – und die Differenz zweier
+     * solcher Läufe hatte kein Konfidenzintervall.
+     *
+     * Sie lässt sich aber sehr wohl paaren: Laufen X und Y auf demselben Seed, ist die
+     * Differenz je Blatt (X − Anfänger) − (Y − Anfänger) = X − Y auf demselben Blatt. Das
+     * kürzt das Kartenglück heraus, das in beiden Läufen dasselbe ist, und ist um ein
+     * Vielfaches schärfer als der Vergleich zweier Mittelwerte.
+     *
+     * ⚠️ Was es **nicht** kürzt: Beide Läufe verbrauchen unterschiedlich viele Zufallszahlen,
+     * sobald sie verschieden oft Rollouts anwerfen. Ab der ersten abweichenden Entscheidung
+     * spielen sie dasselbe Blatt mit anderen Determinisierungen – die Streuung der
+     * PIMC-Kartenwahl bleibt also drin. Gepaart wird das Blatt, nicht der Spielverlauf.
+     */
+    private function vergleiche(SymfonyStyle $io, string $paar): int
+    {
+        $dateien = array_map('trim', explode(',', $paar));
+        if (count($dateien) !== 2) {
+            $io->error('--vergleiche erwartet zwei Dateien: "x.json,y.json".');
+
+            return Command::FAILURE;
+        }
+
+        $laeufe = [];
+        foreach ($dateien as $datei) {
+            if (!is_file($datei)) {
+                $io->error(sprintf('Datei nicht gefunden: %s', $datei));
+
+                return Command::FAILURE;
+            }
+            $laeufe[] = json_decode((string) file_get_contents($datei), true);
+        }
+
+        [$x, $y] = $laeufe;
+        if ($x['seed'] !== $y['seed']) {
+            $io->error(sprintf('Verschiedene Seeds (%d vs %d) – die Blätter sind nicht dieselben.', $x['seed'], $y['seed']));
+
+            return Command::FAILURE;
+        }
+        if (count($x['differenzen']) !== count($y['differenzen'])) {
+            $io->error('Verschieden viele Blätter – nicht paarbar.');
+
+            return Command::FAILURE;
+        }
+
+        $paarweise = [];
+        foreach ($x['differenzen'] as $i => $wert) {
+            $paarweise[] = $wert - $y['differenzen'][$i];
+        }
+
+        $ergebnis = new TurnierErgebnis($x['name_a'], $y['name_a'], $paarweise, 0, 0, 0, 0.0);
+        $mittel   = $ergebnis->mittelwert();
+        $halb     = $ergebnis->konfidenzHalbbreite();
+
+        $io->title('Gepaarter Vergleich');
+        $io->table(['Kennzahl', 'Wert'], [
+            ['X', $x['name_a']],
+            ['Y', $y['name_a']],
+            ['Seed', (string) $x['seed']],
+            ['Blätter', (string) $ergebnis->anzahlBlaetter()],
+            ['Ansagen X / Y', sprintf('%d / %d', $x['ansagen_a'], $y['ansagen_a'])],
+            ['davon Absagen X / Y', sprintf('%d / %d', $x['absagen_a'] ?? 0, $y['absagen_a'] ?? 0)],
+            ['Ø Punkte/Spieler/Partie (X − Y)', sprintf('%+.4f', $mittel)],
+            ['95-%-Konfidenzintervall', sprintf('%+.4f … %+.4f', $mittel - $halb, $mittel + $halb)],
+            ['Standardabweichung', sprintf('%.4f', $ergebnis->standardabweichung())],
+        ]);
+
+        $ergebnis->signifikant()
+            ? $io->success(sprintf('Signifikanter Unterschied (%+.4f).', $mittel))
+            : $io->warning('Kein signifikanter Unterschied auf dem 95-%-Niveau.');
+
+        return Command::SUCCESS;
+    }
+
+    /** null = Ansage weiter über die Blattbewertung entscheiden. */
+    private function baueRollout(
+        bool $an,
+        bool $evVergleich,
+        bool $absagen,
+        int $welten,
+        bool $absagenNachSchwellen = false,
+        bool $nurAbsagen = false,
+    ): ?AnsageRollout {
+        // „Nur Absagen" ergibt ohne eingeschaltete Absagen keinen Sinn – dann bliebe nichts.
+        $absagen = $absagen || $nurAbsagen;
+
+        return $an || $nurAbsagen
+            ? new AnsageRollout($evVergleich, $absagen, AnsageRollout::SICHERHEIT_ESSEN, max(1, $welten), $absagenNachSchwellen, $nurAbsagen)
+            : null;
     }
 }

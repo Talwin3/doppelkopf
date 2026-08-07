@@ -10,6 +10,7 @@ use App\Domain\Doppelkopf\Service\SpielGedaechtnis;
 use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\AnsageTyp;
 use App\Enum\SpielVariante;
 use App\Enum\Team;
 use PHPUnit\Framework\TestCase;
@@ -156,5 +157,97 @@ final class ProfiHeuristikTest extends TestCase
         );
 
         self::assertContains($gewaehlt->id(), array_map(fn(Karte $k) => $k->id(), $eigeneHand));
+    }
+
+    // ── Ansage-Aussichten ───────────────────────────────────────────────────
+    //
+    // Endstellungen, deren Ausgang in **jeder** Welt gleich ist – nur so lässt sich eine
+    // Wahrscheinlichkeit exakt gegen 1,0 bzw. 0,0 prüfen, obwohl die Determinisierung
+    // zufällig verteilt.
+
+    /** @param Karte[] $eigeneHand @param Karte[] $ungesehene */
+    private function aussichtenFuerEndstellung(array $eigeneHand, array $ungesehene): \App\Domain\Doppelkopf\ValueObject\AnsageAussichten
+    {
+        return $this->profi->aussichten(
+            kandidaten: [AnsageTyp::RE, AnsageTyp::KEINE_NEUN, AnsageTyp::SCHWARZ],
+            eigeneHand: $eigeneHand,
+            eigenerSitz: 1,
+            eigenesTeam: Team::RE,
+            offenerStich: [],
+            restHandGroessen: [2 => 2, 3 => 2, 4 => 2],
+            ungesehene: $ungesehene,
+            gedaechtnis: SpielGedaechtnis::ausHistorie([], [], $eigeneHand, $this->ordnung),
+            // Solo: Sitz 1 allein gegen den Rest – jeder fremde Stich fällt an KONTRA.
+            variante: SpielVariante::SOLO_DAMEN,
+            bekannteTeams: [1 => Team::RE, 2 => Team::KONTRA, 3 => Team::KONTRA, 4 => Team::KONTRA],
+            kreuzDameGespieltVon: [],
+            ordnung: $this->ordnung,
+            zweiteDulle: false,
+            solistSitzplatz: 1,
+            rollouts: 15,
+        );
+    }
+
+    /**
+     * Bot hält beide Dullen, alle anderen nur augenlose Fehlfarben: Er zieht beide Stiche,
+     * die Gegenpartei bekommt weder Stich noch Auge. „Schwarz" und „keine 90" gehen damit
+     * in jeder Welt auf.
+     */
+    public function testAussichtenErkennenDieSichereAbsage(): void
+    {
+        $aussichten = $this->aussichtenFuerEndstellung(
+            [$this->k('HERZ_ZEHN_1'), $this->k('HERZ_ZEHN_2')],
+            [
+                $this->k('KREUZ_NEUN_1'), $this->k('KREUZ_NEUN_2'),
+                $this->k('PIK_NEUN_1'), $this->k('PIK_NEUN_2'),
+                $this->k('HERZ_NEUN_1'), $this->k('HERZ_NEUN_2'),
+            ],
+        );
+
+        self::assertFalse($aussichten->leer());
+        self::assertSame(1.0, $aussichten->sicherheit(AnsageTyp::SCHWARZ));
+        self::assertSame(1.0, $aussichten->sicherheit(AnsageTyp::KEINE_NEUN));
+    }
+
+    /**
+     * Umgekehrt: Der Bot hat nur zwei augenlose Kreuz-Neunen, jede fremde Karte sticht sie.
+     * Er verliert beide Stiche – „schwarz" geht in keiner Welt auf, „keine 90" dagegen
+     * schon (die Gegenpartei holt nur 50 Augen). Genau diese Unterscheidung soll die
+     * Schätzung leisten; die Trumpfzahl konnte sie nie treffen.
+     */
+    public function testAussichtenTrennenDieAbsageStufen(): void
+    {
+        $aussichten = $this->aussichtenFuerEndstellung(
+            [$this->k('KREUZ_NEUN_1'), $this->k('KREUZ_NEUN_2')],
+            [
+                $this->k('KREUZ_ASS_1'), $this->k('KREUZ_ASS_2'),
+                $this->k('KREUZ_ZEHN_1'), $this->k('KREUZ_ZEHN_2'),
+                $this->k('KREUZ_KOENIG_1'), $this->k('KREUZ_KOENIG_2'),
+            ],
+        );
+
+        self::assertSame(0.0, $aussichten->sicherheit(AnsageTyp::SCHWARZ));
+        self::assertSame(1.0, $aussichten->sicherheit(AnsageTyp::KEINE_NEUN));
+    }
+
+    public function testOhneKandidatenKeineAussichten(): void
+    {
+        $hand = [$this->k('HERZ_ZEHN_1')];
+
+        self::assertTrue($this->profi->aussichten(
+            kandidaten: [],
+            eigeneHand: $hand,
+            eigenerSitz: 1,
+            eigenesTeam: Team::RE,
+            offenerStich: [],
+            restHandGroessen: [2 => 1, 3 => 1, 4 => 1],
+            ungesehene: [$this->k('KREUZ_NEUN_1'), $this->k('PIK_NEUN_1'), $this->k('HERZ_NEUN_1')],
+            gedaechtnis: SpielGedaechtnis::ausHistorie([], [], $hand, $this->ordnung),
+            variante: SpielVariante::SOLO_DAMEN,
+            bekannteTeams: [1 => Team::RE, 2 => Team::KONTRA, 3 => Team::KONTRA, 4 => Team::KONTRA],
+            kreuzDameGespieltVon: [],
+            ordnung: $this->ordnung,
+            zweiteDulle: false,
+        )->leer());
     }
 }

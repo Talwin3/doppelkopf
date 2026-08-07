@@ -7,6 +7,8 @@ namespace App\Tests\Domain\Doppelkopf\Service;
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\BlattBewertung;
+use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
+use App\Domain\Doppelkopf\ValueObject\AnsageRollout;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
@@ -296,6 +298,262 @@ final class AnsageHeuristikTest extends TestCase
         self::assertSame(
             AnsageTyp::CONTRA,
             $this->heuristik->willAnsagen(BotStaerke::PROFI, $hand, Team::KONTRA, $this->ordnung, AnsageSchwellen::gleich(7)),
+        );
+    }
+
+    // ── Ansage per Rollout ──────────────────────────────────────────────────
+    //
+    // Die Schätzung wird hier gestellt, nicht gerechnet: Genau dafür ist sie von der
+    // Entscheidung getrennt. Die Politik ist damit ohne eine einzige Monte-Carlo-Welt
+    // prüfbar – und die Tests laufen in Millisekunden statt Sekunden.
+
+    /** @param array<string, float> $evMit @param array<string, float> $haelt */
+    private function aussichten(float $evOhne, array $evMit, array $haelt = []): callable
+    {
+        return static fn(array $kandidaten): AnsageAussichten
+            => new AnsageAussichten(60, $evOhne, $evMit, $haelt);
+    }
+
+    private function rolloutSchwellen(bool $evVergleich = true, bool $absagen = false): AnsageSchwellen
+    {
+        return (new AnsageSchwellen())->mitRollout(new AnsageRollout($evVergleich, $absagen));
+    }
+
+    public function testRolloutSagtAnWennDerErwartungswertSteigt(): void
+    {
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+                aussichtenFuer: $this->aussichten(1.0, ['RE' => 2.0]),
+            ),
+        );
+    }
+
+    public function testRolloutSchweigtWennDieAnsageDenErwartungswertSenkt(): void
+    {
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+                aussichtenFuer: $this->aussichten(1.0, ['RE' => -2.0]),
+            ),
+        );
+    }
+
+    /**
+     * Der fachliche Kern des Hebels: Das Damen-Gate („Kreuz-Dame oder ≥ 2 Damen") gilt im
+     * Rollout-Pfad nicht mehr. Eine Hand ohne jede Dame konnte bisher nie ansagen – auch
+     * dann nicht, wenn die Partei längst uneinholbar vorn lag.
+     */
+    public function testRolloutBrauchtKeineDamenImBlatt(): void
+    {
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+                aussichtenFuer: $this->aussichten(0.5, ['RE' => 1.5]),
+            ),
+        );
+
+        // Zum Vergleich: über die Blattbewertung bleibt dieselbe Hand stumm.
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung,
+            ),
+        );
+    }
+
+    public function testEssenerSchwellenEntscheidenNachWahrscheinlichkeit(): void
+    {
+        $schwellen = $this->rolloutSchwellen(evVergleich: false);
+
+        // 52 % Siegchance – über den 50 % für Re, obwohl der Erwartungswert hier fiele.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                aussichtenFuer: $this->aussichten(1.0, ['RE' => -5.0], ['RE' => 0.52]),
+            ),
+        );
+
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                aussichtenFuer: $this->aussichten(1.0, ['RE' => 5.0], ['RE' => 0.48]),
+            ),
+        );
+    }
+
+    /**
+     * Der Absage-Schalter wirkt getrennt: Re/Contra bleiben beim Erwartungswert, nur die
+     * Absage entscheidet nach Wahrscheinlichkeit. Sonst ließe sich nicht messen, welche der
+     * beiden Regeln einen Unterschied macht.
+     */
+    public function testAbsagenKoennenEigenerRegelFolgen(): void
+    {
+        $schwellen = (new AnsageSchwellen())->mitRollout(
+            new AnsageRollout(true, true, AnsageRollout::SICHERHEIT_ESSEN, 60, absagenNachSchwellen: true),
+        );
+
+        // Erwartungswert spräche dafür, die Sicherheit (80 %) reicht für „keine 90" nicht.
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                [AnsageTyp::RE],
+                aussichtenFuer: $this->aussichten(1.0, ['KEINE_NEUN' => 9.0], ['KEINE_NEUN' => 0.80]),
+            ),
+        );
+
+        // 95 % liegen über den geforderten 88,89 %.
+        self::assertSame(
+            AnsageTyp::KEINE_NEUN,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                [AnsageTyp::RE],
+                aussichtenFuer: $this->aussichten(1.0, ['KEINE_NEUN' => -9.0], ['KEINE_NEUN' => 0.95]),
+            ),
+        );
+
+        // Die Grundansage folgt weiter dem Erwartungswert, nicht der Sicherheit.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                aussichtenFuer: $this->aussichten(1.0, ['RE' => 2.0], ['RE' => 0.10]),
+            ),
+        );
+    }
+
+    /**
+     * `nurAbsagen`: Die Erstansage bleibt bei der Blattbewertung, die Rollouts greifen erst
+     * ab der Absage-Kette. Der Schätzer darf für die Grundansage gar nicht erst befragt
+     * werden – sonst kostete er Rechenzeit für eine Entscheidung, die er nicht trifft.
+     */
+    public function testNurAbsagenLaesstDieErstansageBeiDerBlattbewertung(): void
+    {
+        $schwellen = (new AnsageSchwellen())->mitRollout(
+            new AnsageRollout(true, true, AnsageRollout::SICHERHEIT_ESSEN, 60, nurAbsagen: true),
+        );
+
+        $befragt = false;
+        $geber = static function (array $k) use (&$befragt): AnsageAussichten {
+            $befragt = true;
+
+            return new AnsageAussichten(60, 0.0, ['KEINE_NEUN' => 5.0]);
+        };
+
+        // Ohne Grundansage: Blattbewertung entscheidet, Rollout bleibt unangetastet.
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung, $schwellen,
+                aussichtenFuer: $geber,
+            ),
+        );
+        self::assertFalse($befragt, 'Für die Erstansage dürfen keine Rollouts laufen.');
+
+        // Eine Hand, die der Blattbewertung nicht reicht, sagt auch nicht an …
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung, $schwellen,
+                aussichtenFuer: $geber,
+            ),
+        );
+
+        // … steht die Grundansage aber, übernimmt der Rollout die Absage.
+        self::assertSame(
+            AnsageTyp::KEINE_NEUN,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->schwacheHand(), Team::RE, $this->ordnung, $schwellen,
+                [AnsageTyp::RE],
+                aussichtenFuer: $geber,
+            ),
+        );
+        self::assertTrue($befragt);
+    }
+
+    public function testAbsagenBleibenOhneEigenenSchalterAus(): void
+    {
+        // Re steht, der Erwartungswert trüge auch „keine 90" – der Schalter ist aber aus.
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(absagen: false),
+                [AnsageTyp::RE],
+                aussichtenFuer: $this->aussichten(1.0, ['KEINE_NEUN' => 3.0]),
+            ),
+        );
+
+        self::assertSame(
+            AnsageTyp::KEINE_NEUN,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(absagen: true),
+                [AnsageTyp::RE],
+                aussichtenFuer: $this->aussichten(1.0, ['KEINE_NEUN' => 3.0]),
+            ),
+        );
+    }
+
+    /** Immer nur die nächste offene Stufe – das hält die Rollout-Kosten bei einem Durchgang. */
+    public function testRolloutBietetGenauEinenKandidatenAn(): void
+    {
+        $gesehen = [];
+        $geber = static function (array $kandidaten) use (&$gesehen): AnsageAussichten {
+            $gesehen = $kandidaten;
+
+            return new AnsageAussichten(60, 0.0, ['KEINE_SECHS' => 1.0]);
+        };
+
+        $this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+            $this->rolloutSchwellen(absagen: true),
+            [AnsageTyp::RE, AnsageTyp::KEINE_NEUN],
+            aussichtenFuer: $geber,
+        );
+
+        self::assertSame([AnsageTyp::KEINE_SECHS], $gesehen);
+    }
+
+    public function testRolloutHaeltDieFristEin(): void
+    {
+        $hand = $this->starkeHand(); // 10 Karten
+
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $hand, Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+                [],
+                static fn(AnsageTyp $typ): int => 9, // erst ab 9 Handkarten
+                aussichtenFuer: $this->aussichten(0.0, ['RE' => 9.0]),
+            ),
+        );
+    }
+
+    /** Ohne auswertbare Welt wird nicht geraten. */
+    public function testOhneWeltenKeineAnsage(): void
+    {
+        self::assertNull(
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+                aussichtenFuer: static fn(array $k): AnsageAussichten => new AnsageAussichten(0),
+            ),
+        );
+    }
+
+    /** Ohne Schätzer (alle Stufen außer PROFI) bleibt es bei der Blattbewertung. */
+    public function testOhneSchaetzerEntscheidetWeiterDasBlatt(): void
+    {
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $this->starkeHand(), Team::RE, $this->ordnung,
+                $this->rolloutSchwellen(),
+            ),
         );
     }
 }

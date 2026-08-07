@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Doppelkopf\Service;
 
+use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
 use App\Enum\Kartenfarbe;
@@ -167,6 +168,145 @@ final class ProfiHeuristik
         }
 
         return $erlaubte[$besterIndex];
+    }
+
+    /**
+     * Schätzt die Aussichten der eigenen Partei – Grundlage der Ansage-Entscheidung
+     * ({@see \App\Domain\Doppelkopf\ValueObject\AnsageRollout}).
+     *
+     * Zieht dieselben Welten wie {@see self::entscheide} und spielt jede von der aktuellen
+     * Stellung aus zu Ende – diesmal ohne Kandidat-Karte, denn gefragt ist nicht „welche
+     * Karte", sondern „wie steht die Partei". Aus jeder fertigen Welt fällt ab, ob die
+     * Partei gewinnt und wie viele Augen die Gegenpartei bekommt; daraus die
+     * Wahrscheinlichkeiten. Zusätzlich wird jede Welt einmal je Kandidat-Ansage durch den
+     * {@see WertungsRechner} gerechnet, was den Erwartungswert der Ansage liefert.
+     *
+     * @param AnsageTyp[] $kandidaten Ansagen, die gerade zur Debatte stehen (regelkonform
+     *        vorgefiltert – die Engine prüft weder Fristen noch Voraussetzungsketten)
+     *
+     * @see self::entscheide für die Bedeutung der übrigen Parameter
+     */
+    public function aussichten(
+        array $kandidaten,
+        array $eigeneHand,
+        int $eigenerSitz,
+        ?Team $eigenesTeam,
+        array $offenerStich,
+        array $restHandGroessen,
+        array $ungesehene,
+        SpielGedaechtnis $gedaechtnis,
+        ?SpielVariante $variante,
+        array $bekannteTeams,
+        array $kreuzDameGespieltVon,
+        TrumpfOrdnung $ordnung,
+        bool $zweiteDulle,
+        array $bisherigeStiche = [],
+        array $ansagen = [],
+        ?int $solistSitzplatz = null,
+        bool $nurZweiGegenZwei = true,
+        int $rollouts = 60,
+        float $zeitbudgetSek = 0.8,
+    ): AnsageAussichten {
+        if ($kandidaten === [] || $eigenesTeam === null || $eigeneHand === []) {
+            return new AnsageAussichten(0);
+        }
+
+        $gegenTeam = $eigenesTeam === Team::RE ? Team::KONTRA : Team::RE;
+
+        $summeOhne = 0.0;
+        $summeMit  = array_fill_keys(array_map(static fn(AnsageTyp $t) => $t->value, $kandidaten), 0.0);
+        $haelt     = array_fill_keys(array_keys($summeMit), 0);
+        $anzahl    = 0;
+        $start     = microtime(true);
+
+        for ($r = 0; $r < $rollouts; $r++) {
+            if ($r > 0 && (microtime(true) - $start) >= $zeitbudgetSek) {
+                break;
+            }
+
+            $welt  = null;
+            $teams = null;
+            for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
+                $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
+                if ($kandidatWelt === null) {
+                    continue;
+                }
+
+                $kandidatTeams = $this->teamsAbleiten($kandidatWelt, $variante, $bekannteTeams, $eigenesTeam, $eigenerSitz, $kreuzDameGespieltVon);
+                if ($nurZweiGegenZwei && !$this->istZweiGegenZwei($kandidatTeams, $variante)) {
+                    continue;
+                }
+
+                $welt  = $kandidatWelt;
+                $teams = $kandidatTeams;
+                break;
+            }
+            if ($welt === null || $teams === null) {
+                continue;
+            }
+
+            // Die eigene Hand gehört im Rollout dazu – gespielt wird ab dem eigenen Sitz.
+            $welt[$eigenerSitz] = $eigeneHand;
+            $stiche = array_merge(
+                $bisherigeStiche,
+                $this->ausspielen($welt, $offenerStich, $eigenerSitz, $teams, $ordnung, $zweiteDulle),
+            );
+
+            $ohne = $this->wertungsRechner->berechne($stiche, $teams, $ordnung, $ansagen, $zweiteDulle, $solistSitzplatz);
+            $summeOhne += $this->signierterWert($ohne, $eigenesTeam);
+
+            $gegenAugen  = $ohne['augen'][$gegenTeam->value] ?? 0;
+            $gegenStiche = $ohne['stiche'][$gegenTeam->value] ?? 0;
+
+            foreach ($kandidaten as $typ) {
+                $mitAnsagen = array_merge($ansagen, [['sitzplatz' => $eigenerSitz, 'typ' => $typ]]);
+                $mit = $this->wertungsRechner->berechne($stiche, $teams, $ordnung, $mitAnsagen, $zweiteDulle, $solistSitzplatz);
+                $summeMit[$typ->value] += $this->signierterWert($mit, $eigenesTeam);
+
+                if ($this->ansageHaelt($typ, $ohne['sieger'] ?? null, $eigenesTeam, $gegenAugen, $gegenStiche)) {
+                    $haelt[$typ->value]++;
+                }
+            }
+
+            $anzahl++;
+        }
+
+        if ($anzahl === 0) {
+            return new AnsageAussichten(0);
+        }
+
+        return new AnsageAussichten(
+            welten: $anzahl,
+            evOhne: $summeOhne / $anzahl,
+            evMit: array_map(static fn(float $s) => $s / $anzahl, $summeMit),
+            haelt: array_map(static fn(int $n) => $n / $anzahl, $haelt),
+        );
+    }
+
+    /**
+     * Geht diese Ansage in der ausgespielten Welt auf? Re/Contra verlangen den Sieg, jede
+     * Absage das Unterschreiten ihrer Grenze durch die Gegenpartei. Gerechnet wird gegen die
+     * Wertung **ohne** die Ansage – sonst wäre die Ansage ihre eigene Voraussetzung: eine
+     * verfehlte Absage macht die eigene Partei zum Verlierer, und `sieger` wäre dann immer
+     * negativ, sobald man sie hypothetisch hinzunimmt.
+     */
+    private function ansageHaelt(AnsageTyp $typ, ?string $sieger, Team $eigenesTeam, int $gegenAugen, int $gegenStiche): bool
+    {
+        return match ($typ) {
+            AnsageTyp::RE, AnsageTyp::CONTRA => $sieger === $eigenesTeam->value,
+            AnsageTyp::KEINE_NEUN            => $gegenAugen < 90,
+            AnsageTyp::KEINE_SECHS           => $gegenAugen < 60,
+            AnsageTyp::KEINE_DREI            => $gegenAugen < 30,
+            AnsageTyp::SCHWARZ               => $gegenStiche === 0,
+        };
+    }
+
+    /** @param array{punkteEmpfaenger: string, spielwert: int} $wertung */
+    private function signierterWert(array $wertung, Team $eigenesTeam): float
+    {
+        return $wertung['punkteEmpfaenger'] === $eigenesTeam->value
+            ? (float) $wertung['spielwert']
+            : -(float) $wertung['spielwert'];
     }
 
     // ── Determinisierung ────────────────────────────────────────────────────
@@ -360,11 +500,8 @@ final class ProfiHeuristik
     ): float {
         $wertung = $this->wertungsRechner->berechne($stiche, $teams, $ordnung, $ansagen, $zweiteDulle, $solistSitzplatz);
 
-        $punkte = $wertung['punkteEmpfaenger'] === $eigenesTeam->value
-            ? $wertung['spielwert']
-            : -$wertung['spielwert'];
-
-        return self::PUNKT_GEWICHT * $punkte + $wertung['augen'][$eigenesTeam->value];
+        return self::PUNKT_GEWICHT * $this->signierterWert($wertung, $eigenesTeam)
+            + $wertung['augen'][$eigenesTeam->value];
     }
 
     /**

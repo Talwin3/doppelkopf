@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Doppelkopf\Service;
 
+use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
+use App\Domain\Doppelkopf\ValueObject\AnsageRollout;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
@@ -42,6 +44,11 @@ final class AnsageHeuristik
      *        Schwellen-Konfiguration, nicht zum Aufrufer.
      * @param int $erspielteAugen Augen, die die eigene Partei in den abgeschlossenen Stichen
      *        schon geholt hat – der erste Summand der Essener Formel.
+     * @param ?callable(AnsageTyp[]): AnsageAussichten $aussichtenFuer Schätzung aus den
+     *        Rollouts der PIMC-Engine. Nur die Stufe PROFI kann sie liefern; fehlt sie oder
+     *        ist {@see AnsageSchwellen::$rollout} nicht gesetzt, entscheidet die
+     *        Blattbewertung wie bisher. Als Callback, weil die Rollouts teuer sind – sie
+     *        laufen erst, wenn Frist und Voraussetzungskette eine Ansage überhaupt zulassen.
      * @return ?AnsageTyp Nächste sinnvolle Ansage, oder null
      */
     public function willAnsagen(
@@ -54,12 +61,19 @@ final class AnsageHeuristik
         ?callable $fristFuer = null,
         ?array $starthand = null,
         int $erspielteAugen = 0,
+        ?callable $aussichtenFuer = null,
     ): ?AnsageTyp {
         if ($staerke === BotStaerke::ANFAENGER || $team === null) {
             return null;
         }
 
         $schwellen ??= new AnsageSchwellen();
+
+        $rollout = $schwellen->rollout;
+        if ($rollout !== null && $aussichtenFuer !== null && $this->rolloutGreift($rollout, $team, $teamAnsagen)) {
+            return $this->perRollout($hand, $team, $schwellen, $rollout, $teamAnsagen, $fristFuer, $aussichtenFuer);
+        }
+
         $bewertungsHand = $schwellen->bewerteRestblatt ? $hand : ($starthand ?? $hand);
 
         $truempfe = 0;
@@ -102,6 +116,91 @@ final class AnsageHeuristik
                 && $this->zeitpunktPasst($absage, $hand, $schwellen, $fristFuer)
                     ? $absage
                     : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Ist für diese Entscheidung der Rollout zuständig – oder die Blattbewertung?
+     *
+     * Unterschieden werden muss nur bei {@see AnsageRollout::$nurAbsagen}: Dort bleibt die
+     * Erstansage bei der Blattbewertung, und die Rollouts greifen erst, wenn die Grundansage
+     * des Teams schon steht.
+     *
+     * @param AnsageTyp[] $teamAnsagen
+     */
+    private function rolloutGreift(AnsageRollout $rollout, Team $team, array $teamAnsagen): bool
+    {
+        if (!$rollout->nurAbsagen) {
+            return true;
+        }
+
+        $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
+
+        return in_array($grundansage, $teamAnsagen, true);
+    }
+
+    /**
+     * Ansage-Entscheidung über die Rollouts der PIMC-Engine (P5 Hebel 5).
+     *
+     * Unterschied zur Blattbewertung, über die Schätzgüte hinaus:
+     *
+     * - **Kein Damen-Gate.** Die Vorbedingung „Kreuz-Dame oder ≥ 2 Damen" ist ein grober
+     *   Ersatz für „starke Hand" und kann neben einer echten Gewinnschätzung nur noch
+     *   schaden – sie blockierte bisher auch Ansagen, deren Augen längst gebucht waren
+     *   (wer seine Kreuz-Dame im ersten Stich spielt, verliert sie aus dem Restblatt).
+     * - **Absagen sind ein eigener Schalter.** Sie hängen nicht mehr an der Trumpfzahl,
+     *   sondern an P(Gegner unter 90/60/30) bzw. am Erwartungswert – bleiben aber per
+     *   Default aus, bis sie einzeln vermessen sind ({@see AnsageRollout::$absagen}).
+     *
+     * Die Kandidatenliste ist immer genau eine Ansage: Die Absagen bauen aufeinander auf,
+     * es kommt also nur die nächste offene Stufe in Frage. Das hält die Rollout-Kosten bei
+     * einem Durchgang je Entscheidungszeitpunkt.
+     *
+     * @param Karte[]      $hand
+     * @param AnsageTyp[]  $teamAnsagen
+     * @param ?callable(AnsageTyp): int $fristFuer
+     * @param callable(AnsageTyp[]): AnsageAussichten $aussichtenFuer
+     */
+    private function perRollout(
+        array $hand,
+        Team $team,
+        AnsageSchwellen $schwellen,
+        AnsageRollout $rollout,
+        array $teamAnsagen,
+        ?callable $fristFuer,
+        callable $aussichtenFuer,
+    ): ?AnsageTyp {
+        $kandidat = $this->naechsteOffeneAnsage($team, $teamAnsagen, $rollout);
+        if ($kandidat === null || !$this->zeitpunktPasst($kandidat, $hand, $schwellen, $fristFuer)) {
+            return null;
+        }
+
+        return $rollout->traegt($aussichtenFuer([$kandidat]), $kandidat) ? $kandidat : null;
+    }
+
+    /**
+     * Welche Ansage steht als nächste zur Debatte? Erst die Grundansage, danach die Absagen
+     * der Reihe nach – jede setzt die vorige voraus, deshalb ist immer nur eine offen.
+     *
+     * @param AnsageTyp[] $teamAnsagen
+     */
+    private function naechsteOffeneAnsage(Team $team, array $teamAnsagen, AnsageRollout $rollout): ?AnsageTyp
+    {
+        $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
+        if (!in_array($grundansage, $teamAnsagen, true)) {
+            return $grundansage;
+        }
+
+        if (!$rollout->absagen) {
+            return null;
+        }
+
+        foreach (AnsageSchwellen::ABSAGE_KETTE as $absage) {
+            if (!in_array($absage, $teamAnsagen, true)) {
+                return $absage;
+            }
         }
 
         return null;
