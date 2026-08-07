@@ -40,7 +40,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly ?FortgeschritteneRegeln $regeln = null,
         private readonly ?AnsageSchwellen $ansageSchwellen = null,
         private readonly bool $punkteBewertung = false,
-        private readonly bool $nurZweiGegenZwei = false,
+        private readonly bool $nurZweiGegenZwei = true,
     ) {}
 
     public function name(): string
@@ -51,8 +51,8 @@ final class EngineStrategie implements SimulierteStrategie
                 ? sprintf('(r=%d)', $this->rollouts)
                 : sprintf('(r=%d, t=%.2fs)', $this->rollouts, $this->zeitbudgetSek);
             $name .= $this->punkteBewertung ? ' [Punkte]' : ' [Augen]';
-            if ($this->nurZweiGegenZwei) {
-                $name .= ' [2-gegen-2]';
+            if (!$this->nurZweiGegenZwei) {
+                $name .= ' [1-gegen-3-Welten]';
             }
         }
         if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {

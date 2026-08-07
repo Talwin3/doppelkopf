@@ -65,7 +65,10 @@ final class ProfiHeuristik
      * @param list<array{sitzplatz: int, typ: AnsageTyp}>     $ansagen         Bisherige Ansagen (verdoppeln den Spielwert)
      * @param int|null           $solistSitzplatz  gesetzt bei Solo/Hochzeit-als-Solo
      * @param bool               $bewertePunkte    true = `v = 500·s + e` statt reiner Ø-Augen
-     * @param bool               $nurZweiGegenZwei true = Welten mit stiller Hochzeit (1 gegen 3) verwerfen
+     * @param bool               $nurZweiGegenZwei true = Welten mit stiller Hochzeit (1 gegen 3) verwerfen.
+     *        Solche Welten sind im angemeldeten Normalspiel praktisch ausgeschlossen (Bots melden die
+     *        Hochzeit immer an), fielen ohne diese Prüfung aber in ~30 % der Ziehungen an, sobald der
+     *        Bot selbst keine Kreuz-Dame hält. Messung 2026-08-07: +0,19 Punkte je Spieler und Partie.
      */
     public function entscheide(
         array $erlaubte,
@@ -85,7 +88,7 @@ final class ProfiHeuristik
         array $ansagen = [],
         ?int $solistSitzplatz = null,
         bool $bewertePunkte = false,
-        bool $nurZweiGegenZwei = false,
+        bool $nurZweiGegenZwei = true,
         int $rollouts = 60,
         float $zeitbudgetSek = 0.8,
     ): Karte {

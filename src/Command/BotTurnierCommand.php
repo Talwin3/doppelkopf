@@ -83,8 +83,8 @@ final class BotTurnierCommand extends Command
             ->addOption('ohne-erspielte-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('profi-punkte-a', null, InputOption::VALUE_NONE, 'A bewertet die PIMC-Welten nach Turnierpunkten (v = 500*s + e) statt nach Ø-Augen')
             ->addOption('profi-punkte-b', null, InputOption::VALUE_NONE, 'dito für B')
-            ->addOption('profi-2gegen2-a', null, InputOption::VALUE_NONE, 'A verwirft Welten mit stiller Hochzeit (1 gegen 3) bei der Determinisierung')
-            ->addOption('profi-2gegen2-b', null, InputOption::VALUE_NONE, 'dito für B')
+            ->addOption('profi-1gegen3-a', null, InputOption::VALUE_NONE, 'A lässt Welten mit stiller Hochzeit (1 gegen 3) bei der Determinisierung zu (Stand vor dem 2026-08-07)')
+            ->addOption('profi-1gegen3-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('regeln-liste', null, InputOption::VALUE_NONE, 'Nur die bekannten FORTGESCHRITTEN-Regeln auflisten und beenden')
             ->addOption('ohne-neuner', null, InputOption::VALUE_NONE, 'Mit 40-Karten-Blatt spielen')
             ->addOption('zweite-dulle', null, InputOption::VALUE_NONE, 'Zweite Dulle sticht');
@@ -127,7 +127,7 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('starthand-a'),
                 !$input->getOption('ohne-erspielte-a'),
                 (bool) $input->getOption('profi-punkte-a'),
-                (bool) $input->getOption('profi-2gegen2-a'),
+                !$input->getOption('profi-1gegen3-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -143,7 +143,7 @@ final class BotTurnierCommand extends Command
                 !$input->getOption('starthand-b'),
                 !$input->getOption('ohne-erspielte-b'),
                 (bool) $input->getOption('profi-punkte-b'),
-                (bool) $input->getOption('profi-2gegen2-b'),
+                !$input->getOption('profi-1gegen3-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
