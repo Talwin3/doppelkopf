@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
+use App\Domain\Doppelkopf\Service\EndspielLoeser;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Service\SpielGedaechtnis;
 use App\Domain\Doppelkopf\Service\StichGewinner;
@@ -26,7 +27,7 @@ final class ProfiHeuristikTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->profi   = new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()));
+        $this->profi   = new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()), new EndspielLoeser(new StichGewinner()));
         $this->ordnung = new NormalspielTrumpfOrdnung();
     }
 

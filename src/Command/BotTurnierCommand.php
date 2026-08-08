@@ -99,6 +99,9 @@ final class BotTurnierCommand extends Command
             ->addOption('rollout-nur-absagen-b', null, InputOption::VALUE_NONE, 'dito für B')
             ->addOption('rollout-welten-a', null, InputOption::VALUE_REQUIRED, 'Welten je Ansage-Entscheidung für A', '60')
             ->addOption('rollout-welten-b', null, InputOption::VALUE_REQUIRED, 'dito für B', '60')
+            ->addOption('endspiel-a', null, InputOption::VALUE_REQUIRED, 'A rechnet das Endspiel exakt aus (Alpha-Beta), sobald keine Hand mehr als N Karten hält; 0 = aus', '0')
+            ->addOption('endspiel-b', null, InputOption::VALUE_REQUIRED, 'dito für B', '0')
+            ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit)')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
             ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
             ->addOption('vergleiche', null, InputOption::VALUE_REQUIRED, 'Zwei mit --dump erzeugte Dateien gepaart vergleichen ("x.json,y.json") und beenden')
@@ -157,6 +160,8 @@ final class BotTurnierCommand extends Command
                     (bool) $input->getOption('rollout-absagen-schwellen-a'),
                     (bool) $input->getOption('rollout-nur-absagen-a'),
                 ),
+                (int) $input->getOption('endspiel-a'),
+                (bool) $input->getOption('endspiel-diagnose'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -181,6 +186,8 @@ final class BotTurnierCommand extends Command
                     (bool) $input->getOption('rollout-absagen-schwellen-b'),
                     (bool) $input->getOption('rollout-nur-absagen-b'),
                 ),
+                (int) $input->getOption('endspiel-b'),
+                (bool) $input->getOption('endspiel-diagnose'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -210,6 +217,7 @@ final class BotTurnierCommand extends Command
         );
 
         $this->profi->statistik->zuruecksetzen();
+        $this->profi->endspielStatistik->zuruecksetzen();
 
         $fortschritt = $io->createProgressBar($anzahl);
         $fortschritt->start();
@@ -252,6 +260,7 @@ final class BotTurnierCommand extends Command
         );
 
         $this->zeigeWeltStatistik($io);
+        $this->zeigeEndspielStatistik($io);
 
         if (($ziel = $input->getOption('dump')) !== null) {
             file_put_contents((string) $ziel, json_encode([
@@ -313,6 +322,8 @@ final class BotTurnierCommand extends Command
         bool $punkteBewertung,
         bool $nurZweiGegenZwei,
         ?AnsageRollout $rollout,
+        int $endspielAbRestkarten,
+        bool $endspielDiagnose,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -377,12 +388,44 @@ final class BotTurnierCommand extends Command
             $schwellen,
             $punkteBewertung,
             $nurZweiGegenZwei,
+            max(0, $endspielAbRestkarten),
+            $endspielDiagnose,
         );
     }
 
     private function quote(?float $anteil): string
     {
         return $anteil === null ? '–' : sprintf('%.1f %%', $anteil * 100);
+    }
+
+    /**
+     * Reichweite der exakten Endspielsuche (nur mit `--endspiel-diagnose` gefüllt).
+     *
+     * Die letzte Zeile ist die entscheidende: sie begrenzt den erreichbaren Effekt nach oben.
+     * Ändert die Suche die Kartenwahl so gut wie nie, kann sie die Spielstärke nicht bewegen –
+     * dann erübrigt sich der lange Stärkelauf.
+     */
+    private function zeigeEndspielStatistik(SymfonyStyle $io): void
+    {
+        $s = $this->profi->endspielStatistik;
+        if ($s->zuege === 0) {
+            return;
+        }
+
+        $io->table(['Endspiel-Reichweite', 'Wert'], [
+            ['bewertete Züge', number_format($s->zuege, 0, ',', '.')],
+            ['davon mit exakter Suche', sprintf(
+                '%s  (%.2f %%)',
+                number_format($s->zuegeMitEndspiel, 0, ',', '.'),
+                $s->quoteMitEndspiel(),
+            )],
+            ['davon andere Karte als Greedy', sprintf(
+                '%s  (%.2f %% dieser Züge)',
+                number_format($s->zuegeWahlGeaendert, 0, ',', '.'),
+                $s->trefferquoteImEndspiel(),
+            )],
+            ['Wahländerungen je Zug gesamt', sprintf('%.2f %%', $s->quoteWahlGeaendert())],
+        ]);
     }
 
     /**

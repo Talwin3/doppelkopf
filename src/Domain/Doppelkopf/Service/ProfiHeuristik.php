@@ -54,11 +54,16 @@ final class ProfiHeuristik
      */
     public readonly WeltStatistik $statistik;
 
+    /** Reichweite der exakten Endspielsuche – nur im Diagnosemodus gefüllt. */
+    public readonly EndspielStatistik $endspielStatistik;
+
     public function __construct(
         private readonly StichGewinner $stichGewinner,
         private readonly WertungsRechner $wertungsRechner,
+        private readonly EndspielLoeser $endspielLoeser,
     ) {
-        $this->statistik = new WeltStatistik();
+        $this->statistik         = new WeltStatistik();
+        $this->endspielStatistik = new EndspielStatistik();
     }
 
     /**
@@ -100,6 +105,8 @@ final class ProfiHeuristik
         bool $nurZweiGegenZwei = true,
         int $rollouts = 60,
         float $zeitbudgetSek = 0.8,
+        int $endspielAbRestkarten = 0,
+        bool $endspielDiagnose = false,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -113,6 +120,11 @@ final class ProfiHeuristik
         $summe  = array_fill(0, count($erlaubte), 0.0);
         $anzahl = 0;
         $start  = microtime(true);
+
+        // Diagnose: dieselbe Stellung zusätzlich greedy bewerten, um die beiden Wahlen zu
+        // vergleichen. Kostet die doppelte Rechenzeit und ist deshalb per Default aus.
+        $summeGreedy     = $endspielDiagnose ? $summe : [];
+        $endspielGenutzt = false;
 
         for ($r = 0; $r < $rollouts; $r++) {
             if ($r > 0 && (microtime(true) - $start) >= $zeitbudgetSek) {
@@ -151,8 +163,20 @@ final class ProfiHeuristik
                 $stich[$eigenerSitz] = $kandidat;
                 $amZug = ($eigenerSitz % 4) + 1;
 
+                if ($this->endspielReif($haende, $endspielAbRestkarten, $bewertePunkte)) {
+                    // Perfekte Information in dieser Welt – der Rest ist ausrechenbar.
+                    $endspielGenutzt = true;
+                    $summe[$i] += $this->endspielLoeser->augen($haende, $stich, $amZug, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+
+                    if ($endspielDiagnose) {
+                        $greedyStiche = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
+                        $summeGreedy[$i] += $this->augenFuer($greedyStiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+                    }
+                    continue;
+                }
+
                 $stiche = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
-                $summe[$i] += $bewertePunkte
+                $wert   = $bewertePunkte
                     ? $this->bewerteWelt(
                         array_merge($bisherigeStiche, $stiche),
                         $teams,
@@ -163,6 +187,10 @@ final class ProfiHeuristik
                         $solistSitzplatz,
                     )
                     : $this->augenFuer($stiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+                $summe[$i] += $wert;
+                if ($endspielDiagnose) {
+                    $summeGreedy[$i] += $wert; // außerhalb des Endspiels sind beide Wege identisch
+                }
             }
             $anzahl++;
         }
@@ -171,14 +199,37 @@ final class ProfiHeuristik
             return $erlaubte[0];
         }
 
-        $besterIndex = 0;
-        foreach ($summe as $i => $wert) {
-            if ($wert > $summe[$besterIndex]) {
-                $besterIndex = $i;
+        $besterIndex = $this->bestenIndex($summe);
+
+        if ($endspielDiagnose) {
+            $this->endspielStatistik->zuege++;
+            if ($endspielGenutzt) {
+                $this->endspielStatistik->zuegeMitEndspiel++;
+                if ($this->bestenIndex($summeGreedy) !== $besterIndex) {
+                    $this->endspielStatistik->zuegeWahlGeaendert++;
+                }
             }
         }
 
         return $erlaubte[$besterIndex];
+    }
+
+    /**
+     * Index des höchsten Werts – bei Gleichstand der erste, damit beide Bewertungswege im
+     * Diagnosemodus nach derselben Regel wählen und der Vergleich fair bleibt.
+     *
+     * @param array<int, float> $werte
+     */
+    private function bestenIndex(array $werte): int
+    {
+        $bester = 0;
+        foreach ($werte as $i => $wert) {
+            if ($wert > $werte[$bester]) {
+                $bester = $i;
+            }
+        }
+
+        return $bester;
     }
 
     /**
@@ -547,6 +598,33 @@ final class ProfiHeuristik
         }
 
         return $augen;
+    }
+
+    /**
+     * Ist die Stellung klein genug, um sie exakt auszurechnen statt sie zu schätzen?
+     *
+     * Maßgeblich ist die größte verbliebene Hand – die Suche läuft bis zum Spielende, ihre
+     * Tiefe hängt also am längsten Sitz. Ab dieser Grenze ersetzt der {@see EndspielLoeser}
+     * den Greedy-Rollout.
+     *
+     * ⚠️ Nur im Augen-Maßstab: der Löser liefert einen Wert, keine Stichliste, und die
+     * (per Default abgeschaltete) Punkte-Bewertung braucht die einzelnen Stiche.
+     *
+     * @param array<int, Karte[]> $haende
+     */
+    private function endspielReif(array $haende, int $abRestkarten, bool $bewertePunkte): bool
+    {
+        if ($abRestkarten <= 0 || $bewertePunkte) {
+            return false;
+        }
+
+        foreach ($haende as $hand) {
+            if (count($hand) > $abRestkarten) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** Schnelle Greedy-Kartenwahl im Rollout (perfekte Info in dieser Welt). */

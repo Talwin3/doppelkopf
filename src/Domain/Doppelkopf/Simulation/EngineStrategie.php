@@ -42,6 +42,8 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly ?AnsageSchwellen $ansageSchwellen = null,
         private readonly bool $punkteBewertung = false,
         private readonly bool $nurZweiGegenZwei = true,
+        private readonly int $endspielAbRestkarten = 0,
+        private readonly bool $endspielDiagnose = false,
     ) {}
 
     public function name(): string
@@ -54,6 +56,9 @@ final class EngineStrategie implements SimulierteStrategie
             $name .= $this->punkteBewertung ? ' [Punkte]' : ' [Augen]';
             if (!$this->nurZweiGegenZwei) {
                 $name .= ' [1-gegen-3-Welten]';
+            }
+            if ($this->endspielAbRestkarten > 0) {
+                $name .= sprintf(' [Endspiel exakt ab %d Karten]', $this->endspielAbRestkarten);
             }
         }
         if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {
@@ -116,6 +121,8 @@ final class EngineStrategie implements SimulierteStrategie
             nurZweiGegenZwei: $this->nurZweiGegenZwei,
             rollouts: $this->rollouts,
             zeitbudgetSek: $this->zeitbudgetSek,
+            endspielAbRestkarten: $this->endspielAbRestkarten,
+            endspielDiagnose: $this->endspielDiagnose,
         );
     }
 
