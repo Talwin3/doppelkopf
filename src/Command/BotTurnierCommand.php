@@ -209,6 +209,8 @@ final class BotTurnierCommand extends Command
             )],
         );
 
+        $this->profi->statistik->zuruecksetzen();
+
         $fortschritt = $io->createProgressBar($anzahl);
         $fortschritt->start();
 
@@ -248,6 +250,8 @@ final class BotTurnierCommand extends Command
                 ['Dauer', sprintf('%.1f s (%.3f s/Partie)', $ergebnis->dauerSek, $ergebnis->dauerSek / max(1, $ergebnis->anzahlBlaetter() * 2))],
             ],
         );
+
+        $this->zeigeWeltStatistik($io);
 
         if (($ziel = $input->getOption('dump')) !== null) {
             file_put_contents((string) $ziel, json_encode([
@@ -379,6 +383,41 @@ final class BotTurnierCommand extends Command
     private function quote(?float $anteil): string
     {
         return $anteil === null ? '–' : sprintf('%.1f %%', $anteil * 100);
+    }
+
+    /**
+     * Diagnose der Determinisierung – nur relevant, wenn überhaupt ein PROFI mitgespielt hat.
+     *
+     * Zeigt, wie oft sich `ProfiHeuristik::determinisiere()` festfährt und wie oft deshalb ein
+     * ganzer Rollout ausfällt. Grundlage für die Entscheidung, ob der Umbau auf Sievers'
+     * CAP-Algorithmus (Zuweisung ohne Verwerfen) lohnt.
+     */
+    private function zeigeWeltStatistik(SymfonyStyle $io): void
+    {
+        $s = $this->profi->statistik;
+        if ($s->weltAnlaeufe === 0) {
+            return;
+        }
+
+        $io->table(['Determinisierung', 'Wert'], [
+            ['Ziehungen gesamt', number_format($s->ziehungen, 0, ',', '.')],
+            ['davon ohne Ergebnis', sprintf(
+                '%s  (%.3f %%)',
+                number_format($s->ziehungenOhneErgebnis, 0, ',', '.'),
+                $s->quoteZiehungenOhneErgebnis(),
+            )],
+            ['als 1-gegen-3 verworfen', sprintf(
+                '%s  (%.2f %% der gezogenen Welten)',
+                number_format($s->verworfenEinGegenDrei, 0, ',', '.'),
+                $s->quoteEinGegenDrei(),
+            )],
+            ['Rollouts mit Weltsuche', number_format($s->weltAnlaeufe, 0, ',', '.')],
+            ['davon ausgefallen', sprintf(
+                '%s  (%.3f %%)',
+                number_format($s->weltAusfaelle, 0, ',', '.'),
+                $s->quoteWeltAusfaelle(),
+            )],
+        ]);
     }
 
     /**

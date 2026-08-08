@@ -48,10 +48,18 @@ final class ProfiHeuristik
     /** Wie oft eine Welt neu gezogen wird, bis sie konsistent (und ggf. 2-gegen-2) ist. */
     private const WELT_VERSUCHE = 8;
 
+    /**
+     * Diagnose-Zähler der Determinisierung – wird nur beschrieben, nie gelesen; das Spiel
+     * hängt nicht davon ab. Ausgewertet vom `app:bot:turnier`, siehe {@see WeltStatistik}.
+     */
+    public readonly WeltStatistik $statistik;
+
     public function __construct(
         private readonly StichGewinner $stichGewinner,
         private readonly WertungsRechner $wertungsRechner,
-    ) {}
+    ) {
+        $this->statistik = new WeltStatistik();
+    }
 
     /**
      * @param Karte[]            $erlaubte         Spielbare Karten (mind. eine)
@@ -113,6 +121,7 @@ final class ProfiHeuristik
 
             $welt  = null;
             $teams = null;
+            $this->statistik->weltAnlaeufe++;
             for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
                 $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
                 if ($kandidatWelt === null) {
@@ -121,6 +130,7 @@ final class ProfiHeuristik
 
                 $kandidatTeams = $this->teamsAbleiten($kandidatWelt, $variante, $bekannteTeams, $eigenesTeam, $eigenerSitz, $kreuzDameGespieltVon);
                 if ($nurZweiGegenZwei && !$this->istZweiGegenZwei($kandidatTeams, $variante)) {
+                    $this->statistik->verworfenEinGegenDrei++;
                     continue; // stille Hochzeit – in einem angemeldeten Normalspiel praktisch ausgeschlossen
                 }
 
@@ -129,6 +139,7 @@ final class ProfiHeuristik
                 break;
             }
             if ($welt === null || $teams === null) {
+                $this->statistik->weltAusfaelle++;
                 continue; // Welt überspringen
             }
 
@@ -226,6 +237,7 @@ final class ProfiHeuristik
 
             $welt  = null;
             $teams = null;
+            $this->statistik->weltAnlaeufe++;
             for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
                 $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
                 if ($kandidatWelt === null) {
@@ -234,6 +246,7 @@ final class ProfiHeuristik
 
                 $kandidatTeams = $this->teamsAbleiten($kandidatWelt, $variante, $bekannteTeams, $eigenesTeam, $eigenerSitz, $kreuzDameGespieltVon);
                 if ($nurZweiGegenZwei && !$this->istZweiGegenZwei($kandidatTeams, $variante)) {
+                    $this->statistik->verworfenEinGegenDrei++;
                     continue;
                 }
 
@@ -242,6 +255,7 @@ final class ProfiHeuristik
                 break;
             }
             if ($welt === null || $teams === null) {
+                $this->statistik->weltAusfaelle++;
                 continue;
             }
 
@@ -320,6 +334,8 @@ final class ProfiHeuristik
      */
     private function determinisiere(array $ungesehene, array $restHandGroessen, SpielGedaechtnis $gedaechtnis, TrumpfOrdnung $ordnung): ?array
     {
+        $this->statistik->ziehungen++;
+
         for ($versuch = 0; $versuch < 8; $versuch++) {
             $karten = $ungesehene;
             shuffle($karten);
@@ -354,6 +370,8 @@ final class ProfiHeuristik
                 return $haende;
             }
         }
+
+        $this->statistik->ziehungenOhneErgebnis++;
 
         return null;
     }
