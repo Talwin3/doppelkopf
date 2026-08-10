@@ -14,6 +14,7 @@ use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
 use App\Enum\BotStaerke;
+use App\Enum\EndspielPolitik;
 
 /**
  * Bindet die produktiven Entscheidungs-Engines in den Benchmark ein.
@@ -44,6 +45,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $nurZweiGegenZwei = true,
         private readonly int $endspielAbRestkarten = 0,
         private readonly bool $endspielDiagnose = false,
+        private readonly EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
     ) {}
 
     public function name(): string
@@ -59,6 +61,9 @@ final class EngineStrategie implements SimulierteStrategie
             }
             if ($this->endspielAbRestkarten > 0) {
                 $name .= sprintf(' [Endspiel exakt ab %d Karten]', $this->endspielAbRestkarten);
+                if ($this->endspielPolitik !== EndspielPolitik::MINIMAX) {
+                    $name .= sprintf(' [%s]', $this->endspielPolitik->label());
+                }
             }
         }
         if ($this->staerke === BotStaerke::FORTGESCHRITTEN && $this->regeln !== null) {
@@ -123,6 +128,7 @@ final class EngineStrategie implements SimulierteStrategie
             zeitbudgetSek: $this->zeitbudgetSek,
             endspielAbRestkarten: $this->endspielAbRestkarten,
             endspielDiagnose: $this->endspielDiagnose,
+            endspielPolitik: $this->endspielPolitik,
         );
     }
 

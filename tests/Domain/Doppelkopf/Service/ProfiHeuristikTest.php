@@ -8,6 +8,7 @@ use App\Domain\Doppelkopf\Regel\Normalspiel\NormalspielTrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\EndspielLoeser;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Service\SpielGedaechtnis;
+use App\Domain\Doppelkopf\Service\RolloutPolitik;
 use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Domain\Doppelkopf\ValueObject\Karte;
@@ -27,7 +28,7 @@ final class ProfiHeuristikTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->profi   = new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()), new EndspielLoeser(new StichGewinner()));
+        $this->profi   = new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()), new EndspielLoeser(new StichGewinner(), new RolloutPolitik()), new RolloutPolitik());
         $this->ordnung = new NormalspielTrumpfOrdnung();
     }
 

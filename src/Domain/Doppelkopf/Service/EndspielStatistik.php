@@ -26,11 +26,21 @@ final class EndspielStatistik
     /** Davon Züge, in denen die exakte Suche eine andere Karte wählt als der Greedy-Rollout. */
     public int $zuegeWahlGeaendert = 0;
 
+    /**
+     * Davon Züge, in denen die eingestellte {@see \App\Enum\EndspielPolitik} eine andere Karte
+     * wählt als Minimax – bleibt 0, solange Minimax selbst läuft.
+     *
+     * Beantwortet die Frage, ob ein anderes Gegnermodell überhaupt etwas bewegen *kann*:
+     * wählt es dieselben Karten wie Minimax, erübrigt sich jeder Stärkelauf darüber.
+     */
+    public int $zuegeAbweichendVonMinimax = 0;
+
     public function zuruecksetzen(): void
     {
-        $this->zuege              = 0;
-        $this->zuegeMitEndspiel   = 0;
-        $this->zuegeWahlGeaendert = 0;
+        $this->zuege                     = 0;
+        $this->zuegeMitEndspiel          = 0;
+        $this->zuegeWahlGeaendert        = 0;
+        $this->zuegeAbweichendVonMinimax = 0;
     }
 
     /** Anteil der Züge, in denen die exakte Suche greift, in Prozent. */
@@ -51,5 +61,13 @@ final class EndspielStatistik
         return $this->zuegeMitEndspiel === 0
             ? 0.0
             : 100.0 * $this->zuegeWahlGeaendert / $this->zuegeMitEndspiel;
+    }
+
+    /** Anteil der Züge mit Suche, in denen die Politik von Minimax abweicht. */
+    public function quoteAbweichendVonMinimax(): float
+    {
+        return $this->zuegeMitEndspiel === 0
+            ? 0.0
+            : 100.0 * $this->zuegeAbweichendVonMinimax / $this->zuegeMitEndspiel;
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Doppelkopf\Service;
 
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\EndspielPolitik;
 use App\Enum\Team;
 
 /**
@@ -16,9 +17,16 @@ use App\Enum\Team;
  * mit einem einzigen Greedy-Durchlauf zu Ende ({@see ProfiHeuristik::ausspielen}); das ist eine
  * grobe Schätzung ohne jedes Zurücknehmen.
  *
- * Diese Klasse ersetzt sie im Endspiel durch eine Minimax-Suche mit Alpha-Beta. Beide Spieler
- * einer Partei ziehen am selben Strang (im Rollout sind die Parteien bekannt), also maximieren
- * die Sitze des Zielteams und die beiden anderen minimieren.
+ * Diese Klasse ersetzt sie im Endspiel durch eine Suche mit Alpha-Beta. Beide Spieler einer
+ * Partei ziehen am selben Strang (im Rollout sind die Parteien bekannt), also maximieren die
+ * Sitze des Zielteams und die beiden anderen minimieren.
+ *
+ * **Wer wirklich sucht, steuert die {@see EndspielPolitik}.** „Exakt ausgerechnet" ist ein
+ * Ergebnis immer nur unter einer Annahme über das Spiel der anderen drei. Unterstellt man
+ * ihnen Minimax, verteidigt der Löser gegen einen Gegner, der am Tisch gar nicht sitzt – dort
+ * spielt die {@see RolloutPolitik}. Die Alternativen lassen die nicht gesuchten Sitze deshalb
+ * genau diese Greedy-Politik spielen; ihr Zug ist dann erzwungen, der Baum verzweigt nur noch
+ * an ein bis zwei Sitzen.
  *
  * Anlass ist der Befund von Sievers/Helmert, dass bei festem Budget *wenige Welten mit viel
  * Suche* deutlich besser abschneiden als viele Welten ohne Suche (dort 10 × 1000 gegen 20 × 500
@@ -35,15 +43,21 @@ final class EndspielLoeser
     /** Ab hier lohnt die Zugsortierung den Aufwand nicht mehr (letzter Stich ist erzwungen). */
     private const SORTIER_SCHWELLE = 2;
 
-    public function __construct(private readonly StichGewinner $stichGewinner) {}
+    public function __construct(
+        private readonly StichGewinner $stichGewinner,
+        private readonly RolloutPolitik $rolloutPolitik,
+    ) {}
 
     /**
-     * Augen, die `$zielTeam` aus der Reststellung holt, wenn alle vier Sitze optimal spielen.
+     * Augen, die `$zielTeam` aus der Reststellung holt, wenn die suchenden Sitze optimal und
+     * alle übrigen nach der {@see RolloutPolitik} spielen.
      *
-     * @param array<int, Karte[]> $haende Sitzplatz → Handkarten (alle vier Sitze)
-     * @param array<int, Karte>   $stich  Sitzplatz → Karte des laufenden Stichs, in Spielreihenfolge
-     * @param int                 $amZug  Sitzplatz, der als Nächstes legt
-     * @param array<int, Team>    $teams  Sitzplatz → Partei (in dieser Welt vollständig bekannt)
+     * @param array<int, Karte[]> $haende      Sitzplatz → Handkarten (alle vier Sitze)
+     * @param array<int, Karte>   $stich       Sitzplatz → Karte des laufenden Stichs, in Spielreihenfolge
+     * @param int                 $amZug       Sitzplatz, der als Nächstes legt
+     * @param array<int, Team>    $teams       Sitzplatz → Partei (in dieser Welt vollständig bekannt)
+     * @param int|null            $eigenerSitz Sitz des entscheidenden Bots – nur für
+     *        {@see EndspielPolitik::NUR_ICH} nötig, sonst ohne Bedeutung
      */
     public function augen(
         array $haende,
@@ -53,16 +67,32 @@ final class EndspielLoeser
         Team $zielTeam,
         TrumpfOrdnung $ordnung,
         bool $zweiteDulle,
+        EndspielPolitik $politik = EndspielPolitik::MINIMAX,
+        ?int $eigenerSitz = null,
     ): int {
-        return $this->suche($haende, $stich, $amZug, $teams, $zielTeam, $ordnung, $zweiteDulle, PHP_INT_MIN, PHP_INT_MAX);
+        if ($politik === EndspielPolitik::NUR_ICH && $eigenerSitz === null) {
+            throw new \InvalidArgumentException('Die Politik "nur-ich" braucht den eigenen Sitzplatz.');
+        }
+
+        $suchend = [];
+        for ($sitz = 1; $sitz <= 4; $sitz++) {
+            $suchend[$sitz] = match ($politik) {
+                EndspielPolitik::MINIMAX       => true,
+                EndspielPolitik::GEGNER_GREEDY => ($teams[$sitz] ?? null) === $zielTeam,
+                EndspielPolitik::NUR_ICH       => $sitz === $eigenerSitz,
+            };
+        }
+
+        return $this->suche($haende, $stich, $amZug, $teams, $zielTeam, $ordnung, $zweiteDulle, $suchend, PHP_INT_MIN, PHP_INT_MAX);
     }
 
     /**
-     * Minimax mit Alpha-Beta über die Reststellung.
+     * Alpha-Beta über die Reststellung; nicht suchende Sitze ziehen erzwungen greedy.
      *
      * @param array<int, Karte[]> $haende
      * @param array<int, Karte>   $stich
      * @param array<int, Team>    $teams
+     * @param array<int, bool>    $suchend Sitzplatz → sucht dieser Sitz seinen besten Zug?
      */
     private function suche(
         array $haende,
@@ -72,6 +102,7 @@ final class EndspielLoeser
         Team $ziel,
         TrumpfOrdnung $ordnung,
         bool $zweiteDulle,
+        array $suchend,
         int $alpha,
         int $beta,
     ): int {
@@ -97,6 +128,7 @@ final class EndspielLoeser
                     $ziel,
                     $ordnung,
                     $zweiteDulle,
+                    $suchend,
                     $this->verschiebe($alpha, -$ausbeute),
                     $this->verschiebe($beta, -$ausbeute),
                 );
@@ -104,8 +136,27 @@ final class EndspielLoeser
             return $ausbeute + $rest;
         }
 
+        $hand = $haende[$amZug] ?? [];
+        if ($hand === []) {
+            return 0; // Sicherheitsnetz – kann bei konsistenten Händen nicht eintreten
+        }
+
         $angespielt = $stich === [] ? null : array_values($stich)[0];
-        $zuege      = $this->zuege($haende[$amZug] ?? [], $stich, $angespielt, $ordnung, $teams[$amZug] ?? null, $ziel);
+        $naechster  = ($amZug % 4) + 1;
+
+        // Sitz mit fremder Politik: sein Zug steht fest, es gibt nichts zu verzweigen.
+        if (!($suchend[$amZug] ?? true)) {
+            $karte = $this->rolloutPolitik->waehle($hand, $stich, $teams[$amZug], $teams, $angespielt, $ordnung);
+
+            $folgeHaende         = $haende;
+            $folgeHaende[$amZug] = $this->ohne($hand, $karte);
+            $folgeStich          = $stich;
+            $folgeStich[$amZug]  = $karte;
+
+            return $this->suche($folgeHaende, $folgeStich, $naechster, $teams, $ziel, $ordnung, $zweiteDulle, $suchend, $alpha, $beta);
+        }
+
+        $zuege = $this->zuege($hand, $stich, $angespielt, $ordnung, $teams[$amZug] ?? null, $ziel);
 
         if ($zuege === []) {
             return 0; // Sicherheitsnetz – kann bei konsistenten Händen nicht eintreten
@@ -113,15 +164,14 @@ final class EndspielLoeser
 
         $maximiert = ($teams[$amZug] ?? null) === $ziel;
         $bester    = $maximiert ? PHP_INT_MIN : PHP_INT_MAX;
-        $naechster = ($amZug % 4) + 1;
 
         foreach ($zuege as $karte) {
             $folgeHaende          = $haende;
-            $folgeHaende[$amZug]  = $this->ohne($haende[$amZug], $karte);
+            $folgeHaende[$amZug]  = $this->ohne($hand, $karte);
             $folgeStich           = $stich;
             $folgeStich[$amZug]   = $karte;
 
-            $wert = $this->suche($folgeHaende, $folgeStich, $naechster, $teams, $ziel, $ordnung, $zweiteDulle, $alpha, $beta);
+            $wert = $this->suche($folgeHaende, $folgeStich, $naechster, $teams, $ziel, $ordnung, $zweiteDulle, $suchend, $alpha, $beta);
 
             if ($maximiert) {
                 if ($wert > $bester) {

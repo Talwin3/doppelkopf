@@ -7,6 +7,7 @@ namespace App\Domain\Doppelkopf\Service;
 use App\Domain\Doppelkopf\ValueObject\AnsageAussichten;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
+use App\Enum\EndspielPolitik;
 use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
 use App\Enum\SpielVariante;
@@ -36,8 +37,6 @@ use App\Enum\Team;
  */
 final class ProfiHeuristik
 {
-    private const STECH_SCHWELLE = 10;
-
     /**
      * Gewicht der Turnierpunkte gegenüber den Augen in `v = 500 · s + e`. Aus Sievers/Obenaus:
      * bei realistischen Werten (s ≈ −8…+8, e = 0…240) dominieren die Punkte, die Augen
@@ -61,6 +60,7 @@ final class ProfiHeuristik
         private readonly StichGewinner $stichGewinner,
         private readonly WertungsRechner $wertungsRechner,
         private readonly EndspielLoeser $endspielLoeser,
+        private readonly RolloutPolitik $rolloutPolitik,
     ) {
         $this->statistik         = new WeltStatistik();
         $this->endspielStatistik = new EndspielStatistik();
@@ -107,6 +107,7 @@ final class ProfiHeuristik
         float $zeitbudgetSek = 0.8,
         int $endspielAbRestkarten = 0,
         bool $endspielDiagnose = false,
+        EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -123,7 +124,11 @@ final class ProfiHeuristik
 
         // Diagnose: dieselbe Stellung zusätzlich greedy bewerten, um die beiden Wahlen zu
         // vergleichen. Kostet die doppelte Rechenzeit und ist deshalb per Default aus.
+        // Läuft eine andere Politik als Minimax, wird zusätzlich diese gerechnet – die Frage
+        // „ändert das Gegnermodell überhaupt die Karte?" ist die, an der ein Stärkelauf hängt.
+        $diagnoseMinimax = $endspielDiagnose && $endspielPolitik !== EndspielPolitik::MINIMAX;
         $summeGreedy     = $endspielDiagnose ? $summe : [];
+        $summeMinimax    = $diagnoseMinimax ? $summe : [];
         $endspielGenutzt = false;
 
         for ($r = 0; $r < $rollouts; $r++) {
@@ -166,11 +171,14 @@ final class ProfiHeuristik
                 if ($this->endspielReif($haende, $endspielAbRestkarten, $bewertePunkte)) {
                     // Perfekte Information in dieser Welt – der Rest ist ausrechenbar.
                     $endspielGenutzt = true;
-                    $summe[$i] += $this->endspielLoeser->augen($haende, $stich, $amZug, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+                    $summe[$i] += $this->endspielLoeser->augen($haende, $stich, $amZug, $teams, $eigenesTeam, $ordnung, $zweiteDulle, $endspielPolitik, $eigenerSitz);
 
                     if ($endspielDiagnose) {
                         $greedyStiche = $this->ausspielen($haende, $stich, $amZug, $teams, $ordnung, $zweiteDulle);
                         $summeGreedy[$i] += $this->augenFuer($greedyStiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
+                    }
+                    if ($diagnoseMinimax) {
+                        $summeMinimax[$i] += $this->endspielLoeser->augen($haende, $stich, $amZug, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
                     }
                     continue;
                 }
@@ -189,7 +197,10 @@ final class ProfiHeuristik
                     : $this->augenFuer($stiche, $teams, $eigenesTeam, $ordnung, $zweiteDulle);
                 $summe[$i] += $wert;
                 if ($endspielDiagnose) {
-                    $summeGreedy[$i] += $wert; // außerhalb des Endspiels sind beide Wege identisch
+                    $summeGreedy[$i] += $wert; // außerhalb des Endspiels sind alle Wege identisch
+                }
+                if ($diagnoseMinimax) {
+                    $summeMinimax[$i] += $wert;
                 }
             }
             $anzahl++;
@@ -207,6 +218,9 @@ final class ProfiHeuristik
                 $this->endspielStatistik->zuegeMitEndspiel++;
                 if ($this->bestenIndex($summeGreedy) !== $besterIndex) {
                     $this->endspielStatistik->zuegeWahlGeaendert++;
+                }
+                if ($diagnoseMinimax && $this->bestenIndex($summeMinimax) !== $besterIndex) {
+                    $this->endspielStatistik->zuegeAbweichendVonMinimax++;
                 }
             }
         }
@@ -535,7 +549,7 @@ final class ProfiHeuristik
             }
 
             $angespielt = $stich === [] ? null : array_values($stich)[0];
-            $karte = $this->rolloutWahl($hand, $stich, $teams[$amZug], $teams, $angespielt, $ordnung);
+            $karte = $this->rolloutPolitik->waehle($hand, $stich, $teams[$amZug], $teams, $angespielt, $ordnung);
 
             $haende[$amZug] = $this->ohne($hand, $karte);
             $stich[$amZug]  = $karte;
@@ -627,43 +641,6 @@ final class ProfiHeuristik
         return true;
     }
 
-    /** Schnelle Greedy-Kartenwahl im Rollout (perfekte Info in dieser Welt). */
-    private function rolloutWahl(array $hand, array $stich, Team $eigenes, array $teams, ?Karte $angespielt, TrumpfOrdnung $ordnung): Karte
-    {
-        $legale = LegaleKarten::fuer($hand, $angespielt, $ordnung);
-
-        if ($stich === []) {
-            return $this->niedrigsteAugen($legale, $ordnung); // simpel anspielen
-        }
-
-        $gewinnerSitz  = array_key_first($stich);
-        $gewinnerKarte = $stich[$gewinnerSitz];
-        foreach ($stich as $sitz => $karte) {
-            if ($this->schlaegt($karte, $gewinnerKarte, $angespielt, $ordnung)) {
-                $gewinnerSitz  = $sitz;
-                $gewinnerKarte = $karte;
-            }
-        }
-
-        $partnerFuehrt = $teams[$gewinnerSitz] === $eigenes;
-        $istLetzter    = count($stich) === 3;
-        $stichAugen    = array_sum(array_map(fn(Karte $k) => $k->augen(), $stich));
-
-        if ($partnerFuehrt) {
-            return $istLetzter ? $this->hoechsteAugen($legale, $ordnung) : $this->niedrigsteAugen($legale, $ordnung);
-        }
-
-        $schlagende = array_values(array_filter(
-            $legale,
-            fn(Karte $k) => $this->schlaegt($k, $gewinnerKarte, $angespielt, $ordnung),
-        ));
-        if ($schlagende !== [] && ($istLetzter || $stichAugen >= self::STECH_SCHWELLE)) {
-            return $this->billigsteSchlagende($schlagende, $ordnung);
-        }
-
-        return $this->niedrigsteAugen($legale, $ordnung);
-    }
-
     // ── Helfer ────────────────────────────────────────────────────────────────
 
     /** @param Karte[] $karten */
@@ -693,68 +670,4 @@ final class ProfiHeuristik
         return true;
     }
 
-    private function schlaegt(Karte $kandidat, Karte $gewinner, ?Karte $angespielt, TrumpfOrdnung $ordnung): bool
-    {
-        $kandTrumpf = $ordnung->istTrumpf($kandidat);
-        $gewTrumpf  = $ordnung->istTrumpf($gewinner);
-
-        if ($kandTrumpf && !$gewTrumpf) {
-            return true;
-        }
-        if (!$kandTrumpf && $gewTrumpf) {
-            return false;
-        }
-        if ($kandTrumpf && $gewTrumpf) {
-            return $ordnung->trumpfRang($kandidat) > $ordnung->trumpfRang($gewinner);
-        }
-
-        if ($angespielt === null || $ordnung->istTrumpf($angespielt)) {
-            return false;
-        }
-        if ($ordnung->fehlfarbe($kandidat) !== $ordnung->fehlfarbe($angespielt)) {
-            return false;
-        }
-
-        return $ordnung->fehlfarbenRang($kandidat) > $ordnung->fehlfarbenRang($gewinner);
-    }
-
-    private function billigsteSchlagende(array $schlagende, TrumpfOrdnung $ordnung): Karte
-    {
-        usort($schlagende, function (Karte $a, Karte $b) use ($ordnung) {
-            $aT = $ordnung->istTrumpf($a);
-            $bT = $ordnung->istTrumpf($b);
-            if ($aT !== $bT) {
-                return $aT <=> $bT;
-            }
-            $aR = $aT ? $ordnung->trumpfRang($a) : $ordnung->fehlfarbenRang($a);
-            $bR = $bT ? $ordnung->trumpfRang($b) : $ordnung->fehlfarbenRang($b);
-            return $aR <=> $bR;
-        });
-
-        return $schlagende[0];
-    }
-
-    private function hoechsteAugen(array $karten, TrumpfOrdnung $ordnung): Karte
-    {
-        usort($karten, function (Karte $a, Karte $b) use ($ordnung) {
-            if ($a->augen() !== $b->augen()) {
-                return $b->augen() <=> $a->augen();
-            }
-            return $ordnung->istTrumpf($a) <=> $ordnung->istTrumpf($b);
-        });
-
-        return $karten[0];
-    }
-
-    private function niedrigsteAugen(array $karten, TrumpfOrdnung $ordnung): Karte
-    {
-        usort($karten, function (Karte $a, Karte $b) use ($ordnung) {
-            if ($a->augen() !== $b->augen()) {
-                return $a->augen() <=> $b->augen();
-            }
-            return $ordnung->istTrumpf($a) <=> $ordnung->istTrumpf($b);
-        });
-
-        return $karten[0];
-    }
 }

@@ -10,6 +10,7 @@ use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\KartenGeber;
 use App\Domain\Doppelkopf\Service\EndspielLoeser;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
+use App\Domain\Doppelkopf\Service\RolloutPolitik;
 use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
@@ -52,7 +53,7 @@ final class FortgeschritteneRegelnTest extends TestCase
             $staerke,
             new BotHeuristik(),
             new FortgeschritteneHeuristik(),
-            new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()), new EndspielLoeser(new StichGewinner())),
+            new ProfiHeuristik(new StichGewinner(), new WertungsRechner(new StichGewinner()), new EndspielLoeser(new StichGewinner(), new RolloutPolitik()), new RolloutPolitik()),
             new AnsageHeuristik(),
             20,
             0.2,

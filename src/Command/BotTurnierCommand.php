@@ -16,6 +16,7 @@ use App\Domain\Doppelkopf\ValueObject\AnsageRollout;
 use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\FortgeschritteneRegeln;
 use App\Enum\BotStaerke;
+use App\Enum\EndspielPolitik;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -101,7 +102,9 @@ final class BotTurnierCommand extends Command
             ->addOption('rollout-welten-b', null, InputOption::VALUE_REQUIRED, 'dito für B', '60')
             ->addOption('endspiel-a', null, InputOption::VALUE_REQUIRED, 'A rechnet das Endspiel exakt aus (Alpha-Beta), sobald keine Hand mehr als N Karten hält; 0 = aus', '0')
             ->addOption('endspiel-b', null, InputOption::VALUE_REQUIRED, 'dito für B', '0')
-            ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit)')
+            ->addOption('endspiel-politik-a', null, InputOption::VALUE_REQUIRED, 'Gegenspiel, das A im Endspiel-Loeser unterstellt: minimax|gegner-greedy|nur-ich', 'minimax')
+            ->addOption('endspiel-politik-b', null, InputOption::VALUE_REQUIRED, 'dito für B', 'minimax')
+            ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit; bei anderer Politik als minimax wird zusaetzlich Minimax gerechnet)')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
             ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
             ->addOption('vergleiche', null, InputOption::VALUE_REQUIRED, 'Zwei mit --dump erzeugte Dateien gepaart vergleichen ("x.json,y.json") und beenden')
@@ -162,6 +165,7 @@ final class BotTurnierCommand extends Command
                 ),
                 (int) $input->getOption('endspiel-a'),
                 (bool) $input->getOption('endspiel-diagnose'),
+                EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-a')),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -188,6 +192,7 @@ final class BotTurnierCommand extends Command
                 ),
                 (int) $input->getOption('endspiel-b'),
                 (bool) $input->getOption('endspiel-diagnose'),
+                EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-b')),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -324,6 +329,7 @@ final class BotTurnierCommand extends Command
         ?AnsageRollout $rollout,
         int $endspielAbRestkarten,
         bool $endspielDiagnose,
+        EndspielPolitik $endspielPolitik,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -390,6 +396,7 @@ final class BotTurnierCommand extends Command
             $nurZweiGegenZwei,
             max(0, $endspielAbRestkarten),
             $endspielDiagnose,
+            $endspielPolitik,
         );
     }
 
@@ -425,6 +432,12 @@ final class BotTurnierCommand extends Command
                 $s->trefferquoteImEndspiel(),
             )],
             ['Wahländerungen je Zug gesamt', sprintf('%.2f %%', $s->quoteWahlGeaendert())],
+            // Bleibt 0, solange A selbst mit Minimax rechnet – dann ist die Zeile bedeutungslos.
+            ['davon andere Karte als Minimax', sprintf(
+                '%s  (%.2f %% dieser Züge)',
+                number_format($s->zuegeAbweichendVonMinimax, 0, ',', '.'),
+                $s->quoteAbweichendVonMinimax(),
+            )],
         ]);
     }
 
