@@ -47,6 +47,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $endspielDiagnose = false,
         private readonly EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         private readonly bool $bewertungsDiagnose = false,
+        private readonly bool $teamNebenbedingung = false,
     ) {}
 
     public function name(): string
@@ -59,6 +60,9 @@ final class EngineStrategie implements SimulierteStrategie
             $name .= $this->punkteBewertung ? ' [Punkte]' : ' [Augen]';
             if (!$this->nurZweiGegenZwei) {
                 $name .= ' [1-gegen-3-Welten]';
+            }
+            if ($this->teamNebenbedingung) {
+                $name .= ' [Kreuz-Damen-Nebenbedingung]';
             }
             if ($this->endspielAbRestkarten > 0) {
                 $name .= sprintf(' [Endspiel exakt ab %d Karten]', $this->endspielAbRestkarten);
@@ -131,6 +135,7 @@ final class EngineStrategie implements SimulierteStrategie
             endspielDiagnose: $this->endspielDiagnose,
             endspielPolitik: $this->endspielPolitik,
             bewertungsDiagnose: $this->bewertungsDiagnose,
+            teamNebenbedingung: $this->teamNebenbedingung,
         );
     }
 

@@ -36,6 +36,18 @@ final class WeltStatistik
     /** Verworfen, weil die Welt eine stille Hochzeit ergab (1 gegen 3). */
     public int $verworfenEinGegenDrei = 0;
 
+    /**
+     * Gezogene Welten, für die überhaupt ein bekanntes fremdes Team vorlag (Normalspiel).
+     *
+     * Ein Sitz, der „Re" angesagt hat, **hält im Normalspiel eine Kreuz-Dame** – und wer
+     * „Contra" ansagt, hält keine. Beides ist eine harte Tatsache, die
+     * {@see \App\Domain\Doppelkopf\Service\TeamSichtbarkeit} ohnehin öffentlich macht.
+     */
+    public int $weltenMitTeamFakten = 0;
+
+    /** Davon Welten, die dieser Tatsache widersprechen – der Anteil ist die Effekt-Obergrenze. */
+    public int $weltenMitTeamWiderspruch = 0;
+
     public function zuruecksetzen(): void
     {
         $this->ziehungen             = 0;
@@ -43,6 +55,8 @@ final class WeltStatistik
         $this->weltAnlaeufe          = 0;
         $this->weltAusfaelle         = 0;
         $this->verworfenEinGegenDrei = 0;
+        $this->weltenMitTeamFakten      = 0;
+        $this->weltenMitTeamWiderspruch = 0;
     }
 
     /** Anteil der Determinisierungen ohne Ergebnis, in Prozent. */
@@ -63,5 +77,13 @@ final class WeltStatistik
         $gezogen = $this->ziehungen - $this->ziehungenOhneErgebnis;
 
         return $gezogen === 0 ? 0.0 : 100.0 * $this->verworfenEinGegenDrei / $gezogen;
+    }
+
+    /** Anteil der Welten, die einem bekannten Team widersprechen, in Prozent. */
+    public function quoteTeamWiderspruch(): float
+    {
+        return $this->weltenMitTeamFakten === 0
+            ? 0.0
+            : 100.0 * $this->weltenMitTeamWiderspruch / $this->weltenMitTeamFakten;
     }
 }

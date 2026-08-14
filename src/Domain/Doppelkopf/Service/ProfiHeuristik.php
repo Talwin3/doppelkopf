@@ -116,6 +116,7 @@ final class ProfiHeuristik
         bool $endspielDiagnose = false,
         EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         bool $bewertungsDiagnose = false,
+        bool $teamNebenbedingung = false,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -145,6 +146,13 @@ final class ProfiHeuristik
         $diagPunkte = [];
         $diagAugen  = [];
 
+        [$mussKreuzDame, $keineKreuzDame] = $this->teamNebenbedingungen(
+            $bekannteTeams,
+            $restHandGroessen,
+            $kreuzDameGespieltVon,
+            $variante,
+        );
+
         for ($r = 0; $r < $rollouts; $r++) {
             if ($r > 0 && (microtime(true) - $start) >= $zeitbudgetSek) {
                 break;
@@ -154,7 +162,15 @@ final class ProfiHeuristik
             $teams = null;
             $this->statistik->weltAnlaeufe++;
             for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
-                $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
+                $kandidatWelt = $this->determinisiere(
+                    $ungesehene,
+                    $restHandGroessen,
+                    $gedaechtnis,
+                    $ordnung,
+                    $mussKreuzDame,
+                    $keineKreuzDame,
+                    $teamNebenbedingung,
+                );
                 if ($kandidatWelt === null) {
                     continue; // keine konsistente Verteilung gefunden
                 }
@@ -429,11 +445,28 @@ final class ProfiHeuristik
      * bekannten Farb-Freiheiten. Gibt null zurück, wenn keine konsistente Verteilung
      * gelingt (Aufrufer überspringt die Welt).
      *
+     * Mit `$erzwingeTeams` kommt die **Kreuz-Damen-Nebenbedingung** dazu: wer im Normalspiel
+     * „Re" angesagt hat, hält eine Kreuz-Dame; wer „Contra" angesagt hat, hält keine. Das ist
+     * keine Schätzung, sondern eine Regelfolge – und die Teams sind über
+     * {@see TeamSichtbarkeit} ohnehin öffentlich, es wird also nichts ausgenutzt, was ein
+     * Mensch am Tisch nicht auch wüsste. Ohne den Schalter wird der Widerspruch nur gezählt.
+     *
+     * @param list<int> $mussKreuzDame  Sitze, die zwingend eine der ungesehenen Kreuz-Damen halten
+     * @param list<int> $keineKreuzDame Sitze, die sicher keine halten
+     *
      * @return array<int, Karte[]>|null Sitzplatz → zugeteilte Handkarten
      */
-    private function determinisiere(array $ungesehene, array $restHandGroessen, SpielGedaechtnis $gedaechtnis, TrumpfOrdnung $ordnung): ?array
-    {
+    private function determinisiere(
+        array $ungesehene,
+        array $restHandGroessen,
+        SpielGedaechtnis $gedaechtnis,
+        TrumpfOrdnung $ordnung,
+        array $mussKreuzDame = [],
+        array $keineKreuzDame = [],
+        bool $erzwingeTeams = false,
+    ): ?array {
         $this->statistik->ziehungen++;
+        $hatFakten = $mussKreuzDame !== [] || $keineKreuzDame !== [];
 
         for ($versuch = 0; $versuch < 8; $versuch++) {
             $karten = $ungesehene;
@@ -445,27 +478,65 @@ final class ProfiHeuristik
                 $haende[$sitz] = [];
             }
 
+            // Die Pflicht-Kreuz-Damen zuerst – die am stärksten eingeschränkten Karten
+            // zuerst zu setzen ist derselbe Gedanke wie in Sievers' CAP-Algorithmus.
             $erfolg = true;
-            foreach ($karten as $karte) {
-                $farbe = $ordnung->istTrumpf($karte) ? null : $ordnung->fehlfarbe($karte);
-
-                $moeglich = [];
-                foreach ($bedarf as $sitz => $n) {
-                    if ($n > 0 && !$gedaechtnis->istFrei($sitz, $farbe)) {
-                        $moeglich[] = $sitz;
+            if ($erzwingeTeams && $mussKreuzDame !== []) {
+                $sitze = $mussKreuzDame;
+                shuffle($sitze);
+                foreach ($sitze as $sitz) {
+                    $index = null;
+                    foreach ($karten as $i => $karte) {
+                        if ($this->istKreuzDame($karte)) {
+                            $index = $i;
+                            break;
+                        }
                     }
+                    if ($index === null || ($bedarf[$sitz] ?? 0) <= 0 || $gedaechtnis->istFrei($sitz, null)) {
+                        $erfolg = false;
+                        break;
+                    }
+                    $haende[$sitz][] = $karten[$index];
+                    unset($karten[$index]);
+                    $karten = array_values($karten);
+                    $bedarf[$sitz]--;
                 }
-                if ($moeglich === []) {
-                    $erfolg = false;
-                    break;
-                }
-
-                $sitz = $moeglich[array_rand($moeglich)];
-                $haende[$sitz][] = $karte;
-                $bedarf[$sitz]--;
             }
 
             if ($erfolg) {
+                foreach ($karten as $karte) {
+                    $farbe        = $ordnung->istTrumpf($karte) ? null : $ordnung->fehlfarbe($karte);
+                    $istKreuzDame = $erzwingeTeams && $this->istKreuzDame($karte);
+
+                    $moeglich = [];
+                    foreach ($bedarf as $sitz => $n) {
+                        if ($n <= 0 || $gedaechtnis->istFrei($sitz, $farbe)) {
+                            continue;
+                        }
+                        if ($istKreuzDame && in_array($sitz, $keineKreuzDame, true)) {
+                            continue; // dieser Sitz hat Contra angesagt – er kann keine halten
+                        }
+                        $moeglich[] = $sitz;
+                    }
+                    if ($moeglich === []) {
+                        $erfolg = false;
+                        break;
+                    }
+
+                    $sitz = $moeglich[array_rand($moeglich)];
+                    $haende[$sitz][] = $karte;
+                    $bedarf[$sitz]--;
+                }
+            }
+
+            if ($erfolg) {
+                if ($hatFakten) {
+                    $this->statistik->weltenMitTeamFakten++;
+                    if ($this->widersprichtTeams($haende, $mussKreuzDame, $keineKreuzDame)) {
+                        $this->statistik->weltenMitTeamWiderspruch++;
+                    }
+                }
+
                 return $haende;
             }
         }
@@ -473,6 +544,85 @@ final class ProfiHeuristik
         $this->statistik->ziehungenOhneErgebnis++;
 
         return null;
+    }
+
+    /**
+     * Widerspricht diese Welt einem bekannten Team? Reine Diagnose – misst, wie viel die
+     * Nebenbedingung überhaupt bewegen kann, bevor sie scharf geschaltet wird.
+     *
+     * @param array<int, Karte[]> $haende
+     * @param list<int>           $mussKreuzDame
+     * @param list<int>           $keineKreuzDame
+     */
+    private function widersprichtTeams(array $haende, array $mussKreuzDame, array $keineKreuzDame): bool
+    {
+        foreach ($mussKreuzDame as $sitz) {
+            if (!$this->haeltKreuzDame($haende[$sitz] ?? [])) {
+                return true;
+            }
+        }
+        foreach ($keineKreuzDame as $sitz) {
+            if ($this->haeltKreuzDame($haende[$sitz] ?? [])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param Karte[] $hand */
+    private function haeltKreuzDame(array $hand): bool
+    {
+        foreach ($hand as $karte) {
+            if ($this->istKreuzDame($karte)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function istKreuzDame(Karte $karte): bool
+    {
+        return $karte->farbe === Kartenfarbe::KREUZ && $karte->wert === Kartenwert::DAME;
+    }
+
+    /**
+     * Leitet aus den öffentlich bekannten Teams die harten Nebenbedingungen für die
+     * Determinisierung ab – nur im Normalspiel, wo „RE" gleichbedeutend mit „hält eine
+     * Kreuz-Dame" ist. Sitze, die ihre Kreuz-Dame schon gespielt haben, sind erfüllt und
+     * brauchen keine weitere.
+     *
+     * @param array<int, ?Team> $bekannteTeams
+     * @param array<int, int>   $restHandGroessen nur die drei fremden Sitze
+     * @param list<int>         $kreuzDameGespieltVon
+     *
+     * @return array{0: list<int>, 1: list<int>} [muss eine halten, hält sicher keine]
+     */
+    private function teamNebenbedingungen(
+        array $bekannteTeams,
+        array $restHandGroessen,
+        array $kreuzDameGespieltVon,
+        ?SpielVariante $variante,
+    ): array {
+        if ($variante !== null && $variante !== SpielVariante::NORMALSPIEL) {
+            return [[], []]; // bei Solo/Hochzeit sagt die Kreuz-Dame nichts über die Partei
+        }
+
+        $muss  = [];
+        $keine = [];
+        foreach (array_keys($restHandGroessen) as $sitz) {
+            $team = $bekannteTeams[$sitz] ?? null;
+            if ($team === Team::RE) {
+                if (!in_array($sitz, $kreuzDameGespieltVon, true)) {
+                    $muss[] = $sitz;
+                }
+            } elseif ($team === Team::KONTRA) {
+                $keine[] = $sitz;
+            }
+        }
+
+        return [$muss, $keine];
     }
 
     /**

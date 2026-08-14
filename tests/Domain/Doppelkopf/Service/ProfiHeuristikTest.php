@@ -178,6 +178,85 @@ final class ProfiHeuristikTest extends TestCase
         self::assertGreaterThan(1.0, $this->profi->bewertungsStatistik->weltenSchnitt(), 'Es müssen echte Welten ausgewertet worden sein.');
     }
 
+    /**
+     * Hebel 3, erster Schritt: wer im Normalspiel „Re" angesagt hat, hält eine Kreuz-Dame –
+     * wer „Contra" angesagt hat, keine. Beides ist über {@see \App\Domain\Doppelkopf\Service\TeamSichtbarkeit}
+     * öffentlich bekannt und wird von der Determinisierung bisher ignoriert.
+     *
+     * Geprüft wird die Wirkung an der Statistik: ohne den Schalter zieht die Engine Welten,
+     * die dem bekannten Team widersprechen; mit Schalter ist die Widerspruchsquote null.
+     *
+     * @param array<int, mixed> $zusatz
+     */
+    private function argumenteMitBekanntenTeams(array $zusatz = []): array
+    {
+        // Bot sitzt auf 1 und ist KONTRA (hält keine Kreuz-Dame). Sitz 2 hat Re angesagt und
+        // ist damit öffentlich RE, Sitz 3 hat Contra angesagt und ist öffentlich KONTRA.
+        // Sitz 4 bleibt verdeckt. Beide Kreuz-Damen sind noch ungesehen.
+        $eigeneHand = [$this->k('PIK_ASS_1'), $this->k('PIK_ZEHN_1'), $this->k('HERZ_ASS_1')];
+        $ungesehene = [
+            $this->k('KREUZ_DAME_1'), $this->k('KREUZ_DAME_2'),
+            $this->k('PIK_KOENIG_1'), $this->k('PIK_NEUN_1'),
+            $this->k('HERZ_KOENIG_1'), $this->k('HERZ_NEUN_1'),
+            $this->k('KREUZ_ASS_1'), $this->k('KREUZ_NEUN_1'),
+            $this->k('KARO_ASS_1'),
+        ];
+
+        return [...[
+            'erlaubte'             => $eigeneHand,
+            'eigeneHand'           => $eigeneHand,
+            'eigenerSitz'          => 1,
+            'eigenesTeam'          => Team::KONTRA,
+            'offenerStich'         => [],
+            'restHandGroessen'     => [2 => 3, 3 => 3, 4 => 3],
+            'ungesehene'           => $ungesehene,
+            'gedaechtnis'          => SpielGedaechtnis::ausHistorie([], [], $eigeneHand, $this->ordnung),
+            'variante'             => SpielVariante::NORMALSPIEL,
+            'bekannteTeams'        => [1 => Team::KONTRA, 2 => Team::RE, 3 => Team::KONTRA, 4 => null],
+            'kreuzDameGespieltVon' => [],
+            'ordnung'              => $this->ordnung,
+            'zweiteDulle'          => false,
+            'rollouts'             => 40,
+        ], ...$zusatz];
+    }
+
+    public function testOhneNebenbedingungEntstehenWeltenGegenDasBekannteTeam(): void
+    {
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteMitBekanntenTeams());
+
+        $s = $this->profi->statistik;
+        self::assertGreaterThan(0, $s->weltenMitTeamFakten, 'Es liegen bekannte Teams vor.');
+        self::assertGreaterThan(
+            0,
+            $s->weltenMitTeamWiderspruch,
+            'Ohne Nebenbedingung müssen Welten entstehen, die dem bekannten Team widersprechen.',
+        );
+    }
+
+    public function testMitNebenbedingungWidersprichtKeineWeltMehr(): void
+    {
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteMitBekanntenTeams(['teamNebenbedingung' => true]));
+
+        $s = $this->profi->statistik;
+        self::assertGreaterThan(0, $s->weltenMitTeamFakten);
+        self::assertSame(0, $s->weltenMitTeamWiderspruch, 'Mit Nebenbedingung darf es keinen Widerspruch geben.');
+    }
+
+    public function testNebenbedingungGiltNichtImSolo(): void
+    {
+        // Im Solo sagt die Kreuz-Dame nichts über die Partei – die Nebenbedingung muss
+        // dort schweigen, sonst würden völlig legale Welten verworfen.
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteMitBekanntenTeams([
+            'variante'            => SpielVariante::SOLO_DAMEN,
+            'teamNebenbedingung'  => true,
+        ]));
+
+        self::assertSame(0, $this->profi->statistik->weltenMitTeamFakten, 'Im Solo gibt es keine Kreuz-Damen-Fakten.');
+    }
+
     public function testGibtImmerEineErlaubteKarteZurueck(): void
     {
         $eigeneHand = [$this->k('KREUZ_ASS_1'), $this->k('KARO_DAME_1'), $this->k('PIK_NEUN_1')];
