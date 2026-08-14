@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Domain\Doppelkopf\Service\AnsageHeuristik;
+use App\Domain\Doppelkopf\Service\BewertungsStatistik;
 use App\Domain\Doppelkopf\Service\BotHeuristik;
 use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
@@ -105,6 +106,7 @@ final class BotTurnierCommand extends Command
             ->addOption('endspiel-politik-a', null, InputOption::VALUE_REQUIRED, 'Gegenspiel, das A im Endspiel-Loeser unterstellt: minimax|gegner-greedy|nur-ich', 'minimax')
             ->addOption('endspiel-politik-b', null, InputOption::VALUE_REQUIRED, 'dito für B', 'minimax')
             ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit; bei anderer Politik als minimax wird zusaetzlich Minimax gerechnet)')
+            ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
             ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
             ->addOption('vergleiche', null, InputOption::VALUE_REQUIRED, 'Zwei mit --dump erzeugte Dateien gepaart vergleichen ("x.json,y.json") und beenden')
@@ -166,6 +168,7 @@ final class BotTurnierCommand extends Command
                 (int) $input->getOption('endspiel-a'),
                 (bool) $input->getOption('endspiel-diagnose'),
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-a')),
+                (bool) $input->getOption('bewertungs-diagnose'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -193,6 +196,7 @@ final class BotTurnierCommand extends Command
                 (int) $input->getOption('endspiel-b'),
                 (bool) $input->getOption('endspiel-diagnose'),
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-b')),
+                (bool) $input->getOption('bewertungs-diagnose'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -266,6 +270,7 @@ final class BotTurnierCommand extends Command
 
         $this->zeigeWeltStatistik($io);
         $this->zeigeEndspielStatistik($io);
+        $this->zeigeBewertungsStatistik($io);
 
         if (($ziel = $input->getOption('dump')) !== null) {
             file_put_contents((string) $ziel, json_encode([
@@ -330,6 +335,7 @@ final class BotTurnierCommand extends Command
         int $endspielAbRestkarten,
         bool $endspielDiagnose,
         EndspielPolitik $endspielPolitik,
+        bool $bewertungsDiagnose,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -397,6 +403,7 @@ final class BotTurnierCommand extends Command
             max(0, $endspielAbRestkarten),
             $endspielDiagnose,
             $endspielPolitik,
+            $bewertungsDiagnose,
         );
     }
 
@@ -439,6 +446,82 @@ final class BotTurnierCommand extends Command
                 $s->quoteAbweichendVonMinimax(),
             )],
         ]);
+    }
+
+    /**
+     * Diagnose der Bewertungsformel `v = w · s + e` (siehe {@see BewertungsStatistik}).
+     *
+     * Zwei Blöcke: oben der Gewichts-Sweep – ab welchem Gewicht die Punkte überhaupt eine
+     * andere Karte wählen als die Augen (Effekt-Obergrenze); unten die Trennschärfe – ob der
+     * Abstand zwischen bester und zweitbester Karte bei dieser Weltenzahl statistisch
+     * überhaupt trägt. Die untere Hälfte prüft die Varianz-Hypothese direkt.
+     */
+    private function zeigeBewertungsStatistik(SymfonyStyle $io): void
+    {
+        $s = $this->profi->bewertungsStatistik;
+        if ($s->zuege === 0) {
+            return;
+        }
+
+        $zeilen = [
+            ['bewertete Züge', number_format($s->zuege, 0, ',', '.')],
+            ['Ø Kandidaten je Zug', sprintf('%.2f', $s->kandidatenSchnitt())],
+            ['Ø Welten je Zug', sprintf('%.1f', $s->weltenSchnitt())],
+        ];
+        foreach (BewertungsStatistik::GEWICHTE as $w) {
+            if ($w === 0) {
+                continue;
+            }
+            $zeilen[] = [sprintf('andere Karte als Augen bei w=%d', $w), sprintf(
+                '%s  (%.2f %%)',
+                number_format($s->wahlGeaendert[$w], 0, ',', '.'),
+                $s->quoteWahlGeaendert($w),
+            )];
+        }
+        $zeilen[] = ['Rangfolge 1↔2 nicht abgesichert – Augen', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->unentschiedenAugen, 0, ',', '.'),
+            $s->quoteUnentschiedenAugen(),
+        )];
+        $zeilen[] = ['Rangfolge 1↔2 nicht abgesichert – Punkte', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->unentschiedenPunkte, 0, ',', '.'),
+            $s->quoteUnentschiedenPunkte(),
+        )];
+        $zeilen[] = ['⤷ davon einstimmig (t = ∞) – Augen / Punkte', sprintf(
+            '%s / %s',
+            number_format($s->einstimmigAugen, 0, ',', '.'),
+            number_format($s->einstimmigPunkte, 0, ',', '.'),
+        )];
+        $zeilen[] = ['Median t – Augen / Punkte', sprintf('%.2f / %.2f', $s->tMedianAugen(), $s->tMedianPunkte())];
+        $zeilen[] = ['Ø t ohne einstimmige Züge – Augen / Punkte', sprintf(
+            '%.2f / %.2f  (schwankt stark, siehe Median)',
+            $s->tSchnittAugen(),
+            $s->tSchnittPunkte(),
+        )];
+        $zeilen[] = ['Median Abstand Platz 1↔2 (Augen)', sprintf('%.2f', $s->abstandMedianAugen())];
+        $zeilen[] = ['davon praktisch gleichwertig (< 5 Augen)', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->praktischGleichwertig, 0, ',', '.'),
+            $s->quotePraktischGleichwertig(),
+        )];
+        $zeilen[] = ['⭐ spürbarer Abstand UND Münzwurf', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->teuerUndUnentschieden, 0, ',', '.'),
+            $s->quoteTeuerUndUnentschieden(),
+        )];
+        $zeilen[] = ['hochgerechnet r=300: unentschieden – Augen', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->unentschiedenBei300Augen, 0, ',', '.'),
+            $s->quoteUnentschiedenBei300Augen(),
+        )];
+        $zeilen[] = ['hochgerechnet r=300: unentschieden – Punkte', sprintf(
+            '%s  (%.2f %%)',
+            number_format($s->unentschiedenBei300Punkte, 0, ',', '.'),
+            $s->quoteUnentschiedenBei300Punkte(),
+        )];
+
+        $io->table(['Bewertungs-Diagnose', 'Wert'], $zeilen);
     }
 
     /**

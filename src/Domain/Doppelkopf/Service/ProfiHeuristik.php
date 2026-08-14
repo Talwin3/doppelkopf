@@ -56,14 +56,18 @@ final class ProfiHeuristik
     /** Reichweite der exakten Endspielsuche – nur im Diagnosemodus gefüllt. */
     public readonly EndspielStatistik $endspielStatistik;
 
+    /** Trennschärfe der Bewertungsformel – nur im Diagnosemodus gefüllt. */
+    public readonly BewertungsStatistik $bewertungsStatistik;
+
     public function __construct(
         private readonly StichGewinner $stichGewinner,
         private readonly WertungsRechner $wertungsRechner,
         private readonly EndspielLoeser $endspielLoeser,
         private readonly RolloutPolitik $rolloutPolitik,
     ) {
-        $this->statistik         = new WeltStatistik();
-        $this->endspielStatistik = new EndspielStatistik();
+        $this->statistik           = new WeltStatistik();
+        $this->endspielStatistik   = new EndspielStatistik();
+        $this->bewertungsStatistik = new BewertungsStatistik();
     }
 
     /**
@@ -83,6 +87,9 @@ final class ProfiHeuristik
      *        Solche Welten sind im angemeldeten Normalspiel praktisch ausgeschlossen (Bots melden die
      *        Hochzeit immer an), fielen ohne diese Prüfung aber in ~30 % der Ziehungen an, sobald der
      *        Bot selbst keine Kreuz-Dame hält. Messung 2026-08-07: +0,19 Punkte je Spieler und Partie.
+     * @param bool               $bewertungsDiagnose true = beide Maßstäbe je Welt mitschreiben und in
+     *        die {@see BewertungsStatistik} geben. Ändert die Kartenwahl nicht, kostet aber eine
+     *        zusätzliche Abrechnung je Welt und Kandidat.
      */
     public function entscheide(
         array $erlaubte,
@@ -108,6 +115,7 @@ final class ProfiHeuristik
         int $endspielAbRestkarten = 0,
         bool $endspielDiagnose = false,
         EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
+        bool $bewertungsDiagnose = false,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -130,6 +138,12 @@ final class ProfiHeuristik
         $summeGreedy     = $endspielDiagnose ? $summe : [];
         $summeMinimax    = $diagnoseMinimax ? $summe : [];
         $endspielGenutzt = false;
+
+        // Bewertungs-Diagnose: beide Maßstäbe je Welt und Kandidat mitschreiben, ohne die
+        // Wahl anzufassen. Aus den Rohwerten fällt der ganze Gewichts-Sweep ab und der
+        // Standardfehler des Abstands zwischen Platz 1 und 2 (siehe BewertungsStatistik).
+        $diagPunkte = [];
+        $diagAugen  = [];
 
         for ($r = 0; $r < $rollouts; $r++) {
             if ($r > 0 && (microtime(true) - $start) >= $zeitbudgetSek) {
@@ -202,6 +216,20 @@ final class ProfiHeuristik
                 if ($diagnoseMinimax) {
                     $summeMinimax[$i] += $wert;
                 }
+                if ($bewertungsDiagnose) {
+                    // Bewusst zusätzlich gerechnet statt aus $wert abgeleitet: so bleibt die
+                    // Wahl bit-identisch zum Normalbetrieb, egal welcher Maßstab gerade läuft.
+                    $wertung = $this->wertungsRechner->berechne(
+                        array_merge($bisherigeStiche, $stiche),
+                        $teams,
+                        $ordnung,
+                        $ansagen,
+                        $zweiteDulle,
+                        $solistSitzplatz,
+                    );
+                    $diagPunkte[$i][] = $this->signierterWert($wertung, $eigenesTeam);
+                    $diagAugen[$i][]  = (float) $wertung['augen'][$eigenesTeam->value];
+                }
             }
             $anzahl++;
         }
@@ -223,6 +251,12 @@ final class ProfiHeuristik
                     $this->endspielStatistik->zuegeAbweichendVonMinimax++;
                 }
             }
+        }
+
+        // Züge, in denen die exakte Suche gegriffen hat, tragen keine Welt-Rohwerte und
+        // bleiben deshalb außen vor – der Löser liefert nur den Wert, nicht beide Maßstäbe.
+        if ($bewertungsDiagnose && !$endspielGenutzt && $diagPunkte !== []) {
+            $this->bewertungsStatistik->erfasse(array_values($diagPunkte), array_values($diagAugen));
         }
 
         return $erlaubte[$besterIndex];

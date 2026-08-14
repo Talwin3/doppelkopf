@@ -131,6 +131,53 @@ final class ProfiHeuristikTest extends TestCase
         );
     }
 
+    /**
+     * Die Bewertungs-Diagnose ist ein Messgerät, kein Hebel: sie schreibt beide Maßstäbe je
+     * Welt mit, darf die Kartenwahl aber nicht anfassen. Geprüft mit gesetztem Zufallsstrom,
+     * sonst würden schon unterschiedliche Determinisierungen den Vergleich erklären.
+     */
+    public function testBewertungsDiagnoseAendertDieWahlNicht(): void
+    {
+        // Dieselbe Stellung wie im Doppelkopf-Test: die Teams stehen fest (Solo), sonst
+        // verwirft die Engine mangels Kreuz-Damen jede Welt als 1-gegen-3 und bewertet nichts.
+        $offenerStich = [
+            2 => $this->k('KREUZ_ASS_1'),
+            3 => $this->k('KREUZ_ASS_2'),
+            4 => $this->k('KREUZ_ZEHN_1'),
+        ];
+        $eigeneHand = [$this->k('KARO_NEUN_1'), $this->k('KARO_ZEHN_1')];
+        $ungesehene = [$this->k('PIK_NEUN_1'), $this->k('HERZ_NEUN_1'), $this->k('KREUZ_NEUN_1')];
+
+        $argumente = [
+            'erlaubte'             => $eigeneHand,
+            'eigeneHand'           => $eigeneHand,
+            'eigenerSitz'          => 1,
+            'eigenesTeam'          => Team::KONTRA,
+            'offenerStich'         => $offenerStich,
+            'restHandGroessen'     => [2 => 1, 3 => 1, 4 => 1],
+            'ungesehene'           => $ungesehene,
+            'gedaechtnis'          => SpielGedaechtnis::ausHistorie([], [], $eigeneHand, $this->ordnung),
+            'variante'             => SpielVariante::SOLO_DAMEN,
+            'bekannteTeams'        => [1 => Team::KONTRA, 2 => Team::RE, 3 => Team::RE, 4 => Team::RE],
+            'kreuzDameGespieltVon' => [],
+            'ordnung'              => $this->ordnung,
+            'zweiteDulle'          => false,
+            'rollouts'             => 20,
+        ];
+
+        mt_srand(20260814);
+        $ohne = $this->profi->entscheide(...$argumente)->id();
+        self::assertSame(0, $this->profi->bewertungsStatistik->zuege, 'Ohne Schalter bleibt der Zähler leer.');
+
+        mt_srand(20260814);
+        $mit = $this->profi->entscheide(...[...$argumente, 'bewertungsDiagnose' => true])->id();
+
+        self::assertSame($ohne, $mit, 'Die Diagnose darf die Kartenwahl nicht verschieben.');
+        self::assertSame(1, $this->profi->bewertungsStatistik->zuege);
+        self::assertSame(2.0, $this->profi->bewertungsStatistik->kandidatenSchnitt());
+        self::assertGreaterThan(1.0, $this->profi->bewertungsStatistik->weltenSchnitt(), 'Es müssen echte Welten ausgewertet worden sein.');
+    }
+
     public function testGibtImmerEineErlaubteKarteZurueck(): void
     {
         $eigeneHand = [$this->k('KREUZ_ASS_1'), $this->k('KARO_DAME_1'), $this->k('PIK_NEUN_1')];

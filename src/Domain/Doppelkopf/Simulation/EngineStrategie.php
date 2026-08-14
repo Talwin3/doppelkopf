@@ -46,6 +46,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly int $endspielAbRestkarten = 0,
         private readonly bool $endspielDiagnose = false,
         private readonly EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
+        private readonly bool $bewertungsDiagnose = false,
     ) {}
 
     public function name(): string
@@ -129,6 +130,7 @@ final class EngineStrategie implements SimulierteStrategie
             endspielAbRestkarten: $this->endspielAbRestkarten,
             endspielDiagnose: $this->endspielDiagnose,
             endspielPolitik: $this->endspielPolitik,
+            bewertungsDiagnose: $this->bewertungsDiagnose,
         );
     }
 
