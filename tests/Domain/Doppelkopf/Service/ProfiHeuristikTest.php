@@ -183,8 +183,9 @@ final class ProfiHeuristikTest extends TestCase
      * wer „Contra" angesagt hat, keine. Beides ist über {@see \App\Domain\Doppelkopf\Service\TeamSichtbarkeit}
      * öffentlich bekannt und wird von der Determinisierung bisher ignoriert.
      *
-     * Geprüft wird die Wirkung an der Statistik: ohne den Schalter zieht die Engine Welten,
-     * die dem bekannten Team widersprechen; mit Schalter ist die Widerspruchsquote null.
+     * Geprüft wird die Wirkung an der Statistik: abgeschaltet zieht die Engine Welten,
+     * die dem bekannten Team widersprechen; eingeschaltet ist die Widerspruchsquote null.
+     * Seit dem 15.08.2026 ist die Nebenbedingung Default (gemessen +0,35 Punkte).
      *
      * @param array<int, mixed> $zusatz
      */
@@ -223,7 +224,7 @@ final class ProfiHeuristikTest extends TestCase
     public function testOhneNebenbedingungEntstehenWeltenGegenDasBekannteTeam(): void
     {
         mt_srand(20260815);
-        $this->profi->entscheide(...$this->argumenteMitBekanntenTeams());
+        $this->profi->entscheide(...$this->argumenteMitBekanntenTeams(['teamNebenbedingung' => false]));
 
         $s = $this->profi->statistik;
         self::assertGreaterThan(0, $s->weltenMitTeamFakten, 'Es liegen bekannte Teams vor.');

@@ -106,8 +106,8 @@ final class BotTurnierCommand extends Command
             ->addOption('endspiel-politik-a', null, InputOption::VALUE_REQUIRED, 'Gegenspiel, das A im Endspiel-Loeser unterstellt: minimax|gegner-greedy|nur-ich', 'minimax')
             ->addOption('endspiel-politik-b', null, InputOption::VALUE_REQUIRED, 'dito für B', 'minimax')
             ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit; bei anderer Politik als minimax wird zusaetzlich Minimax gerechnet)')
-            ->addOption('team-nebenbedingung-a', null, InputOption::VALUE_NONE, 'A haelt in der Determinisierung die bekannten Teams ein: wer Re angesagt hat, bekommt eine Kreuz-Dame, wer Contra angesagt hat, keine')
-            ->addOption('team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
+            ->addOption('ohne-team-nebenbedingung-a', null, InputOption::VALUE_NONE, 'A ignoriert in der Determinisierung die bekannten Teams wieder (Stand vor dem 15.08.2026). Normalerweise gilt: wer Re angesagt hat, bekommt eine Kreuz-Dame, wer Contra angesagt hat, keine')
+            ->addOption('ohne-team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
             ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
             ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
@@ -171,7 +171,7 @@ final class BotTurnierCommand extends Command
                 (bool) $input->getOption('endspiel-diagnose'),
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-a')),
                 (bool) $input->getOption('bewertungs-diagnose'),
-                (bool) $input->getOption('team-nebenbedingung-a'),
+                !$input->getOption('ohne-team-nebenbedingung-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -200,7 +200,7 @@ final class BotTurnierCommand extends Command
                 (bool) $input->getOption('endspiel-diagnose'),
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-b')),
                 (bool) $input->getOption('bewertungs-diagnose'),
-                (bool) $input->getOption('team-nebenbedingung-b'),
+                !$input->getOption('ohne-team-nebenbedingung-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());

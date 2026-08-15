@@ -116,7 +116,7 @@ final class ProfiHeuristik
         bool $endspielDiagnose = false,
         EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         bool $bewertungsDiagnose = false,
-        bool $teamNebenbedingung = false,
+        bool $teamNebenbedingung = true,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -332,10 +332,18 @@ final class ProfiHeuristik
         bool $nurZweiGegenZwei = true,
         int $rollouts = 60,
         float $zeitbudgetSek = 0.8,
+        bool $teamNebenbedingung = true,
     ): AnsageAussichten {
         if ($kandidaten === [] || $eigenesTeam === null || $eigeneHand === []) {
             return new AnsageAussichten(0);
         }
+
+        [$mussKreuzDame, $keineKreuzDame] = $this->teamNebenbedingungen(
+            $bekannteTeams,
+            $restHandGroessen,
+            $kreuzDameGespieltVon,
+            $variante,
+        );
 
         $gegenTeam = $eigenesTeam === Team::RE ? Team::KONTRA : Team::RE;
 
@@ -354,7 +362,15 @@ final class ProfiHeuristik
             $teams = null;
             $this->statistik->weltAnlaeufe++;
             for ($versuch = 0; $versuch < self::WELT_VERSUCHE; $versuch++) {
-                $kandidatWelt = $this->determinisiere($ungesehene, $restHandGroessen, $gedaechtnis, $ordnung);
+                $kandidatWelt = $this->determinisiere(
+                    $ungesehene,
+                    $restHandGroessen,
+                    $gedaechtnis,
+                    $ordnung,
+                    $mussKreuzDame,
+                    $keineKreuzDame,
+                    $teamNebenbedingung,
+                );
                 if ($kandidatWelt === null) {
                     continue;
                 }

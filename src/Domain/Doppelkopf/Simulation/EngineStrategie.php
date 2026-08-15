@@ -47,7 +47,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $endspielDiagnose = false,
         private readonly EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         private readonly bool $bewertungsDiagnose = false,
-        private readonly bool $teamNebenbedingung = false,
+        private readonly bool $teamNebenbedingung = true,
     ) {}
 
     public function name(): string
@@ -61,8 +61,8 @@ final class EngineStrategie implements SimulierteStrategie
             if (!$this->nurZweiGegenZwei) {
                 $name .= ' [1-gegen-3-Welten]';
             }
-            if ($this->teamNebenbedingung) {
-                $name .= ' [Kreuz-Damen-Nebenbedingung]';
+            if (!$this->teamNebenbedingung) {
+                $name .= ' [ohne Kreuz-Damen-Nebenbedingung]';
             }
             if ($this->endspielAbRestkarten > 0) {
                 $name .= sprintf(' [Endspiel exakt ab %d Karten]', $this->endspielAbRestkarten);
@@ -196,6 +196,7 @@ final class EngineStrategie implements SimulierteStrategie
                 nurZweiGegenZwei: $this->nurZweiGegenZwei,
                 rollouts: $rollout->welten,
                 zeitbudgetSek: $this->zeitbudgetSek,
+                teamNebenbedingung: $this->teamNebenbedingung,
             );
         };
     }
