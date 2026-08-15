@@ -48,6 +48,7 @@ final class FortgeschritteneRegelnTest extends TestCase
                 new WertungsRechner($stichGewinner),
                 new AnsageRegeln(),
                 new EvidenzDiagnose(new TeamEvidenz(new RolloutPolitik())),
+                new AnsageHeuristik(),
             ),
             new KartenGeber(),
             new TrumpfOrdnungFactory(),

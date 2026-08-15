@@ -25,9 +25,17 @@ use App\Enum\Team;
  */
 final class AnsageHeuristik
 {
+    /**
+     * Diagnose der Erstansage-Schwellen – wird nur beschrieben, nie gelesen; die Ansage
+     * entscheidet unverändert die Heuristik. Per Default abgeschaltet.
+     */
+    public readonly AnsageStatistik $statistik;
+
     public function __construct(
         private readonly BlattBewertung $blattBewertung = new BlattBewertung(),
-    ) {}
+    ) {
+        $this->statistik = new AnsageStatistik();
+    }
 
     /**
      * @param Karte[]      $hand         Aktuelle Handkarten
@@ -99,6 +107,16 @@ final class AnsageHeuristik
         $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
 
         if (!in_array($grundansage, $teamAnsagen, true)) {
+            if ($this->statistik->istAktiv()) {
+                // Beide Bedingungen einzeln festhalten: aus der Verknüpfung allein wäre nicht
+                // mehr ablesbar, welche Ansagen eine andere Schwelle zusätzlich zuließe.
+                $this->statistik->verbucheErstansage(
+                    $team,
+                    $this->blattWert($bewertungsHand, $ordnung, $schwellen, $erspielteAugen),
+                    $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer),
+                );
+            }
+
             return $this->blattReicht($bewertungsHand, $truempfe, $team, $ordnung, $schwellen, $erspielteAugen)
                 && $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer)
                     ? $grundansage
@@ -232,9 +250,20 @@ final class AnsageHeuristik
             return $truempfe >= $schwellen->minTruempfe($team);
         }
 
+        return $this->blattWert($bewertungsHand, $ordnung, $schwellen, $erspielteAugen) >= $minAugen;
+    }
+
+    /**
+     * Der Wert, an dem die Augen-Schwelle gemessen wird: Blattbewertung plus die schon
+     * erspielten Team-Augen (erster Summand der Essener Formel).
+     *
+     * @param Karte[] $bewertungsHand
+     */
+    private function blattWert(array $bewertungsHand, TrumpfOrdnung $ordnung, AnsageSchwellen $schwellen, int $erspielteAugen): float
+    {
         $bereits = $schwellen->mitErspieltenAugen ? (float) $erspielteAugen : 0.0;
 
-        return $this->blattBewertung->augen($bewertungsHand, $ordnung) + $bereits >= $minAugen;
+        return $this->blattBewertung->augen($bewertungsHand, $ordnung) + $bereits;
     }
 
     /**

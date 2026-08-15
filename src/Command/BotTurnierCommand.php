@@ -112,6 +112,7 @@ final class BotTurnierCommand extends Command
             ->addOption('ohne-team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
             ->addOption('schmier-evidenz-a', null, InputOption::VALUE_REQUIRED, 'Gewicht der weichen Schmier-Evidenz fuer A (0 = aus). Wer als Letzter hohe Augen abwirft, haelt den Stichfuehrenden fuer seinen Partner - gemessen zu 93 Prozent richtig gegen regelbasierte Gegner. Widersprechende Welten werden mit dieser Wahrscheinlichkeit verworfen, nicht ausgeschlossen', '0')
             ->addOption('schmier-evidenz-b', null, InputOption::VALUE_REQUIRED, 'dito fuer B', '0')
+            ->addOption('ansage-diagnose', null, InputOption::VALUE_NONE, 'An jedem Entscheidungspunkt den Blattwert der Erstansage mitschreiben und daraus Ansagezahl und Haltequote fuer JEDE Schwelle ableiten - ohne je Schwelle einen eigenen Lauf zu fahren. Aendert nichts am Spiel')
             ->addOption('evidenz-diagnose', null, InputOption::VALUE_NONE, 'Weiche Team-Signale (Schmieren/Stechen) gegen die wahren Parteien halten und je Signal Haeufigkeit, Trefferquote und Zeitpunkt ausweisen. Aendert nichts am Spiel, kostet praktisch keine Zeit (Hebel 3, zweiter Schritt)')
             ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
@@ -242,6 +243,10 @@ final class BotTurnierCommand extends Command
         if ($input->getOption('evidenz-diagnose')) {
             $this->evidenzDiagnose->aktivieren();
         }
+        $this->ansageHeuristik->statistik->zuruecksetzen();
+        if ($input->getOption('ansage-diagnose')) {
+            $this->ansageHeuristik->statistik->aktivieren();
+        }
 
         $fortschritt = $io->createProgressBar($anzahl);
         $fortschritt->start();
@@ -287,6 +292,7 @@ final class BotTurnierCommand extends Command
         $this->zeigeEndspielStatistik($io);
         $this->zeigeBewertungsStatistik($io);
         $this->zeigeEvidenzStatistik($io);
+        $this->zeigeAnsageStatistik($io);
 
         if (($ziel = $input->getOption('dump')) !== null) {
             file_put_contents((string) $ziel, json_encode([
@@ -542,6 +548,48 @@ final class BotTurnierCommand extends Command
         )];
 
         $io->table(['Bewertungs-Diagnose', 'Wert'], $zeilen);
+    }
+
+    /**
+     * Diagnose der Erstansage-Schwellen.
+     *
+     * Zeigt für jede Kandidatenschwelle, wie viele Ansagen sie zuließe und wie oft die
+     * ansagende Partei das Blatt gewonnen hat. Beides fällt aus **einem** Lauf ab, weil an
+     * jedem Entscheidungspunkt der Rohwert mitgeschrieben wird (Verfahren aus P5-Hebel 1c).
+     *
+     * ⚠️ Die Haltequote ist eine Obergrenze für die Entscheidungsqualität, kein Ersatz für den
+     * Messlauf: eine andere Schwelle ändert den Spielverlauf, nicht nur die Buchhaltung. Sie
+     * beantwortet die Vorfrage – bewegt eine Verschiebung überhaupt genug Ansagen?
+     */
+    private function zeigeAnsageStatistik(SymfonyStyle $io): void
+    {
+        $s = $this->ansageHeuristik->statistik;
+        if ($s->istLeer()) {
+            return;
+        }
+
+        $zeilen = [];
+        foreach ($s->sweep() as $z) {
+            $zeilen[] = [
+                sprintf('%.0f', $z['schwelle']),
+                number_format($z['re'], 0, ',', '.'),
+                sprintf('%.1f %%', $z['reQuote']),
+                number_format($z['contra'], 0, ',', '.'),
+                sprintf('%.1f %%', $z['contraQuote']),
+            ];
+        }
+
+        $io->table(
+            ['Schwelle (Augen)', 'Re-Ansagen', 'davon gewonnen', 'Contra-Ansagen', 'davon gewonnen'],
+            $zeilen,
+        );
+        $io->writeln(sprintf(
+            '  Entscheidungspunkte mit passender Frist: %s   (heutige Schwellen: Re %.0f / Contra %.0f)',
+            number_format($s->entscheidungspunkte(), 0, ',', '.'),
+            AnsageSchwellen::AUGEN_RE,
+            AnsageSchwellen::AUGEN_CONTRA,
+        ));
+        $io->newLine();
     }
 
     /**

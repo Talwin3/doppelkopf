@@ -47,6 +47,7 @@ final class SpielSimulatorTest extends TestCase
             new WertungsRechner($stichGewinner),
             new AnsageRegeln(),
             new EvidenzDiagnose(new TeamEvidenz(new RolloutPolitik())),
+            new AnsageHeuristik(),
         );
         $this->trumpfOrdnungFactory = new TrumpfOrdnungFactory();
         $this->kartenGeber          = new KartenGeber();

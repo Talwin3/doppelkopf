@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Doppelkopf\Simulation;
 
+use App\Domain\Doppelkopf\Service\AnsageHeuristik;
 use App\Domain\Doppelkopf\Service\LegaleKarten;
 use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
@@ -32,6 +33,7 @@ final class SpielSimulator
         private readonly WertungsRechner $wertungsRechner,
         private readonly AnsageRegeln $ansageRegeln,
         private readonly EvidenzDiagnose $evidenzDiagnose,
+        private readonly AnsageHeuristik $ansageHeuristik,
     ) {}
 
     /**
@@ -141,6 +143,10 @@ final class SpielSimulator
             $partie->ansagen(),
             $partie->zweiteDulleSticht(),
         );
+
+        // Diagnose, per Default aus: die Entscheidungspunkte dieses Blattes bekommen ihren
+        // Ausgang. Erst damit lässt sich zu jeder Schwelle die Haltequote ausrechnen.
+        $this->ansageHeuristik->statistik->blattAbschliessen($wertung['augen']);
 
         // Spielwert geht an den Empfänger, die Gegenpartei zahlt ihn (pro Spieler).
         $empfaenger = $wertung['punkteEmpfaenger'];
