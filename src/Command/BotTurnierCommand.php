@@ -10,6 +10,7 @@ use App\Domain\Doppelkopf\Service\BotHeuristik;
 use App\Domain\Doppelkopf\Service\FortgeschritteneHeuristik;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Simulation\EngineStrategie;
+use App\Domain\Doppelkopf\Simulation\EvidenzDiagnose;
 use App\Domain\Doppelkopf\Simulation\SimulierteStrategie;
 use App\Domain\Doppelkopf\Simulation\TurnierErgebnis;
 use App\Domain\Doppelkopf\Simulation\TurnierLauf;
@@ -48,6 +49,7 @@ final class BotTurnierCommand extends Command
         private readonly FortgeschritteneHeuristik $fortgeschritten,
         private readonly ProfiHeuristik $profi,
         private readonly AnsageHeuristik $ansageHeuristik,
+        private readonly EvidenzDiagnose $evidenzDiagnose,
     ) {
         parent::__construct();
     }
@@ -108,6 +110,7 @@ final class BotTurnierCommand extends Command
             ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit; bei anderer Politik als minimax wird zusaetzlich Minimax gerechnet)')
             ->addOption('ohne-team-nebenbedingung-a', null, InputOption::VALUE_NONE, 'A ignoriert in der Determinisierung die bekannten Teams wieder (Stand vor dem 15.08.2026). Normalerweise gilt: wer Re angesagt hat, bekommt eine Kreuz-Dame, wer Contra angesagt hat, keine')
             ->addOption('ohne-team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
+            ->addOption('evidenz-diagnose', null, InputOption::VALUE_NONE, 'Weiche Team-Signale (Schmieren/Stechen) gegen die wahren Parteien halten und je Signal Haeufigkeit, Trefferquote und Zeitpunkt ausweisen. Aendert nichts am Spiel, kostet praktisch keine Zeit (Hebel 3, zweiter Schritt)')
             ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
             ->addOption('dump', null, InputOption::VALUE_REQUIRED, 'Die Differenz je Blatt als JSON in diese Datei schreiben – erlaubt den gepaarten Vergleich zweier A-Varianten (siehe --vergleiche)')
@@ -231,6 +234,10 @@ final class BotTurnierCommand extends Command
 
         $this->profi->statistik->zuruecksetzen();
         $this->profi->endspielStatistik->zuruecksetzen();
+        $this->evidenzDiagnose->statistik->zuruecksetzen();
+        if ($input->getOption('evidenz-diagnose')) {
+            $this->evidenzDiagnose->aktivieren();
+        }
 
         $fortschritt = $io->createProgressBar($anzahl);
         $fortschritt->start();
@@ -275,6 +282,7 @@ final class BotTurnierCommand extends Command
         $this->zeigeWeltStatistik($io);
         $this->zeigeEndspielStatistik($io);
         $this->zeigeBewertungsStatistik($io);
+        $this->zeigeEvidenzStatistik($io);
 
         if (($ziel = $input->getOption('dump')) !== null) {
             file_put_contents((string) $ziel, json_encode([
@@ -528,6 +536,65 @@ final class BotTurnierCommand extends Command
         )];
 
         $io->table(['Bewertungs-Diagnose', 'Wert'], $zeilen);
+    }
+
+    /**
+     * Diagnose der weichen Team-Signale (Hebel 3, zweiter Schritt).
+     *
+     * Beantwortet vor dem teuren Messlauf zwei Fragen getrennt: **taugt** das Signal (Trefferquote
+     * deutlich über 50 %?) und **trägt** es überhaupt (wie viele Aussagen betreffen ein Paar, das
+     * nicht ohnehin schon feststeht, und wie früh fallen sie?). Ein Signal muss beide Hürden
+     * nehmen – zuverlässig und selten ist genauso nutzlos wie häufig und zufällig.
+     */
+    private function zeigeEvidenzStatistik(SymfonyStyle $io): void
+    {
+        $s = $this->evidenzDiagnose->statistik;
+        if ($s->istLeer()) {
+            return;
+        }
+
+        $zeilen = [];
+        foreach ($s->auswertung() as $z) {
+            $zeilen[] = [
+                $z['signal'],
+                number_format($z['neu'], 0, ',', '.'),
+                sprintf('%.3f', $z['proSicht']),
+                sprintf('%.1f %%', $z['basis']),
+                sprintf('%.2f %%', $z['quoteNeu']),
+                sprintf('%+.2f', $z['vorsprung']),
+                sprintf('%+.1f', $z['z']),
+            ];
+        }
+
+        // Die rohe Trefferquote steht bewusst nicht in der Tabelle: sie verleitet dazu, 70 %
+        // für stark zu halten, obwohl zwei Drittel davon schon die Basisrate sind.
+        $io->table(
+            ['Signal', 'neue Aussagen', 'je Sicht', 'Basisrate', 'gemessen', '⭐ Vorsprung', 'z'],
+            $zeilen,
+        );
+
+        $io->table(['Evidenz-Diagnose', 'Wert'], [
+            ['Sichten (4 je Stich)', number_format($s->sichten, 0, ',', '.')],
+            ['davon mit neuer Aussage', sprintf(
+                '%s  (%.2f %%)',
+                number_format($s->sichtenMitNeuerAussage, 0, ',', '.'),
+                $s->quoteSichtenMitNeuerAussage(),
+            )],
+            ['fremde Sitze betrachtet', number_format($s->fremdeSitze, 0, ',', '.')],
+            ['davon hart bekannt (Schritt 1)', sprintf(
+                '%s  (%.2f %%)',
+                number_format($s->fremdeSitzeHartBekannt, 0, ',', '.'),
+                $s->quoteHartBekannt(),
+            )],
+        ]);
+
+        $verteilung = [];
+        foreach ($s->proStich() as $z) {
+            $verteilung[] = [sprintf('Stich %d', $z['stich']), number_format($z['anzahl'], 0, ',', '.'), sprintf('%.2f %%', $z['anteil'])];
+        }
+        if ($verteilung !== []) {
+            $io->table(['Wann entsteht die neue Evidenz?', 'Aussagen', 'Anteil'], $verteilung);
+        }
     }
 
     /**

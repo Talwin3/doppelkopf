@@ -31,6 +31,7 @@ final class SpielSimulator
         private readonly StichGewinner $stichGewinner,
         private readonly WertungsRechner $wertungsRechner,
         private readonly AnsageRegeln $ansageRegeln,
+        private readonly EvidenzDiagnose $evidenzDiagnose,
     ) {}
 
     /**
@@ -100,6 +101,8 @@ final class SpielSimulator
             if ($partie->stichVollstaendig()) {
                 $amZug = $this->stichGewinner->bestimme($partie->offenerStich(), $ordnung, $zweiteDulleSticht);
                 $partie->schliesseStich($amZug);
+                // Diagnose, per Default aus – misst die weichen Team-Signale gegen die Wahrheit.
+                $this->evidenzDiagnose->beobachte($partie);
                 continue;
             }
 

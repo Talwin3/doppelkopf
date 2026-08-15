@@ -12,11 +12,13 @@ use App\Domain\Doppelkopf\Service\EndspielLoeser;
 use App\Domain\Doppelkopf\Service\ProfiHeuristik;
 use App\Domain\Doppelkopf\Service\RolloutPolitik;
 use App\Domain\Doppelkopf\Service\StichGewinner;
+use App\Domain\Doppelkopf\Service\TeamEvidenz;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Domain\Doppelkopf\Simulation\AnsageRegeln;
 use App\Domain\Doppelkopf\Simulation\EngineStrategie;
 use App\Domain\Doppelkopf\Simulation\SimulierteStrategie;
+use App\Domain\Doppelkopf\Simulation\EvidenzDiagnose;
 use App\Domain\Doppelkopf\Simulation\SpielSimulator;
 use App\Domain\Doppelkopf\Simulation\TurnierLauf;
 use App\Domain\Doppelkopf\ValueObject\Karte;
@@ -44,6 +46,7 @@ final class SpielSimulatorTest extends TestCase
             $stichGewinner,
             new WertungsRechner($stichGewinner),
             new AnsageRegeln(),
+            new EvidenzDiagnose(new TeamEvidenz(new RolloutPolitik())),
         );
         $this->trumpfOrdnungFactory = new TrumpfOrdnungFactory();
         $this->kartenGeber          = new KartenGeber();
