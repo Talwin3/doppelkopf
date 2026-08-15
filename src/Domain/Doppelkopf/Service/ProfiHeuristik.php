@@ -48,6 +48,18 @@ final class ProfiHeuristik
     private const WELT_VERSUCHE = 8;
 
     /**
+     * So viele dieser Versuche darf die **weiche** Schmier-Evidenz mitreden; danach zählt nur
+     * noch, dass überhaupt eine konsistente Welt zustande kommt.
+     *
+     * Ohne diese Grenze wäre der Hinweis in der Praxis doch wieder ein Ausschluss: sagt die
+     * Evidenz etwas, das in **keiner** zulässigen Welt gilt – etwa weil die harten Kreuz-Damen-
+     * Fakten die Parteien schon festlegen –, scheitern sonst alle acht Versuche und der ganze
+     * Rollout fällt aus. Ein falscher Hinweis würde dem Bot dann Rechenzeit wegnehmen, statt ihn
+     * nur in eine leicht andere Richtung zu schieben.
+     */
+    private const EVIDENZ_VERSUCHE = 4;
+
+    /**
      * Diagnose-Zähler der Determinisierung – wird nur beschrieben, nie gelesen; das Spiel
      * hängt nicht davon ab. Ausgewertet vom `app:bot:turnier`, siehe {@see WeltStatistik}.
      */
@@ -64,6 +76,7 @@ final class ProfiHeuristik
         private readonly WertungsRechner $wertungsRechner,
         private readonly EndspielLoeser $endspielLoeser,
         private readonly RolloutPolitik $rolloutPolitik,
+        private readonly TeamEvidenz $teamEvidenz = new TeamEvidenz(new RolloutPolitik()),
     ) {
         $this->statistik           = new WeltStatistik();
         $this->endspielStatistik   = new EndspielStatistik();
@@ -117,6 +130,7 @@ final class ProfiHeuristik
         EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         bool $bewertungsDiagnose = false,
         bool $teamNebenbedingung = true,
+        float $schmierEvidenz = 0.0,
     ): Karte {
         $erlaubte = array_values($erlaubte);
         if ($erlaubte === []) {
@@ -153,6 +167,11 @@ final class ProfiHeuristik
             $variante,
         );
 
+        // Weiche Evidenz: einmal je Zug abgeleitet, danach je Welt nur noch geprüft.
+        $schmierAussagen = $schmierEvidenz > 0.0
+            ? $this->schmierAussagen($bisherigeStiche, $ordnung, $variante)
+            : [];
+
         for ($r = 0; $r < $rollouts; $r++) {
             if ($r > 0 && (microtime(true) - $start) >= $zeitbudgetSek) {
                 break;
@@ -179,6 +198,15 @@ final class ProfiHeuristik
                 if ($nurZweiGegenZwei && !$this->istZweiGegenZwei($kandidatTeams, $variante)) {
                     $this->statistik->verworfenEinGegenDrei++;
                     continue; // stille Hochzeit – in einem angemeldeten Normalspiel praktisch ausgeschlossen
+                }
+
+                if (
+                    $schmierAussagen !== []
+                    && $versuch < self::EVIDENZ_VERSUCHE
+                    && !$this->evidenzHaeltStand($kandidatTeams, $schmierAussagen, $schmierEvidenz)
+                ) {
+                    $this->statistik->verworfenGegenEvidenz++;
+                    continue;
                 }
 
                 $welt  = $kandidatWelt;
@@ -639,6 +667,71 @@ final class ProfiHeuristik
         }
 
         return [$muss, $keine];
+    }
+
+    /**
+     * Die verwertbaren Schmier-Hinweise aus dem bisherigen Verlauf.
+     *
+     * Genutzt wird **ausschließlich** {@see TeamEvidenz::SIGNAL_SCHMIEREN_ABWURF_LETZTER}: wer
+     * als letzter Spieler hohe Augen abwirft, obwohl er die Farbe gar nicht bedienen muss,
+     * weiß, dass der Stich sicher dem Führenden gehört – er verschenkt sie nicht an einen
+     * Gegner. Gemessen am 2026-08-15 gegen die regelbasierten Stufen: **93,3 % richtig**
+     * (Basisrate 33,3 %). Die übrigen Signale bleiben draußen; `stechen` ist mit +1,2
+     * Prozentpunkten praktisch wertlos und würde bei seiner Häufigkeit nur die
+     * Determinisierung verstopfen, `schmieren-bedient` ist überwiegend Zwang.
+     *
+     * @param list<list<array{sitzplatz: int, karte: Karte}>> $bisherigeStiche
+     *
+     * @return list<array{a: int, b: int}> Sitzpaare, die derselben Partei angehören dürften
+     */
+    private function schmierAussagen(array $bisherigeStiche, TrumpfOrdnung $ordnung, ?SpielVariante $variante): array
+    {
+        if ($variante !== null && $variante !== SpielVariante::NORMALSPIEL) {
+            return []; // im Solo ist die Partei ohnehin bekannt, im Hochzeits-Zweig unklar
+        }
+
+        $paare = [];
+        foreach ($this->teamEvidenz->auswerten($bisherigeStiche, $ordnung) as $aussage) {
+            if ($aussage['signal'] === TeamEvidenz::SIGNAL_SCHMIEREN_ABWURF_LETZTER) {
+                $paare[] = ['a' => $aussage['a'], 'b' => $aussage['b']];
+            }
+        }
+
+        return $paare;
+    }
+
+    /**
+     * Hält eine gezogene Welt der weichen Evidenz stand?
+     *
+     * **Weich**, nicht hart – das ist der Unterschied zur Kreuz-Damen-Nebenbedingung. Die ist
+     * eine Tatsache und schließt widersprechende Welten vollständig aus; ein Schmier-Hinweis
+     * stimmt „nur" in gut neun von zehn Fällen. Würde er Welten ausschließen, wäre in jedem
+     * zehnten Fall die **wahre** Verteilung nicht mehr ziehbar, und der Bot spielte mit
+     * völliger Überzeugung gegen die Wirklichkeit.
+     *
+     * Stattdessen wird eine widersprechende Welt nur mit Wahrscheinlichkeit `$gewicht`
+     * verworfen. Das verschiebt die Häufigkeit der Welten, ohne eine davon unmöglich zu machen:
+     * bei $gewicht = 0,85 steigt der Anteil passender Welten von 33 % auf rund 79 %, die
+     * übrigen 21 % bleiben erreichbar.
+     *
+     * @param array<int, Team>          $teams
+     * @param list<array{a: int, b: int}> $aussagen
+     */
+    private function evidenzHaeltStand(array $teams, array $aussagen, float $gewicht): bool
+    {
+        foreach ($aussagen as $paar) {
+            $a = $teams[$paar['a']] ?? null;
+            $b = $teams[$paar['b']] ?? null;
+            if ($a === null || $b === null || $a === $b) {
+                continue; // die Welt bestätigt den Hinweis
+            }
+
+            if (mt_rand() / mt_getrandmax() < $gewicht) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

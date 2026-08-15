@@ -48,6 +48,7 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly EndspielPolitik $endspielPolitik = EndspielPolitik::MINIMAX,
         private readonly bool $bewertungsDiagnose = false,
         private readonly bool $teamNebenbedingung = true,
+        private readonly float $schmierEvidenz = 0.0,
     ) {}
 
     public function name(): string
@@ -63,6 +64,9 @@ final class EngineStrategie implements SimulierteStrategie
             }
             if (!$this->teamNebenbedingung) {
                 $name .= ' [ohne Kreuz-Damen-Nebenbedingung]';
+            }
+            if ($this->schmierEvidenz > 0.0) {
+                $name .= sprintf(' [Schmier-Evidenz %.2f]', $this->schmierEvidenz);
             }
             if ($this->endspielAbRestkarten > 0) {
                 $name .= sprintf(' [Endspiel exakt ab %d Karten]', $this->endspielAbRestkarten);
@@ -136,6 +140,7 @@ final class EngineStrategie implements SimulierteStrategie
             endspielPolitik: $this->endspielPolitik,
             bewertungsDiagnose: $this->bewertungsDiagnose,
             teamNebenbedingung: $this->teamNebenbedingung,
+            schmierEvidenz: $this->schmierEvidenz,
         );
     }
 

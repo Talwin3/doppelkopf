@@ -110,6 +110,8 @@ final class BotTurnierCommand extends Command
             ->addOption('endspiel-diagnose', null, InputOption::VALUE_NONE, 'Endspiel zusaetzlich greedy bewerten und zaehlen, wie oft die exakte Suche die Kartenwahl aendert (etwa doppelte Laufzeit; bei anderer Politik als minimax wird zusaetzlich Minimax gerechnet)')
             ->addOption('ohne-team-nebenbedingung-a', null, InputOption::VALUE_NONE, 'A ignoriert in der Determinisierung die bekannten Teams wieder (Stand vor dem 15.08.2026). Normalerweise gilt: wer Re angesagt hat, bekommt eine Kreuz-Dame, wer Contra angesagt hat, keine')
             ->addOption('ohne-team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
+            ->addOption('schmier-evidenz-a', null, InputOption::VALUE_REQUIRED, 'Gewicht der weichen Schmier-Evidenz fuer A (0 = aus). Wer als Letzter hohe Augen abwirft, haelt den Stichfuehrenden fuer seinen Partner - gemessen zu 93 Prozent richtig gegen regelbasierte Gegner. Widersprechende Welten werden mit dieser Wahrscheinlichkeit verworfen, nicht ausgeschlossen', '0')
+            ->addOption('schmier-evidenz-b', null, InputOption::VALUE_REQUIRED, 'dito fuer B', '0')
             ->addOption('evidenz-diagnose', null, InputOption::VALUE_NONE, 'Weiche Team-Signale (Schmieren/Stechen) gegen die wahren Parteien halten und je Signal Haeufigkeit, Trefferquote und Zeitpunkt ausweisen. Aendert nichts am Spiel, kostet praktisch keine Zeit (Hebel 3, zweiter Schritt)')
             ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
@@ -175,6 +177,7 @@ final class BotTurnierCommand extends Command
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-a')),
                 (bool) $input->getOption('bewertungs-diagnose'),
                 !$input->getOption('ohne-team-nebenbedingung-a'),
+                (float) $input->getOption('schmier-evidenz-a'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -204,6 +207,7 @@ final class BotTurnierCommand extends Command
                 EndspielPolitik::vonWert((string) $input->getOption('endspiel-politik-b')),
                 (bool) $input->getOption('bewertungs-diagnose'),
                 !$input->getOption('ohne-team-nebenbedingung-b'),
+                (float) $input->getOption('schmier-evidenz-b'),
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -349,6 +353,7 @@ final class BotTurnierCommand extends Command
         EndspielPolitik $endspielPolitik,
         bool $bewertungsDiagnose,
         bool $teamNebenbedingung,
+        float $schmierEvidenz,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -418,6 +423,7 @@ final class BotTurnierCommand extends Command
             $endspielPolitik,
             $bewertungsDiagnose,
             $teamNebenbedingung,
+            max(0.0, min(1.0, $schmierEvidenz)),
         );
     }
 
@@ -635,6 +641,7 @@ final class BotTurnierCommand extends Command
                 number_format($s->weltenMitTeamWiderspruch, 0, ',', '.'),
                 $s->quoteTeamWiderspruch(),
             )],
+            ['wegen Schmier-Evidenz verworfen', number_format($s->verworfenGegenEvidenz, 0, ',', '.')],
         ]);
     }
 

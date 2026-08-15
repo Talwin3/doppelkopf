@@ -35,11 +35,17 @@ final class TeamEvidenz
     /** Ab dieser Augenzahl gilt eine Karte als „geschmiert" (Zehn = 10, Ass = 11). */
     public const SCHMIER_SCHWELLE = 10;
 
-    /** Hohe Augen auf fremd geführten Stich, ohne die geforderte Kategorie zu bedienen. */
-    public const SIGNAL_SCHMIEREN_ABWURF = 'schmieren-abwurf';
+    /** Hohe Augen abgeworfen (nicht bedient), als letzter Spieler – der Stich ist sicher. */
+    public const SIGNAL_SCHMIEREN_ABWURF_LETZTER = 'schmieren-abwurf-letzter';
 
-    /** Hohe Augen auf fremd geführten Stich, aber bedient – kann Zwang gewesen sein. */
-    public const SIGNAL_SCHMIEREN_BEDIENT = 'schmieren-bedient';
+    /** Hohe Augen abgeworfen, aber es kommt noch jemand – riskanter, also überlegter. */
+    public const SIGNAL_SCHMIEREN_ABWURF_FRUEH = 'schmieren-abwurf-frueh';
+
+    /** Hohe Augen bedient, als letzter Spieler. */
+    public const SIGNAL_SCHMIEREN_BEDIENT_LETZTER = 'schmieren-bedient-letzter';
+
+    /** Hohe Augen bedient, mit noch offenen Mitspielern – am ehesten schlichter Zwang. */
+    public const SIGNAL_SCHMIEREN_BEDIENT_FRUEH = 'schmieren-bedient-frueh';
 
     /** Überbietet den bisherigen Stichführenden. */
     public const SIGNAL_STECHEN = 'stechen';
@@ -94,9 +100,10 @@ final class TeamEvidenz
 
         $fuehrerSitz  = $stich[0]['sitzplatz'];
         $fuehrerKarte = $angespielt;
+        $letzterIndex = count($stich) - 1;
 
         // Ab der zweiten Karte: jede Karte ist eine Reaktion auf den aktuellen Führenden.
-        foreach (array_slice($stich, 1) as $eintrag) {
+        foreach (array_slice($stich, 1, null, true) as $index => $eintrag) {
             $sitz  = $eintrag['sitzplatz'];
             $karte = $eintrag['karte'];
 
@@ -116,13 +123,19 @@ final class TeamEvidenz
                 // Führenden für seinen Partner hält. Ob die Karte erzwungen war, ist von
                 // außen nicht sicher zu erkennen; der Abwurf ist das stärkere Signal, weil
                 // dort die ganze Hand zur Wahl stand.
+                $bedient = $this->hatBedient($karte, $gefordert, $ordnung);
+                $letzter = $index === $letzterIndex;
+
                 $aussagen[] = [
                     'a'            => $sitz,
                     'b'            => $fuehrerSitz,
                     'gleichesTeam' => true,
-                    'signal'       => $this->hatBedient($karte, $gefordert, $ordnung)
-                        ? self::SIGNAL_SCHMIEREN_BEDIENT
-                        : self::SIGNAL_SCHMIEREN_ABWURF,
+                    'signal'       => match (true) {
+                        $bedient && $letzter  => self::SIGNAL_SCHMIEREN_BEDIENT_LETZTER,
+                        $bedient              => self::SIGNAL_SCHMIEREN_BEDIENT_FRUEH,
+                        $letzter              => self::SIGNAL_SCHMIEREN_ABWURF_LETZTER,
+                        default               => self::SIGNAL_SCHMIEREN_ABWURF_FRUEH,
+                    },
                     'stichNr'      => $stichNr,
                 ];
             }

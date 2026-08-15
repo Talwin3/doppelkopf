@@ -48,6 +48,15 @@ final class WeltStatistik
     /** Davon Welten, die dieser Tatsache widersprechen – der Anteil ist die Effekt-Obergrenze. */
     public int $weltenMitTeamWiderspruch = 0;
 
+    /**
+     * Welten, die wegen eines **weichen** Schmier-Hinweises verworfen wurden.
+     *
+     * Anders als die Kreuz-Damen-Nebenbedingung ist das kein Ausschluss, sondern eine
+     * Gewichtung: dieselbe Welt kann im nächsten Anlauf durchgehen. Der Zähler ist trotzdem
+     * wichtig – steigt er stark, fährt sich die Determinisierung häufiger fest.
+     */
+    public int $verworfenGegenEvidenz = 0;
+
     public function zuruecksetzen(): void
     {
         $this->ziehungen             = 0;
@@ -57,6 +66,7 @@ final class WeltStatistik
         $this->verworfenEinGegenDrei = 0;
         $this->weltenMitTeamFakten      = 0;
         $this->weltenMitTeamWiderspruch = 0;
+        $this->verworfenGegenEvidenz    = 0;
     }
 
     /** Anteil der Determinisierungen ohne Ergebnis, in Prozent. */

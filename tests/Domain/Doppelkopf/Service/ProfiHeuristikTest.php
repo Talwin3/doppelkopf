@@ -245,6 +245,97 @@ final class ProfiHeuristikTest extends TestCase
         self::assertSame(0, $s->weltenMitTeamWiderspruch, 'Mit Nebenbedingung darf es keinen Widerspruch geben.');
     }
 
+    /**
+     * Aufbau für die Schmier-Evidenz. Der Bot sitzt auf 1 und hält selbst eine Kreuz-Dame,
+     * ist also RE; keiner der anderen hat angesagt, die zweite Kreuz-Dame ist ungesehen und
+     * kann bei 2, 3 oder 4 liegen. Erst dadurch **kann** eine Welt einem Hinweis überhaupt
+     * widersprechen – legen die harten Fakten die Parteien schon fest, ist nichts zu verschieben.
+     *
+     * @param array<int, mixed> $zusatz
+     */
+    private function argumenteFuerSchmierEvidenz(array $zusatz = []): array
+    {
+        $eigeneHand = [$this->k('KREUZ_DAME_1'), $this->k('PIK_ZEHN_1'), $this->k('KARO_ASS_1')];
+        $ungesehene = [
+            $this->k('KREUZ_DAME_2'),
+            $this->k('PIK_KOENIG_2'), $this->k('PIK_NEUN_2'),
+            $this->k('HERZ_KOENIG_1'), $this->k('HERZ_NEUN_1'),
+            $this->k('KREUZ_ASS_1'), $this->k('KREUZ_NEUN_1'),
+            $this->k('KARO_KOENIG_1'), $this->k('KARO_NEUN_1'),
+        ];
+
+        // Sitz 2 führt mit dem Pik-Ass, Sitz 4 wirft als Letzter das Herz-Ass ab, obwohl er
+        // Pik gar nicht bedient → er hält Sitz 2 für seinen Partner.
+        $stich = [
+            ['sitzplatz' => 2, 'karte' => $this->k('PIK_ASS_1')],
+            ['sitzplatz' => 3, 'karte' => $this->k('PIK_NEUN_1')],
+            ['sitzplatz' => 1, 'karte' => $this->k('PIK_KOENIG_1')],
+            ['sitzplatz' => 4, 'karte' => $this->k('HERZ_ASS_1')],
+        ];
+
+        return [...[
+            'erlaubte'             => $eigeneHand,
+            'eigeneHand'           => $eigeneHand,
+            'eigenerSitz'          => 1,
+            'eigenesTeam'          => Team::RE,
+            'offenerStich'         => [],
+            'restHandGroessen'     => [2 => 3, 3 => 3, 4 => 3],
+            'ungesehene'           => $ungesehene,
+            'gedaechtnis'          => SpielGedaechtnis::ausHistorie([], [], $eigeneHand, $this->ordnung),
+            'variante'             => SpielVariante::NORMALSPIEL,
+            'bekannteTeams'        => [1 => Team::RE, 2 => null, 3 => null, 4 => null],
+            'kreuzDameGespieltVon' => [],
+            'ordnung'              => $this->ordnung,
+            'zweiteDulle'          => false,
+            'bisherigeStiche'      => [$stich],
+            'rollouts'             => 40,
+        ], ...$zusatz];
+    }
+
+    /**
+     * Die Schmier-Evidenz ist **weich**: sie verschiebt die Häufigkeit der Welten, macht aber
+     * keine unmöglich. Das ist der Kernunterschied zur Kreuz-Damen-Nebenbedingung – ein
+     * Schmier-Hinweis stimmt nur in gut neun von zehn Fällen, und in jedem zehnten muss die
+     * wahre Verteilung noch ziehbar sein.
+     */
+    public function testSchmierEvidenzVerwirftWeltenOhneSieAuszuschliessen(): void
+    {
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteFuerSchmierEvidenz(['schmierEvidenz' => 0.85]));
+        $mitEvidenz = $this->profi->statistik->verworfenGegenEvidenz;
+
+        $this->profi->statistik->zuruecksetzen();
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteFuerSchmierEvidenz());
+
+        self::assertGreaterThan(0, $mitEvidenz, 'Der Hinweis muss Welten aussortieren.');
+        self::assertSame(0, $this->profi->statistik->verworfenGegenEvidenz, 'Ohne Gewicht greift die Evidenz nicht.');
+    }
+
+    /**
+     * Auch bei Gewicht 1,0 darf kein Rollout ausfallen. Ohne die Begrenzung auf die ersten
+     * Ziehversuche wäre der Hinweis in der Praxis doch ein Ausschluss – und ein falscher
+     * Hinweis nähme dem Bot Rechenzeit weg, statt ihn nur anders zu gewichten.
+     */
+    public function testSchmierEvidenzLaesstDieWahrheitErreichbar(): void
+    {
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteFuerSchmierEvidenz(['schmierEvidenz' => 1.0]));
+
+        self::assertSame(0, $this->profi->statistik->weltAusfaelle, 'Auch bei Gewicht 1,0 darf kein Rollout ausfallen.');
+    }
+
+    public function testSchmierEvidenzSchweigtImSolo(): void
+    {
+        mt_srand(20260815);
+        $this->profi->entscheide(...$this->argumenteFuerSchmierEvidenz([
+            'variante'       => SpielVariante::SOLO_DAMEN,
+            'schmierEvidenz' => 1.0,
+        ]));
+
+        self::assertSame(0, $this->profi->statistik->verworfenGegenEvidenz, 'Im Solo sagt Schmieren nichts über die Partei.');
+    }
+
     public function testNebenbedingungGiltNichtImSolo(): void
     {
         // Im Solo sagt die Kreuz-Dame nichts über die Partei – die Nebenbedingung muss

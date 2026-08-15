@@ -55,7 +55,7 @@ final class TeamEvidenzTest extends TestCase
         self::assertSame([2, 1], [$aussagen[0]['a'], $aussagen[0]['b']]);
         self::assertFalse($aussagen[0]['gleichesTeam'], 'Wer den Führenden überbietet, spielt gegen ihn.');
 
-        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_BEDIENT, $aussagen[1]['signal']);
+        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_BEDIENT_FRUEH, $aussagen[1]['signal']);
         self::assertSame([3, 2], [$aussagen[1]['a'], $aussagen[1]['b']]);
         self::assertTrue($aussagen[1]['gleichesTeam'], 'Wer schmiert, hält den Führenden für seinen Partner.');
     }
@@ -71,9 +71,34 @@ final class TeamEvidenzTest extends TestCase
         );
 
         self::assertCount(1, $aussagen);
-        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_ABWURF, $aussagen[0]['signal']);
+        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_ABWURF_FRUEH, $aussagen[0]['signal']);
         self::assertSame([3, 1], [$aussagen[0]['a'], $aussagen[0]['b']]);
         self::assertTrue($aussagen[0]['gleichesTeam']);
+    }
+
+    /**
+     * Die Position trennt die Signale: wer als Letzter hohe Augen abgibt, weiß, dass der Stich
+     * dem Führenden sicher gehört – die Regel-Bots schmieren ausschließlich so
+     * ({@see \App\Domain\Doppelkopf\Service\BotHeuristik}), und bei Menschen ist es der
+     * häufigste Fall. Wer früher schmiert, riskiert mehr und tut es deshalb überlegter.
+     */
+    public function testDieLetztePositionBekommtEinEigenesSignal(): void
+    {
+        $letzter = $this->evidenz->fuerStich(
+            $this->stich([[1, 'PIK_ASS_1'], [2, 'PIK_NEUN_1'], [3, 'PIK_KOENIG_1'], [4, 'HERZ_ASS_1']]),
+            0,
+            $this->ordnung,
+        );
+        self::assertCount(1, $letzter);
+        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_ABWURF_LETZTER, $letzter[0]['signal']);
+
+        $bedientLetzter = $this->evidenz->fuerStich(
+            $this->stich([[1, 'PIK_ASS_1'], [2, 'PIK_NEUN_1'], [3, 'PIK_KOENIG_1'], [4, 'PIK_ZEHN_1']]),
+            0,
+            $this->ordnung,
+        );
+        self::assertCount(1, $bedientLetzter);
+        self::assertSame(TeamEvidenz::SIGNAL_SCHMIEREN_BEDIENT_LETZTER, $bedientLetzter[0]['signal']);
     }
 
     public function testDerStichfuehrerWandertMit(): void
