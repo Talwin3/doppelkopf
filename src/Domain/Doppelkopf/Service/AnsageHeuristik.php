@@ -106,17 +106,23 @@ final class AnsageHeuristik
 
         $grundansage = $team === Team::RE ? AnsageTyp::RE : AnsageTyp::CONTRA;
 
-        if (!in_array($grundansage, $teamAnsagen, true)) {
-            if ($this->statistik->istAktiv()) {
-                // Beide Bedingungen einzeln festhalten: aus der Verknüpfung allein wäre nicht
-                // mehr ablesbar, welche Ansagen eine andere Schwelle zusätzlich zuließe.
-                $this->statistik->verbucheErstansage(
-                    $team,
-                    $this->blattWert($bewertungsHand, $ordnung, $schwellen, $erspielteAugen),
-                    $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer),
-                );
-            }
+        // Diagnose, per Default aus. Erhoben wird nur, solange die Erstansage nach der Frist
+        // überhaupt noch zulässig ist – `zeitpunktPasst()` allein reicht dafür nicht: es prüft
+        // die Obergrenze (letztmöglich), bleibt danach aber bis zum Blattende wahr. Ohne die
+        // Untergrenze zählte die Erhebung jeden weiteren Stich mit, an dem längst niemand mehr
+        // ansagen kann, und ertränke die Ansagen in Nicht-Ansagen.
+        //
+        // Bewusst auch dann, wenn die Partei schon angesagt hat: sonst fehlte der Wert des
+        // Partners, und die Zusammenfassung je Partei ({@see AnsageStatistik}) griffe zu kurz.
+        if ($this->statistik->istAktiv() && $fristFuer !== null && count($hand) >= $fristFuer($grundansage)) {
+            $this->statistik->verbucheErstansage(
+                $team,
+                $this->blattWert($bewertungsHand, $ordnung, $schwellen, $erspielteAugen),
+                $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer),
+            );
+        }
 
+        if (!in_array($grundansage, $teamAnsagen, true)) {
             return $this->blattReicht($bewertungsHand, $truempfe, $team, $ordnung, $schwellen, $erspielteAugen)
                 && $this->zeitpunktPasst($grundansage, $hand, $schwellen, $fristFuer)
                     ? $grundansage

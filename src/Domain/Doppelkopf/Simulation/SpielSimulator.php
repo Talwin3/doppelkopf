@@ -10,6 +10,7 @@ use App\Domain\Doppelkopf\Service\StichGewinner;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnung;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Domain\Doppelkopf\ValueObject\Karte;
+use App\Enum\AnsageTyp;
 use App\Enum\Kartenfarbe;
 use App\Enum\Kartenwert;
 use App\Enum\SpielVariante;
@@ -134,6 +135,20 @@ final class SpielSimulator
         }
     }
 
+    /** Hat die Re-Partei „Re" angesagt? Verschiebt die Augengrenze der Contra-Ansage auf 120. */
+    private function reHatAngesagt(Partie $partie): bool
+    {
+        $teams = $partie->teamProSitzplatz();
+
+        foreach ($partie->ansagen() as $ansage) {
+            if ($ansage['typ'] === AnsageTyp::RE && ($teams[$ansage['sitzplatz']] ?? null) === Team::RE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function rechneAb(Partie $partie): SpielErgebnis
     {
         $wertung = $this->wertungsRechner->berechne(
@@ -144,9 +159,13 @@ final class SpielSimulator
             $partie->zweiteDulleSticht(),
         );
 
-        // Diagnose, per Default aus: die Entscheidungspunkte dieses Blattes bekommen ihren
-        // Ausgang. Erst damit lässt sich zu jeder Schwelle die Haltequote ausrechnen.
-        $this->ansageHeuristik->statistik->blattAbschliessen($wertung['augen']);
+        // Diagnose, per Default aus: die Abfragen dieses Blattes bekommen ihren Ausgang. Erst
+        // damit lässt sich zu jeder Schwelle die Haltequote ausrechnen. Ob Re angesagt hat,
+        // entscheidet über die Augengrenze der Contra-Ansage (TSR 7.1.1.3).
+        $this->ansageHeuristik->statistik->blattAbschliessen(
+            $wertung['augen'],
+            $this->reHatAngesagt($partie),
+        );
 
         // Spielwert geht an den Empfänger, die Gegenpartei zahlt ihn (pro Spieler).
         $empfaenger = $wertung['punkteEmpfaenger'];

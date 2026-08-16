@@ -26,21 +26,30 @@ use App\Enum\Team;
  * Ersatz für den Messlauf – sie beantworten die Frage „bewegt eine Verschiebung überhaupt genug
  * Ansagen, als dass sich ein Lauf lohnt?".
  *
+ * Gezählt wird in **Partei-Blättern**, nicht in Spieler-Abfragen: eine Partei sagt an, sobald
+ * *einer* ihrer beiden Spieler die Schwelle reißt, und sie sagt genau einmal an. Die Erhebung
+ * fasst die Abfragen eines Blattes deshalb je Partei zum Höchstwert zusammen. Ohne das zählt
+ * jedes Blatt so oft, wie seine Spieler gefragt wurden – und weil eine Partei nach ihrer Ansage
+ * nicht mehr gefragt wird, sind das bei den ansagenden (starken) Blättern systematisch weniger
+ * als bei den schweigenden (schwachen). Die erste Fassung dieser Klasse hatte genau den Fehler
+ * und wies die Re-Haltequote dadurch mit 45 % statt 71 % aus.
+ *
  * Reines Zählwerk, per Default abgeschaltet. Beeinflusst die Ansage an keiner Stelle.
  */
 final class AnsageStatistik
 {
     /**
-     * Entscheidungspunkte des laufenden Blattes, die noch auf ihren Ausgang warten.
+     * Abfragen des laufenden Blattes, die noch auf ihren Ausgang warten.
      *
      * @var list<array{team: string, wert: float, fristPasst: bool}>
      */
     private array $offen = [];
 
     /**
-     * Abgeschlossene Entscheidungspunkte samt Ausgang.
+     * Abgeschlossene Partei-Blätter samt Ausgang: je Blatt und Partei ein Eintrag mit dem
+     * höchsten Blattwert, den einer ihrer Spieler an einem zulässigen Zeitpunkt hatte.
      *
-     * @var list<array{team: string, wert: float, fristPasst: bool, gewonnen: bool}>
+     * @var list<array{team: string, wert: float, gewonnen: bool}>
      */
     private array $punkte = [];
 
@@ -57,11 +66,13 @@ final class AnsageStatistik
     }
 
     /**
-     * Verbucht einen Entscheidungspunkt für die Erstansage.
+     * Verbucht eine Abfrage der Erstansage.
      *
      * Erfasst wird **nach** dem Damen-Gate und unabhängig davon, ob die Augen-Schwelle gerade
      * reicht – sonst wären genau die Fälle unsichtbar, die eine gelockerte Schwelle zusätzlich
-     * ansagen würde.
+     * ansagen würde. Der Aufrufer ruft nur an Zeitpunkten auf, an denen die Erstansage nach der
+     * TSR-Frist überhaupt noch zulässig ist; `$fristPasst` sagt darüber hinaus, ob die Heuristik
+     * an diesem Zeitpunkt ansagen *würde* (bei `letztmöglich` also erst am letzten zulässigen).
      */
     public function verbucheErstansage(Team $team, float $wert, bool $fristPasst): void
     {
@@ -73,20 +84,42 @@ final class AnsageStatistik
     }
 
     /**
-     * Schließt das Blatt ab und trägt den Ausgang nach.
+     * Schließt das Blatt ab: fasst die Abfragen je Partei zu einem Eintrag zusammen und trägt
+     * den Ausgang nach.
+     *
+     * Gehalten hat eine Erstansage, wenn die ansagende Partei ihre Augen erreicht. Nach
+     * TSR 7.1.1.3 braucht Re dafür 121; Kontra genügen 120, sobald **auch Re angesagt** hat,
+     * sonst sind es ebenfalls 121. `$reHatAngesagt` ist dabei das Re-Verhalten des tatsächlich
+     * gespielten Blattes – unter einer anderen Schwelle sagte auch Re anders an, was diese
+     * Rechnung nicht abbilden kann (siehe Klassenkommentar).
      *
      * @param array<string, int> $augenProTeam Team-Wert → erspielte Augen
      */
-    public function blattAbschliessen(array $augenProTeam): void
+    public function blattAbschliessen(array $augenProTeam, bool $reHatAngesagt = false): void
     {
         if (!$this->aktiv) {
             return;
         }
 
-        foreach ($this->offen as $eintrag) {
-            $eigene = $augenProTeam[$eintrag['team']] ?? 0;
+        foreach ([Team::RE, Team::KONTRA] as $team) {
+            $werte = [];
+            foreach ($this->offen as $eintrag) {
+                if ($eintrag['team'] === $team->value && $eintrag['fristPasst']) {
+                    $werte[] = $eintrag['wert'];
+                }
+            }
 
-            $this->punkte[] = [...$eintrag, 'gewonnen' => $eigene >= 121];
+            if ($werte === []) {
+                continue;
+            }
+
+            $noetig = $team === Team::RE || !$reHatAngesagt ? 121 : 120;
+
+            $this->punkte[] = [
+                'team'     => $team->value,
+                'wert'     => max($werte),
+                'gewonnen' => ($augenProTeam[$team->value] ?? 0) >= $noetig,
+            ];
         }
 
         $this->offen = [];
@@ -95,8 +128,8 @@ final class AnsageStatistik
     /**
      * Was eine Schwelle bewirkt hätte – je Partei getrennt, weil sie getrennt gesetzt wird.
      *
-     * Gezählt werden nur Entscheidungspunkte, an denen die Frist ohnehin passt: nur dort hängt
-     * die Ansage tatsächlich an der Augen-Schwelle.
+     * Gezählt wird in Partei-Blättern: die Partei hätte angesagt, wenn ihr Höchstwert die
+     * Schwelle erreicht.
      *
      * @return list<array{schwelle: float, re: int, reQuote: float, contra: int, contraQuote: float}>
      */
@@ -108,7 +141,7 @@ final class AnsageStatistik
             $treffer = [Team::RE->value => 0, Team::KONTRA->value => 0];
 
             foreach ($this->punkte as $p) {
-                if (!$p['fristPasst'] || $p['wert'] < $s) {
+                if ($p['wert'] < $s) {
                     continue;
                 }
                 $zaehler[$p['team']]++;
@@ -132,10 +165,10 @@ final class AnsageStatistik
         return $zeilen;
     }
 
-    /** Entscheidungspunkte mit passender Frist – die Grundgesamtheit des Sweeps. */
+    /** Partei-Blätter mit möglicher Erstansage – die Grundgesamtheit des Sweeps. */
     public function entscheidungspunkte(): int
     {
-        return count(array_filter($this->punkte, static fn(array $p) => $p['fristPasst']));
+        return count($this->punkte);
     }
 
     public function istLeer(): bool

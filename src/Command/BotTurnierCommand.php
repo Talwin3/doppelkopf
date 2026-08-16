@@ -584,7 +584,7 @@ final class BotTurnierCommand extends Command
             $zeilen,
         );
         $io->writeln(sprintf(
-            '  Entscheidungspunkte mit passender Frist: %s   (heutige Schwellen: Re %.0f / Contra %.0f)',
+            '  Partei-Blätter mit möglicher Erstansage: %s   (heutige Schwellen: Re %.0f / Contra %.0f)',
             number_format($s->entscheidungspunkte(), 0, ',', '.'),
             AnsageSchwellen::AUGEN_RE,
             AnsageSchwellen::AUGEN_CONTRA,
