@@ -86,12 +86,29 @@ final class AnsageHeuristik
         $bewertungsHand = $schwellen->bewerteRestblatt ? $hand : ($starthand ?? $hand);
 
         $truempfe = 0;
-        $damen    = 0;
-        $kreuzDamen = 0;
         foreach ($bewertungsHand as $k) {
             if ($ordnung->istTrumpf($k)) {
                 $truempfe++;
             }
+        }
+
+        // Hohe Trümpfe sind Voraussetzung für jede Ansage – gezählt aus der **ausgeteilten**
+        // Hand, nicht aus dem Restblatt.
+        //
+        // Der Ansagezeitpunkt liegt bei 11 Handkarten, der Spieler hat also genau eine Karte
+        // gespielt. War das seine einzige Kreuz-Dame, sperrte das Gate ihn bis dahin aus,
+        // obwohl die Augen der Karte längst gebucht sind und die Dame ihren Dienst getan hat.
+        // Das war fachlich nie gewollt, sondern ein Mitzieheffekt aus P5.8 Teil B: dort wurde
+        // die *Bewertung* aufs Restblatt umgestellt, und das Gate zählte aus derselben Hand.
+        //
+        // Die Bewertung bleibt bewusst auf dem Restblatt ({@see AnsageSchwellen::$bewerteRestblatt}) –
+        // die gespielte Karte ist in den erspielten Augen schon abgerechnet. Nur die Frage
+        // „hatte dieser Spieler je die hohen Damen?" gehört an die Starthand. Bewertet die
+        // Konfiguration ohnehin die Starthand, ändert sich hier nichts.
+        $gateHand   = $starthand ?? $hand;
+        $damen      = 0;
+        $kreuzDamen = 0;
+        foreach ($gateHand as $k) {
             if ($k->wert === Kartenwert::DAME) {
                 $damen++;
                 if ($k->farbe === Kartenfarbe::KREUZ) {
@@ -100,7 +117,6 @@ final class AnsageHeuristik
             }
         }
 
-        // Hohe Trümpfe sind Voraussetzung für jede Ansage.
         if ($kreuzDamen < 1 && $damen < 2) {
             return null;
         }

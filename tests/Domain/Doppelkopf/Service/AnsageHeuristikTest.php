@@ -13,6 +13,7 @@ use App\Domain\Doppelkopf\ValueObject\AnsageSchwellen;
 use App\Domain\Doppelkopf\ValueObject\Karte;
 use App\Enum\AnsageTyp;
 use App\Enum\BotStaerke;
+use App\Enum\Kartenwert;
 use App\Enum\Team;
 use PHPUnit\Framework\TestCase;
 
@@ -50,6 +51,21 @@ final class AnsageHeuristikTest extends TestCase
             'KREUZ_BUBE_1', 'PIK_BUBE_1', 'KARO_ASS_1',
             'KREUZ_ASS_1', 'PIK_ASS_1',
         ]);
+    }
+
+    /** Die Kreuz-Dame ist die einzige Dame – nur so hängt das Gate allein an ihr. */
+    private function handMitNurDerKreuzDame(): array
+    {
+        return $this->karten([
+            'KREUZ_DAME_1', 'KREUZ_BUBE_1', 'PIK_BUBE_1', 'HERZ_BUBE_1', 'KARO_BUBE_1',
+            'KARO_ASS_1', 'KARO_ZEHN_1', 'KREUZ_ASS_1', 'PIK_ASS_1',
+        ]);
+    }
+
+    /** @param Karte[] $hand @return Karte[] */
+    private function ohneKreuzDame(array $hand): array
+    {
+        return array_values(array_filter($hand, static fn(Karte $k) => $k->id() !== 'KREUZ_DAME_1'));
     }
 
     private function schwacheHand(): array
@@ -213,6 +229,61 @@ final class AnsageHeuristikTest extends TestCase
         // … mit 15 schon erspielten Augen dagegen schon.
         self::assertSame(AnsageTyp::RE, $this->heuristik->willAnsagen(
             BotStaerke::PROFI, $hand, Team::RE, $this->ordnung, $schwellen, [], null, null, 15,
+        ));
+    }
+
+    /**
+     * Das Damen-Gate zählt aus der ausgeteilten Hand, nicht aus dem Restblatt.
+     *
+     * Wer seine einzige Kreuz-Dame im ersten Stich gespielt hat, war bis dahin von jeder
+     * Ansage ausgesperrt – obwohl die Augen gebucht sind und die Dame ihren Dienst getan hat.
+     */
+    public function testDamenGateZaehltDieAusgeteilteHand(): void
+    {
+        $starthand = $this->handMitNurDerKreuzDame();
+        $restblatt = $this->ohneKreuzDame($starthand);
+
+        // Vorbedingung des Tests: im Restblatt öffnet keine Dame mehr das Gate.
+        $damenImRest = array_filter($restblatt, static fn(Karte $k) => $k->wert === Kartenwert::DAME);
+        self::assertCount(0, $damenImRest, 'Das Restblatt darf keine Dame mehr enthalten.');
+
+        $augen     = (new BlattBewertung())->augen($restblatt, $this->ordnung);
+        $schwellen = (new AnsageSchwellen())->mitAugenSchwellen($augen, $augen);
+
+        self::assertSame(
+            AnsageTyp::RE,
+            $this->heuristik->willAnsagen(
+                BotStaerke::PROFI, $restblatt, Team::RE, $this->ordnung,
+                $schwellen, [], null, $starthand,
+            ),
+            'Die Kreuz-Dame der Starthand muss das Gate öffnen.',
+        );
+    }
+
+    /** Gegenprobe: ohne die Damen in der Starthand bleibt das Gate zu. */
+    public function testDamenGateSperrtOhneDamenInDerStarthand(): void
+    {
+        $ohneDamen = $this->karten([
+            'KREUZ_BUBE_1', 'PIK_BUBE_1', 'HERZ_BUBE_1', 'KARO_BUBE_1',
+            'KARO_ASS_1', 'KARO_ZEHN_1', 'KREUZ_ASS_1', 'PIK_ASS_1',
+        ]);
+        $schwellen = (new AnsageSchwellen())->mitAugenSchwellen(0.0, 0.0);
+
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $ohneDamen, Team::RE, $this->ordnung,
+            $schwellen, [], null, $ohneDamen,
+        ), 'Ohne Kreuz-Dame und ohne zwei Damen darf auch ein starkes Blatt nicht ansagen.');
+    }
+
+    /** Ohne übergebene Starthand bleibt es beim Restblatt – kein Fehler, nur weniger Wissen. */
+    public function testDamenGateFaelltOhneStarthandAufDieHandZurueck(): void
+    {
+        $restblatt = $this->ohneKreuzDame($this->handMitNurDerKreuzDame());
+        $schwellen = (new AnsageSchwellen())->mitAugenSchwellen(0.0, 0.0);
+
+        self::assertNull($this->heuristik->willAnsagen(
+            BotStaerke::PROFI, $restblatt, Team::RE, $this->ordnung,
+            $schwellen, [], null, null,
         ));
     }
 
