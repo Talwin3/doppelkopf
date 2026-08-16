@@ -112,7 +112,7 @@ final class BotTurnierCommand extends Command
             ->addOption('ohne-team-nebenbedingung-b', null, InputOption::VALUE_NONE, 'dito fuer B')
             ->addOption('schmier-evidenz-a', null, InputOption::VALUE_REQUIRED, 'Gewicht der weichen Schmier-Evidenz fuer A (0 = aus). Wer als Letzter hohe Augen abwirft, haelt den Stichfuehrenden fuer seinen Partner - gemessen zu 93 Prozent richtig gegen regelbasierte Gegner. Widersprechende Welten werden mit dieser Wahrscheinlichkeit verworfen, nicht ausgeschlossen', '0')
             ->addOption('schmier-evidenz-b', null, InputOption::VALUE_REQUIRED, 'dito fuer B', '0')
-            ->addOption('ansage-diagnose', null, InputOption::VALUE_NONE, 'An jedem Entscheidungspunkt den Blattwert der Erstansage mitschreiben und daraus Ansagezahl und Haltequote fuer JEDE Schwelle ableiten - ohne je Schwelle einen eigenen Lauf zu fahren. Aendert nichts am Spiel')
+            ->addOption('ansage-diagnose', null, InputOption::VALUE_NONE, 'Den Blattwert der Erstansage mitschreiben und daraus Ansagezahl und Haltequote fuer JEDE Schwelle ableiten - ohne je Schwelle einen eigenen Lauf zu fahren. Aendert nichts am Spiel. Erfasst NUR die Seite A: die Statistik haengt am gemeinsamen Dienst und wuesste sonst nicht, wessen Entscheidung sie verbucht - bei ungleichen Seiten mischte sie zwei Gegnerstaerken und die gesuchte Wirkung hoebe sich auf')
             ->addOption('evidenz-diagnose', null, InputOption::VALUE_NONE, 'Weiche Team-Signale (Schmieren/Stechen) gegen die wahren Parteien halten und je Signal Haeufigkeit, Trefferquote und Zeitpunkt ausweisen. Aendert nichts am Spiel, kostet praktisch keine Zeit (Hebel 3, zweiter Schritt)')
             ->addOption('bewertungs-diagnose', null, InputOption::VALUE_NONE, 'Beide Bewertungsmassstaebe je Welt mitschreiben: Gewichts-Sweep (v = w*s + e) und Trennschaerfe zwischen bester und zweitbester Karte. Aendert die Kartenwahl nicht, kostet eine zusaetzliche Abrechnung je Welt und Kandidat')
             ->addOption('nach-team', null, InputOption::VALUE_NONE, 'A spielt die ganze RE-, B die ganze KONTRA-Partei (gespiegelt) statt fester Sitze – nötig für Ansage-Vergleiche, siehe TurnierLauf')
@@ -179,6 +179,7 @@ final class BotTurnierCommand extends Command
                 (bool) $input->getOption('bewertungs-diagnose'),
                 !$input->getOption('ohne-team-nebenbedingung-a'),
                 (float) $input->getOption('schmier-evidenz-a'),
+                (bool) $input->getOption('ansage-diagnose'),
             );
             $b = $this->baueStrategie(
                 (string) $input->getOption('b'),
@@ -209,6 +210,7 @@ final class BotTurnierCommand extends Command
                 (bool) $input->getOption('bewertungs-diagnose'),
                 !$input->getOption('ohne-team-nebenbedingung-b'),
                 (float) $input->getOption('schmier-evidenz-b'),
+                false,
             );
         } catch (\InvalidArgumentException $e) {
             $io->error($e->getMessage());
@@ -360,6 +362,7 @@ final class BotTurnierCommand extends Command
         bool $bewertungsDiagnose,
         bool $teamNebenbedingung,
         float $schmierEvidenz,
+        bool $ansageDiagnose,
     ): SimulierteStrategie {
         $staerke = BotStaerke::tryFrom(strtolower($name))
             ?? throw new \InvalidArgumentException(sprintf(
@@ -430,6 +433,7 @@ final class BotTurnierCommand extends Command
             $bewertungsDiagnose,
             $teamNebenbedingung,
             max(0.0, min(1.0, $schmierEvidenz)),
+            $ansageDiagnose,
         );
     }
 

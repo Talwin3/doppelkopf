@@ -70,6 +70,7 @@ final class AnsageHeuristik
         ?array $starthand = null,
         int $erspielteAugen = 0,
         ?callable $aussichtenFuer = null,
+        bool $diagnose = false,
     ): ?AnsageTyp {
         if ($staerke === BotStaerke::ANFAENGER || $team === null) {
             return null;
@@ -114,7 +115,7 @@ final class AnsageHeuristik
         //
         // Bewusst auch dann, wenn die Partei schon angesagt hat: sonst fehlte der Wert des
         // Partners, und die Zusammenfassung je Partei ({@see AnsageStatistik}) griffe zu kurz.
-        if ($this->statistik->istAktiv() && $fristFuer !== null && count($hand) >= $fristFuer($grundansage)) {
+        if ($diagnose && $this->statistik->istAktiv() && $fristFuer !== null && count($hand) >= $fristFuer($grundansage)) {
             $this->statistik->verbucheErstansage(
                 $team,
                 $this->blattWert($bewertungsHand, $ordnung, $schwellen, $erspielteAugen),

@@ -49,6 +49,16 @@ final class EngineStrategie implements SimulierteStrategie
         private readonly bool $bewertungsDiagnose = false,
         private readonly bool $teamNebenbedingung = true,
         private readonly float $schmierEvidenz = 0.0,
+        /**
+         * Erfasst diese Seite die Erstansage-Diagnose ({@see \App\Domain\Doppelkopf\Service\AnsageStatistik})?
+         *
+         * Muss auf **eine** Seite beschränkt bleiben, sobald A und B verschieden spielen: die
+         * Statistik hängt am gemeinsamen {@see AnsageHeuristik}-Dienst und wüsste sonst nicht,
+         * wessen Entscheidung sie verbucht. Bei `profi` gegen `fortgeschritten` mischte sie
+         * PROFI-Parteien (schwache Gegner) mit FORTGESCHRITTEN-Parteien (starke Gegner) – die
+         * beiden Verschiebungen heben sich auf, und die gesuchte Wirkung wäre unsichtbar.
+         */
+        private readonly bool $ansageDiagnose = false,
     ) {}
 
     public function name(): string
@@ -163,6 +173,7 @@ final class EngineStrategie implements SimulierteStrategie
             $partie->starthand($sitzplatz),
             $partie->erspielteAugen($partie->eigenesTeam($sitzplatz)),
             $this->aussichtenGeber($partie, $sitzplatz),
+            $this->ansageDiagnose,
         );
     }
 
