@@ -26,6 +26,7 @@ services:
       MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost:8443/.well-known/mercure}"
       MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
       MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
+      MERCURE_JWT_ISSUER: "${MERCURE_JWT_ISSUER:-doppelkopf}"
       # Bot-Service
       BOT_API_URL: "http://bot:8001"
       BOT_API_TOKEN: "${BOT_API_TOKEN}"
@@ -75,6 +76,7 @@ services:
       MERCURE_PUBLIC_URL: "${MERCURE_PUBLIC_URL:-http://localhost:8443/.well-known/mercure}"
       MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_PUBLISHER_JWT_KEY}"
       MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_SUBSCRIBER_JWT_KEY}"
+      MERCURE_JWT_ISSUER: "${MERCURE_JWT_ISSUER:-doppelkopf}"
       BOT_API_URL: "http://bot:8001"
       BOT_API_TOKEN: "${BOT_API_TOKEN}"
     depends_on:

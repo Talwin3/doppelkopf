@@ -1,4 +1,4 @@
-const Encore = require('@symfony/webpack-encore');
+import Encore from '@symfony/webpack-encore';
 
 if (!Encore.isRuntimeEnvironmentConfigured()) {
     Encore.configureRuntimeEnvironment(process.env.NODE_ENV || 'dev');
@@ -26,10 +26,16 @@ Encore
     // PostCSS für Tailwind
     .enablePostCssLoader()
 
-    .configureBabelPresetEnv((config) => {
-        config.useBuiltIns = 'usage';
-        config.corejs = '3.38';
+    // Babel 8 kennt useBuiltIns/corejs nicht mehr; Polyfills nach Bedarf
+    // liefert jetzt das core-js-Plugin.
+    .configureBabel((config) => {
+        config.plugins.push(['babel-plugin-polyfill-corejs3', { method: 'usage-global', version: '3.51' }]);
+    })
+
+    // Encore 7 minimiert CSS nicht mehr von sich aus.
+    .configureCssMinimizerPlugin((options, MinimizerPlugin) => {
+        options.minify = MinimizerPlugin.lightningCssMinify;
     })
 ;
 
-module.exports = Encore.getWebpackConfig();
+export default await Encore.getWebpackConfig();

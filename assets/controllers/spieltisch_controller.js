@@ -34,7 +34,7 @@ export default class extends Controller {
 
     if (this.mercureUrlValue && this.topicValue) {
       const url = new URL(this.mercureUrlValue)
-      url.searchParams.append('topic', this.topicValue)
+      url.searchParams.append('match', this.topicValue)
 
       this.eventSource = new EventSource(url.toString())
       this.eventSource.onmessage = (event) => {

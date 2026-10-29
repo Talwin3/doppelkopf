@@ -6,3 +6,9 @@ mercure:
             jwt:
                 secret: '%env(MERCURE_PUBLISHER_JWT_KEY)%'
                 publish: '*'
+                # Pflicht-Claims nach RFC 9068 (Mercure-Protokoll 1.0); "iss" muss dem
+                # issuer-Block im Caddyfile entsprechen, "aud" setzt das Bundle selbst.
+                claims:
+                    iss: '%env(MERCURE_JWT_ISSUER)%'
+                    sub: 'doppelkopf-app'
+                    client_id: 'doppelkopf-app'
