@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp:php8.4-alpine AS base
+FROM dunglas/frankenphp:php8.5-alpine AS base
 
 RUN apk add --no-cache git unzip postgresql-client
 

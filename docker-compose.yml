@@ -11,7 +11,7 @@ services:
       - "8443:8443"          # App im Browser: http://localhost:8443 (eigener Port, kollidiert nicht mit anderem lokalen Webserver)
     volumes:
       - .:/app
-      - vendor_data:/app/vendor   # Eigenes Volume: composer install läuft im Container (PHP 8.3)
+      - vendor_data:/app/vendor   # Eigenes Volume: composer install läuft im Container (PHP 8.5)
       - caddy_data:/data
       - caddy_config:/config
     environment:

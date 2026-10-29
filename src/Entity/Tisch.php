@@ -11,6 +11,7 @@ use App\Repository\TischRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use SortDirection;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: TischRepository::class)]
@@ -80,7 +81,7 @@ class Tisch
 
     /** @var Collection<int, TischSpieler> */
     #[ORM\OneToMany(targetEntity: TischSpieler::class, mappedBy: 'tisch', cascade: ['persist', 'remove'], orphanRemoval: true)]
-    #[ORM\OrderBy(['beigetretenAm' => 'ASC'])]
+    #[ORM\OrderBy(['beigetretenAm' => SortDirection::Ascending])]
     private Collection $spieler;
 
     public function __construct()

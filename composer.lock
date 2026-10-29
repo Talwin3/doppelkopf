@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "14cc655ea26bdefec3be9fe46d744273",
+    "content-hash": "72e4e8d0b202158d100d730164580ce1",
     "packages": [
         {
             "name": "dicebear/core",
@@ -10250,7 +10250,7 @@
     },
     "platform-dev": {},
     "platform-overrides": {
-        "php": "8.4.0"
+        "php": "8.5.0"
     },
     "plugin-api-version": "2.11.0"
 }

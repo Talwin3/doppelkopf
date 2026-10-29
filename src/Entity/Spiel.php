@@ -10,6 +10,7 @@ use App\Repository\SpielRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use SortDirection;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: SpielRepository::class)]
@@ -117,12 +118,12 @@ class Spiel
 
     /** @var Collection<int, SpielTeilnehmer> */
     #[ORM\OneToMany(targetEntity: SpielTeilnehmer::class, mappedBy: 'spiel', cascade: ['persist', 'remove'], orphanRemoval: true)]
-    #[ORM\OrderBy(['sitzplatz' => 'ASC'])]
+    #[ORM\OrderBy(['sitzplatz' => SortDirection::Ascending])]
     private Collection $teilnehmer;
 
     /** @var Collection<int, GespielteKarte> */
     #[ORM\OneToMany(targetEntity: GespielteKarte::class, mappedBy: 'spiel', cascade: ['persist', 'remove'], orphanRemoval: true)]
-    #[ORM\OrderBy(['stichNr' => 'ASC', 'positionImStich' => 'ASC'])]
+    #[ORM\OrderBy(['stichNr' => SortDirection::Ascending, 'positionImStich' => SortDirection::Ascending])]
     private Collection $gespielteKarten;
 
     public function __construct()
