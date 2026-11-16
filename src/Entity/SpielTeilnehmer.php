@@ -82,6 +82,24 @@ class SpielTeilnehmer
     #[ORM\Column(options: ['default' => false])]
     private bool $vonBotVertreten = false;
 
+    /**
+     * Wie viele eigene Züge dieser (menschliche) Spieler zuletzt in Folge verpasst hat,
+     * sodass der Bot für ihn spielte. Wird zurückgesetzt, sobald er wieder selbst handelt.
+     * Entscheidet beim Spielende, ob er als abwesend gilt und seinen Platz verliert –
+     * ein einzelner verpasster Zug reicht dafür nicht.
+     */
+    #[ORM\Column(options: ['default' => 0])]
+    private int $verpassteZuegeInFolge = 0;
+
+    /**
+     * Bei Bots: ID des Bot-Platzes am Tisch ({@see TischSpieler}), aus dem der
+     * Teilnehmer stammt. Hält die Tischliste je Bot auseinander – Bot-Namen werden
+     * zufällig vergeben und können sich nach dem Entfernen eines Bots wiederholen.
+     * Bei Menschen null (dort trennt der User).
+     */
+    #[ORM\Column(type: 'uuid', nullable: true)]
+    private ?Uuid $botKennung = null;
+
     #[ORM\Column(nullable: true)]
     private ?bool $gewonnen = null;
 
@@ -152,6 +170,15 @@ class SpielTeilnehmer
 
     public function isVonBotVertreten(): bool { return $this->vonBotVertreten; }
     public function setVonBotVertreten(bool $vertreten): static { $this->vonBotVertreten = $vertreten; return $this; }
+
+    public function getVerpassteZuegeInFolge(): int { return $this->verpassteZuegeInFolge; }
+    public function setVerpassteZuegeInFolge(int $anzahl): static { $this->verpassteZuegeInFolge = $anzahl; return $this; }
+
+    /** Zählt einen Zug, den der Bot nach einem Timeout für diesen Spieler gemacht hat. */
+    public function zugVerpasstZaehlen(): static { $this->verpassteZuegeInFolge++; return $this; }
+
+    public function getBotKennung(): ?Uuid { return $this->botKennung; }
+    public function setBotKennung(?Uuid $botKennung): static { $this->botKennung = $botKennung; return $this; }
 
     /** Aktuelle Hand: Startkarten minus bereits gespielte. */
     public function aktuelleHand(array $gespielteKartenIds): array

@@ -6,6 +6,7 @@ namespace App\Entity;
 
 use App\Enum\SpielStatus;
 use App\Enum\SpielVariante;
+use App\Enum\WertungsKategorie;
 use App\Repository\SpielRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -15,6 +16,7 @@ use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: SpielRepository::class)]
 #[ORM\Table(name: 'spiele')]
+#[ORM\Index(name: 'idx_spiele_bestenliste', columns: ['kategorie', 'global_gewertet', 'beendet_am'])]
 class Spiel
 {
     #[ORM\Id]
@@ -39,6 +41,24 @@ class Spiel
      */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $regelEinstellungenSnapshot = null;
+
+    /**
+     * Punktekonto, auf das das Spiel gebucht wird. Wird beim Spielstart aus dem
+     * Regelwerk bestimmt ({@see WertungsKategorie::fuerRegelwerk()}). Null nur bei
+     * Spielen, die vor Einführung der Kategorien begonnen wurden.
+     */
+    #[ORM\Column(length: 20, enumType: WertungsKategorie::class, nullable: true)]
+    private ?WertungsKategorie $kategorie = null;
+
+    /**
+     * Ob das Spiel in die globalen Konten und Bestenlisten eingeht. Wird beim Spielstart
+     * festgelegt: mindestens drei Menschen und ausschließlich PROFI-Bots. Ein Disconnect
+     * während des Spiels ändert daran nichts mehr – wer droht zu verlieren, soll sich
+     * nicht durch Verlassen aus der Wertung nehmen können. Die Tischliste zählt
+     * unabhängig davon jedes beendete Spiel.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $globalGewertet = false;
 
     /** Null während der Vorbehaltsrunde (wird durch SpielTypResolver gesetzt). */
     #[ORM\Column(length: 20, enumType: SpielVariante::class, nullable: true)]
@@ -202,6 +222,12 @@ class Spiel
 
     public function getBeendetAm(): ?\DateTimeImmutable { return $this->beendetAm; }
     public function setBeendetAm(?\DateTimeImmutable $am): static { $this->beendetAm = $am; return $this; }
+
+    public function getKategorie(): ?WertungsKategorie { return $this->kategorie; }
+    public function setKategorie(?WertungsKategorie $kategorie): static { $this->kategorie = $kategorie; return $this; }
+
+    public function isGlobalGewertet(): bool { return $this->globalGewertet; }
+    public function setGlobalGewertet(bool $globalGewertet): static { $this->globalGewertet = $globalGewertet; return $this; }
 
     /** @return array<string, mixed>|null */
     public function getWertungDetails(): ?array { return $this->wertungDetails; }

@@ -55,7 +55,10 @@ final class TischProtokollService
      * Meldet, dass ein Bot nach einem Zug-Timeout für einen (menschlichen) Spieler
      * übernimmt. Wird nur beim ersten Mal protokolliert — das Flag `vonBotVertreten`
      * verhindert eine Wiederholung bei jedem Folgezug. Aufrufer (Worker) muss
-     * danach nicht flushen; {@see ereignis()} persistiert das Flag mit.
+     * danach nicht flushen; {@see ereignis()} persistiert das Flag mit. Die verpassten
+     * Züge zählt der Worker erst nach einem erfolgreichen Bot-Zug
+     * ({@see SpielTeilnehmer::zugVerpasstZaehlen()}), damit ein wiederholter
+     * Fehlversuch nicht doppelt zählt.
      */
     public function botUebernimmt(SpielTeilnehmer $teilnehmer): void
     {
@@ -90,6 +93,7 @@ final class TischProtokollService
         }
 
         $teilnehmer->setVonBotVertreten(false);
+        $teilnehmer->setVerpassteZuegeInFolge(0);
         $this->ereignis(
             $teilnehmer->getSpiel()->getTisch(),
             sprintf('%s ist zurück und spielt selbst weiter.', $teilnehmer->getAnzeigeName()),

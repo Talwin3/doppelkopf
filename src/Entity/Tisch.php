@@ -65,7 +65,7 @@ class Tisch
     #[ORM\Column(type: 'json')]
     private array $regelEinstellungen = [
         'soli_erlaubt'      => ['SOLO_BUBEN', 'SOLO_DAMEN', 'SOLO_FLEISCHLOS', 'SOLO_KARO', 'SOLO_HERZ', 'SOLO_PIK', 'SOLO_KREUZ'],
-        'solist_kommt_raus' => true,
+        'solist_kommt_raus' => false,
         'schweinchen'       => false,
         'superschweinchen'  => false,
         'ohne_neuner'       => false,
@@ -189,6 +189,20 @@ class Tisch
     public function getWarteschlange(): Collection
     {
         return $this->spieler->filter(fn(TischSpieler $ts) => $ts->getSitzplatz() === null);
+    }
+
+    /**
+     * Namen aller Bots am Tisch, auch der wartenden – neue Bots sollen keinen davon
+     * noch einmal bekommen.
+     *
+     * @return list<string>
+     */
+    public function vergebeneBotNamen(): array
+    {
+        return array_values(array_filter(array_map(
+            fn(TischSpieler $ts) => $ts->getBotName(),
+            $this->spieler->toArray(),
+        )));
     }
 
     public function anzahlAktiveSpieler(): int

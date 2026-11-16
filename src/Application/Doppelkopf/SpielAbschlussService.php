@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Application\Doppelkopf;
 
 use App\Application\SystemEinstellungService;
+use App\Domain\Doppelkopf\Service\BotNamenProvider;
 use App\Domain\Doppelkopf\Service\TrumpfOrdnungFactory;
 use App\Domain\Doppelkopf\Service\WertungsRechner;
 use App\Entity\GespielteKarte;
 use App\Entity\Spiel;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
+use App\Enum\BotStaerke;
 use App\Enum\SpielStatus;
 use App\Enum\Team;
 use App\Infrastructure\Mercure\LobbyMercurePublisher;
@@ -21,6 +23,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class SpielAbschlussService
 {
+    /** So viele eigene Züge in Folge muss ein Spieler beim Spielende verpasst haben, um den Platz zu verlieren. */
+    public const VERPASSTE_ZUEGE_FUER_PLATZVERLUST = 2;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly GespielteKarteRepository $gespielteKarteRepo,
@@ -31,6 +36,7 @@ final class SpielAbschlussService
         private readonly LobbyMercurePublisher $lobbyPublisher,
         private readonly SystemEinstellungService $einstellungService,
         private readonly TischProtokollService $protokoll,
+        private readonly BotNamenProvider $botNamenProvider,
     ) {}
 
     public function abschliessen(Spiel $spiel): void
@@ -125,7 +131,83 @@ final class SpielAbschlussService
 
         $this->protokolliereErgebnis($spiel, $wertung);
 
+        $platzUmgewidmet = $this->abwesendeDurchBotsErsetzen($spiel);
         $this->nachSpielAbrechnungDurchfuehren($spiel->getTisch());
+
+        // Die Clients am Tisch sollen den Ersatz-Bot schon in der Pause zwischen den
+        // Spielen sehen, nicht erst beim Neustart. Erst nach der Abrechnung senden, damit
+        // Rotation und Nachrücken aus der Warteschlange schon eingerechnet sind.
+        if ($platzUmgewidmet) {
+            $this->mercurePublisher->tischZustandAktualisiert($spiel);
+        }
+    }
+
+    /**
+     * Wer beim Spielende noch von einem Bot vertreten wird und dabei mindestens
+     * {@see self::VERPASSTE_ZUEGE_FUER_PLATZVERLUST} eigene Züge in Folge verpasst hat,
+     * ist nicht zurückgekehrt und verliert seinen Platz: Ein PROFI-Bot setzt sich an
+     * seine Stelle. Ein einzelner verpasster Zug reicht nicht – wer nur bei seiner
+     * letzten Karte kurz abgelenkt war, hat keine Gelegenheit mehr, sich zurückzumelden.
+     * Ist er wirklich weg, greift die Regel am Ende des nächsten Spiels. Das gerade beendete
+     * Spiel zählt noch für den Menschen, ab dem nächsten spielt ein vollwertiger Bot.
+     * PROFI, damit die Runden der Übrigen weiter global zählen können, solange noch
+     * genug Menschen am Tisch sitzen ({@see SpielStartService::zaehltGlobal()}).
+     *
+     * Wer ohnehin nach dem Spiel gehen wollte, wird übersprungen – den räumt
+     * {@see vorgemerkteEntfernen()} ab, und ein Wartender kann nachrücken.
+     */
+    private function abwesendeDurchBotsErsetzen(Spiel $spiel): bool
+    {
+        $tisch = $spiel->getTisch();
+        if ($tisch === null) {
+            return false;
+        }
+
+        $abwesendeUserIds = [];
+        foreach ($spiel->getTeilnehmer() as $t) {
+            if (!$t->isIstBot() && $t->isVonBotVertreten() && $t->getUser() !== null
+                && $t->getVerpassteZuegeInFolge() >= self::VERPASSTE_ZUEGE_FUER_PLATZVERLUST) {
+                $abwesendeUserIds[] = $t->getUser()->getId()->toRfc4122();
+            }
+        }
+        if ($abwesendeUserIds === []) {
+            return false;
+        }
+
+        $vergebeneNamen = $tisch->vergebeneBotNamen();
+
+        $ersetzt = false;
+        foreach ($tisch->getAktiveSpieler()->toArray() as $ts) {
+            $user = $ts->getUser();
+            if ($ts->isIstBot() || $user === null || $ts->isMoechteNachSpielVerlassen()
+                || !in_array($user->getId()->toRfc4122(), $abwesendeUserIds, true)) {
+                continue;
+            }
+
+            $name = $this->botNamenProvider->zufaelligerName($vergebeneNamen);
+            $vergebeneNamen[] = $name;
+            $menschName = $ts->getAnzeigeName();
+
+            // Den Platz in sich umwidmen: Sitzplatz und Tisch bleiben, aus dem Menschen
+            // wird ein Bot. Für die Tischliste ist das ein neuer Bot (Kennung = Platz-ID,
+            // die vorher keinem Bot gehörte), der Mensch behält seine Punkte über den User.
+            $ts->setUser(null);
+            $ts->setIstBot(true);
+            $ts->setBotName($name);
+            $ts->setBotStaerke(BotStaerke::PROFI);
+            $ts->setDisconnectSeitAm(null);
+
+            $this->protokoll->ereignis($tisch, sprintf(
+                '%s ist nicht zurückgekehrt und verlässt den Tisch – %s übernimmt den Platz.',
+                $menschName,
+                $ts->getAnzeigeName(),
+            ));
+            $ersetzt = true;
+        }
+
+        $this->em->flush();
+
+        return $ersetzt;
     }
 
     /**

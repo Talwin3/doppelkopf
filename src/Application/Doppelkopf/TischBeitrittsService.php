@@ -293,10 +293,7 @@ final class TischBeitrittsService
         );
 
         // Bereits vergebene Bot-Namen am Tisch sammeln, um Dopplungen zu vermeiden.
-        $vergebeneNamen = array_values(array_filter(array_map(
-            fn(TischSpieler $ts) => $ts->getBotName(),
-            $tisch->getAktiveSpieler()->toArray(),
-        )));
+        $vergebeneNamen = $tisch->vergebeneBotNamen();
 
         $anzahl = 0;
         foreach (range(1, 4) as $platz) {

@@ -100,7 +100,7 @@ final class SpielTypResolver
         }
 
         $regelwerk = $spiel->getRegelEinstellungen();
-        $solistKommtRaus = $regelwerk['solist_kommt_raus'] ?? true;
+        $solistKommtRaus = $regelwerk['solist_kommt_raus'] ?? false;
 
         if ($solistKommtRaus) {
             $spiel->setAktuellerSpielerSitzplatz($solist->getSitzplatz());

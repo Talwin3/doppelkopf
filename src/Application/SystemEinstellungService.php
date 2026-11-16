@@ -21,15 +21,49 @@ final class SystemEinstellungService
         'pause_zwischen_spielen_sekunden' => '5',
         'disconnect_timeout_sekunden'     => '30',
         'bot_avatar_stil'                 => 'bottts',
-        'bot_disconnect_staerke'          => 'anfaenger',
+        'bot_disconnect_staerke'          => 'profi',
+        'bestenliste_min_spiele_monat'    => '50',
+        'bestenliste_min_spiele_jahr'     => '150',
         'chat_schnellnachrichten'         => "Gut gespielt!\nGlückwunsch!\nSchönes Spiel!\nViel Glück!\nTut mir leid!\nGute Nacht!",
     ];
+
+    /**
+     * Einstellungen, die ganzzahlig sein müssen, mit ihrem kleinsten erlaubten Wert.
+     * Ein Disconnect-Timeout von 0 ließe Bots sofort übernehmen.
+     */
+    private const GANZZAHLIG_MIN = [
+        'pause_zwischen_spielen_sekunden' => 0,
+        'disconnect_timeout_sekunden'     => 5,
+        'bestenliste_min_spiele_monat'    => 0,
+        'bestenliste_min_spiele_jahr'     => 0,
+    ];
+
+    /** Höchstwert für ganzzahlige Einstellungen – schützt vor Überlauf beim int-Cast. */
+    private const GANZZAHLIG_MAX = 1_000_000;
 
     public function __construct(
         private readonly SystemEinstellungRepository $repo,
         private readonly EntityManagerInterface $em,
         private readonly CacheInterface $cache,
     ) {}
+
+    /**
+     * Prüft einen Wert vor dem Speichern. Liefert eine Fehlermeldung oder null, wenn
+     * der Wert zulässig ist.
+     */
+    public function pruefeWert(string $schluessel, string $wert): ?string
+    {
+        if (!array_key_exists($schluessel, self::GANZZAHLIG_MIN)) {
+            return null;
+        }
+
+        $min = self::GANZZAHLIG_MIN[$schluessel];
+        if (!ctype_digit($wert) || (int) $wert < $min || (int) $wert > self::GANZZAHLIG_MAX) {
+            return sprintf('Bitte eine ganze Zahl zwischen %d und %d eingeben.', $min, self::GANZZAHLIG_MAX);
+        }
+
+        return null;
+    }
 
     public function getInt(string $schluessel): int
     {
@@ -79,6 +113,8 @@ final class SystemEinstellungService
                     'disconnect_timeout_sekunden'     => 'Sekunden bis nach einem Disconnect ein Bot übernimmt',
                     'bot_avatar_stil'                 => 'Avatar-Stil für Bots (z. B. bottts, avataaars, lorelei)',
                     'bot_disconnect_staerke'          => 'Spielstärke des Bots, der bei einem Disconnect für einen Menschen übernimmt',
+                    'bestenliste_min_spiele_monat'    => 'Mindestanzahl gewerteter Spiele einer Kategorie im Monat, ab der man in der Monatsliste erscheint',
+                    'bestenliste_min_spiele_jahr'     => 'Mindestanzahl gewerteter Spiele einer Kategorie im Jahr, ab der man in der Jahresliste erscheint',
                     'chat_schnellnachrichten'         => 'Vordefinierte Schnell-Chatnachrichten (eine pro Zeile), die allen Spielern zur Auswahl stehen',
                 ];
 

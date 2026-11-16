@@ -79,6 +79,12 @@ class AdminController extends AbstractController
             return $this->redirectToRoute('app_admin_einstellungen');
         }
 
+        $fehler = $this->einstellungService->pruefeWert($schluessel, $wert);
+        if ($fehler !== null) {
+            $this->addFlash('error', $fehler);
+            return $this->redirectToRoute('app_admin_einstellungen');
+        }
+
         $this->einstellungService->set($schluessel, $wert);
         $this->addFlash('success', sprintf('Einstellung „%s" gespeichert.', $schluessel));
 

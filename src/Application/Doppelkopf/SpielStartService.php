@@ -8,7 +8,10 @@ use App\Domain\Doppelkopf\Service\KartenGeber;
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
 use App\Entity\Tisch;
+use App\Entity\TischSpieler;
+use App\Enum\BotStaerke;
 use App\Enum\SpielStatus;
+use App\Enum\WertungsKategorie;
 use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\SpielRepository;
 use Doctrine\DBAL\LockMode;
@@ -16,6 +19,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class SpielStartService
 {
+    /** Mindestzahl Menschen, ab der ein Spiel in die globalen Konten eingeht. */
+    public const MIN_MENSCHEN_GLOBAL = 3;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SpielRepository $spielRepo,
@@ -54,6 +60,8 @@ final class SpielStartService
             // Regelwerk einfrieren: macht das Spiel unabhängig vom Tisch (Replay
             // nach Tisch-Löschung, spätere Regeländerungen am Tisch).
             $spiel->setRegelEinstellungenSnapshot($tisch->getRegelEinstellungen());
+            $spiel->setKategorie(WertungsKategorie::fuerRegelwerk($tisch->getRegelEinstellungen()));
+            $spiel->setGlobalGewertet(self::zaehltGlobal($tisch->getAktiveSpieler()->toArray()));
             $spiel->setStatus(SpielStatus::VORBEHALT);
             $spiel->setAktuellerSpielerSitzplatz(1); // Sitzplatz 1 = Vorhand, deklariert zuerst
             $spiel->setAktuellerStichNr(1);
@@ -76,6 +84,7 @@ final class SpielStartService
                 $teilnehmer->setIstBot($tischSpieler->isIstBot());
                 $teilnehmer->setBotName($tischSpieler->getBotName());
                 $teilnehmer->setBotStaerke($tischSpieler->getBotStaerke());
+                $teilnehmer->setBotKennung($tischSpieler->isIstBot() ? $tischSpieler->getId() : null);
                 // team bleibt null bis SpielTypResolver läuft
 
                 $this->em->persist($teilnehmer);
@@ -93,5 +102,26 @@ final class SpielStartService
         $this->mercurePublisher->kartenAusgeteilt($spiel);
 
         return $spiel;
+    }
+
+    /**
+     * Ob ein Spiel mit dieser Besetzung in die globalen Konten und Bestenlisten eingeht:
+     * mindestens {@see self::MIN_MENSCHEN_GLOBAL} Menschen, und jeder Bot ist ein PROFI.
+     * Schwächere Bots würden die Liste für die Menschen am Tisch aufpolstern.
+     *
+     * @param list<TischSpieler> $aktiveSpieler
+     */
+    public static function zaehltGlobal(array $aktiveSpieler): bool
+    {
+        $menschen = 0;
+        foreach ($aktiveSpieler as $ts) {
+            if (!$ts->isIstBot()) {
+                $menschen++;
+            } elseif ($ts->getBotStaerke() !== BotStaerke::PROFI) {
+                return false;
+            }
+        }
+
+        return $menschen >= self::MIN_MENSCHEN_GLOBAL;
     }
 }

@@ -141,7 +141,8 @@ class BotZugBerechnenCommand extends Command
                 // Menschlicher Spieler reagiert nicht → Übernahme einmalig protokollieren.
                 // Nur in Phasen, in denen der Bot tatsächlich für den Sitz handelt
                 // (ARMUT_TAUSCH wird vom Annehmer selbst erledigt, dort übernimmt kein Bot).
-                if (!$istBot && $spiel->getStatus() !== SpielStatus::ARMUT_TAUSCH) {
+                $vertritt = !$istBot && $spiel->getStatus() !== SpielStatus::ARMUT_TAUSCH;
+                if ($vertritt) {
                     $this->protokoll->botUebernimmt($teilnehmer);
                 }
 
@@ -150,6 +151,13 @@ class BotZugBerechnenCommand extends Command
                 $override = $istBot ? null : BotStaerke::vonWert($this->einstellungService->get('bot_disconnect_staerke'));
 
                 $this->botZugService->spielenFuerSitzplatz($spiel, $sitzplatz, $override);
+
+                // Erst nach dem erfolgreichen Zug zählen: Ein fehlgeschlagener und im
+                // nächsten Durchlauf wiederholter Zug ist derselbe verpasste Zug.
+                if ($vertritt) {
+                    $teilnehmer->zugVerpasstZaehlen();
+                    $this->em->flush();
+                }
             } catch (\Throwable $e) {
                 $output->writeln(sprintf('  <error>Bot-Zug Fehler: %s</error>', $e->getMessage()));
                 if (!$this->em->isOpen()) {

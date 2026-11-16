@@ -25,6 +25,7 @@ final class ChatService
         private readonly TischSpielerRepository $tischSpielerRepo,
         private readonly ChatNachrichtRepository $chatRepo,
         private readonly SpielMercurePublisher $mercurePublisher,
+        private readonly AnwesenheitService $anwesenheit,
     ) {}
 
     /**
@@ -55,6 +56,9 @@ final class ChatService
         $this->em->flush();
 
         $this->mercurePublisher->chatNachricht($nachricht);
+
+        // Wer schreibt, ist da: eine laufende Bot-Vertretung endet.
+        $this->anwesenheit->lebenszeichen($tisch, $user);
 
         return $nachricht;
     }

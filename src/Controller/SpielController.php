@@ -55,6 +55,7 @@ class SpielController extends AbstractController
         private readonly TrumpfOrdnungFactory $trumpfOrdnungFactory,
         private readonly StichStatistik $stichStatistik,
         private readonly \App\Application\Doppelkopf\ChatService $chatService,
+        private readonly \App\Application\Doppelkopf\AnwesenheitService $anwesenheit,
         private readonly \App\Application\ChatPhrasenService $chatPhrasenService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
@@ -78,6 +79,9 @@ class SpielController extends AbstractController
             $this->addFlash('error', 'Du sitzt nicht an diesem Tisch.');
             return $this->redirectToRoute('app_lobby');
         }
+
+        // Seite geöffnet/neu geladen → der Spieler ist da, eine Bot-Vertretung endet.
+        $this->anwesenheit->lebenszeichen($tisch, $user);
 
         $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
         if ($spiel === null && $tisch->anzahlAktiveSpieler() === 4) {
