@@ -1,5 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import { toast } from '../toast.js'
+import { abonnieren } from '../mercure.js'
 
 /**
  * Tisch-Chat: empfängt CHAT_NACHRICHT-Events über das tischbezogene Mercure-Topic
@@ -30,21 +31,14 @@ export default class extends Controller {
     }
     document.addEventListener('click', this.ausserhalbKlick)
 
-    if (this.mercureUrlValue && this.topicValue) {
-      const url = new URL(this.mercureUrlValue)
-      url.searchParams.append('match', this.topicValue)
-      this.eventSource = new EventSource(url.toString())
-      this.eventSource.onmessage = (event) => {
-        let daten
-        try { daten = JSON.parse(event.data) } catch { return }
-        if (daten.typ === 'CHAT_NACHRICHT') this.anhaengen(daten)
-      }
-      this.eventSource.onerror = () => {}
-    }
+    // Teilt sich die Verbindung mit dem Spieltisch (dasselbe Topic), siehe mercure.js.
+    this.abbestellen = abonnieren(this.mercureUrlValue, this.topicValue, (daten) => {
+      if (daten.typ === 'CHAT_NACHRICHT') this.anhaengen(daten)
+    })
   }
 
   disconnect() {
-    this.eventSource?.close()
+    this.abbestellen?.()
     document.removeEventListener('click', this.ausserhalbKlick)
   }
 

@@ -2,6 +2,7 @@ import { Controller } from '@hotwired/stimulus'
 import { SoundEngine } from '../sound_engine.js'
 import { toast } from '../toast.js'
 import { confirmDialog } from '../dialog.js'
+import { abonnieren } from '../mercure.js'
 
 /** Das Regelwerk-Formular im Einstellungs-Panel. */
 const REGELWERK_FORM = 'form[data-action*="regelwerkSpeichern"]'
@@ -67,23 +68,16 @@ export default class extends Controller {
       this.vorbehaltDialogTarget.showModal()
     }
 
-    if (this.mercureUrlValue && this.topicValue) {
-      const url = new URL(this.mercureUrlValue)
-      url.searchParams.append('match', this.topicValue)
-
-      this.eventSource = new EventSource(url.toString())
-      this.eventSource.onmessage = (event) => {
-        const daten = JSON.parse(event.data)
-        // Chat läuft über dasselbe Topic, betrifft aber den Spielzustand nicht.
-        if (daten.typ === 'CHAT_NACHRICHT') return
-        this.aktualisieren(daten)
-      }
-      this.eventSource.onerror = () => {}
-    }
+    // Teilt sich die Verbindung mit dem Chat (dasselbe Topic), siehe mercure.js.
+    this.abbestellen = abonnieren(this.mercureUrlValue, this.topicValue, (daten) => {
+      // Chat läuft über dasselbe Topic, betrifft aber den Spielzustand nicht.
+      if (daten.typ === 'CHAT_NACHRICHT') return
+      this.aktualisieren(daten)
+    })
   }
 
   disconnect() {
-    this.eventSource?.close()
+    this.abbestellen?.()
   }
 
   async aktualisieren(daten) {

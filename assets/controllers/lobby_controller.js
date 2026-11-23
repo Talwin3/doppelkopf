@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { abonnieren } from '../mercure.js'
 
 export default class extends Controller {
   static values = {
@@ -8,18 +9,11 @@ export default class extends Controller {
   }
 
   connect() {
-    const url = new URL(this.mercureUrlValue)
-    url.searchParams.append('match', this.topicValue)
-
-    this.eventSource = new EventSource(url.toString())
-    this.eventSource.onmessage = () => this.aktualisieren()
-    this.eventSource.onerror = () => {
-      // Browserseitiges Auto-Reconnect greift – kein manueller Retry nötig
-    }
+    this.abbestellen = abonnieren(this.mercureUrlValue, this.topicValue, () => this.aktualisieren())
   }
 
   disconnect() {
-    this.eventSource?.close()
+    this.abbestellen?.()
   }
 
   async aktualisieren() {
