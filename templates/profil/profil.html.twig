@@ -1,4 +1,5 @@
 {% extends 'base.html.twig' %}
+{% import '_kategorie_macros.html.twig' as kat %}
 
 {% block title %}{{ profilUser.username }} – Doppelkopf Online{% endblock %}
 
@@ -39,86 +40,255 @@
         </div>
     </div>
 
-    {# ── Kernstatistiken ───────────────────────────────────────────────── #}
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Statistiken</h2>
+    {# ── Statistik-Auswahl ─────────────────────────────────────────────── #}
+    {% set basis = {username: profilUser.username}
+        |merge(kategorie ? {kategorie: kategorie.value} : {})
+        |merge(nurGewertet ? {gewertet: 1} : {}) %}
+    {% set zeitParam = zeitraum ? zeitraum.parameter : {} %}
+    {% set reiterAn  = 'bg-tisch-700 text-white ring-tisch-700 dark:bg-tisch-600 dark:ring-tisch-600' %}
+    {% set reiterAus = 'bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-700' %}
+    {% set segAn  = 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' %}
+    {% set segAus = 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700' %}
 
+    <div class="space-y-3">
+        <nav class="flex flex-wrap gap-2" aria-label="Kategorie">
+            {% set ohneKat = basis|filter((v, k) => k != 'kategorie') %}
+            <a href="{{ path('app_profil', ohneKat|merge(zeitParam)) }}"
+               class="rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors {{ kategorie ? reiterAus : reiterAn }}"
+               {% if not kategorie %}aria-current="page"{% endif %}>Alle</a>
+            {% for k in kategorien %}
+                <a href="{{ path('app_profil', ohneKat|merge(zeitParam)|merge({kategorie: k.value})) }}"
+                   class="rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors {{ k == kategorie ? reiterAn : reiterAus }}"
+                   {% if k == kategorie %}aria-current="page"{% endif %}>{{ k.label }}</a>
+            {% endfor %}
+        </nav>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <nav class="inline-flex rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-gray-600 overflow-hidden text-sm" aria-label="Zeitraum">
+                {% for eintrag in [
+                    {art: null, label: 'Gesamt', param: {zeitraum: 'gesamt'}},
+                    {art: 'jahr', label: 'Jahr', param: jahresZiel.parameter},
+                    {art: 'monat', label: 'Monat', param: monatsZiel.parameter},
+                ] %}
+                    {% set aktiv = (zeitraum ? zeitraum.art : null) == eintrag.art %}
+                    <a href="{{ path('app_profil', basis|merge(eintrag.param)) }}"
+                       class="px-3 py-1 font-medium {{ aktiv ? segAn : segAus }}"
+                       {% if aktiv %}aria-current="page"{% endif %}>{{ eintrag.label }}</a>
+                {% endfor %}
+            </nav>
+
+            {% if nurGewertet %}
+                <a href="{{ path('app_profil', basis|filter((v, k) => k != 'gewertet')|merge(zeitParam)) }}"
+                   class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 hover:text-tisch-700 dark:hover:text-tisch-400"
+                   role="switch" aria-checked="true">
+                    <span class="inline-flex h-4 w-4 items-center justify-center rounded bg-tisch-600 text-white text-xs">✓</span>
+                    Nur gewertete Spiele
+                </a>
+            {% else %}
+                <a href="{{ path('app_profil', basis|merge(zeitParam)|merge({gewertet: 1})) }}"
+                   class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 hover:text-tisch-700 dark:hover:text-tisch-400"
+                   role="switch" aria-checked="false"
+                   title="Nur Spiele, die in die Bestenlisten eingehen (mind. drei Menschen, höchstens Profi-Bots)">
+                    <span class="inline-flex h-4 w-4 rounded ring-1 ring-inset ring-gray-400 dark:ring-gray-500"></span>
+                    Nur gewertete Spiele
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Kernstatistiken ───────────────────────────────────────────────── #}
+    {% set g = statistik.grund %}
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        <div class="flex items-center gap-2 mb-4">
+            {% if zeitraum %}
+                <a href="{{ vorheriger ? path('app_profil', basis|merge(vorheriger.parameter)) : '#' }}"
+                   class="p-1 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 {{ vorheriger ? '' : 'invisible' }}"
+                   aria-label="Vorheriger Zeitraum{{ vorheriger ? ': ' ~ vorheriger.label : '' }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></svg>
+                </a>
+            {% endif %}
+            <h2 class="flex-1 text-base font-semibold text-gray-900 dark:text-gray-100 {{ zeitraum ? 'text-center' : '' }}">
+                Statistiken{{ zeitraum ? ' ' ~ zeitraum.label : '' }}{{ kategorie ? ' · ' ~ kategorie.label : '' }}
+            </h2>
+            {% if zeitraum %}
+                <a href="{{ naechster ? path('app_profil', basis|merge(naechster.parameter)) : '#' }}"
+                   class="p-1 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 {{ naechster ? '' : 'invisible' }}"
+                   aria-label="Nächster Zeitraum{{ naechster ? ': ' ~ naechster.label : '' }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                </a>
+            {% endif %}
+        </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ statistik.spiele }}</div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{{ g.spiele }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Spiele</div>
             </div>
             <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-tisch-700 dark:text-tisch-400">{{ statistik.siegquote }}%</div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{{ g.siegquote|number_format(1, ',', '.') }} %</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Siegquote
-                    {% if statistik.spiele > 0 %}
-                        <span class="block text-gray-400 dark:text-gray-500">{{ statistik.siege }}/{{ statistik.spiele }}</span>
-                    {% endif %}
+                    {% if g.spiele > 0 %}<span class="block text-gray-400 dark:text-gray-500">{{ g.siege }}/{{ g.spiele }}</span>{% endif %}
                 </div>
             </div>
             <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {{ statistik.punkte > 0 ? '+' : '' }}{{ statistik.punkte }}
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Punkte gesamt</div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{{ g.punkte > 0 ? '+' : '' }}{{ g.punkte }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Punkte</div>
             </div>
             <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-center">
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {{ statistik.punkteSchnitt > 0 ? '+' : '' }}{{ statistik.punkteSchnitt }}
-                </div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{{ g.schnitt > 0 ? '+' : '' }}{{ g.schnitt|number_format(2, ',', '.') }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Ø Punkte/Spiel</div>
             </div>
         </div>
+
+        {% if listenplaetze is not empty %}
+            <dl class="mt-4 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                {% for k in listenplaetze %}
+                    <div class="flex flex-wrap items-center gap-x-2">
+                        <dt>{{ kat.abzeichen(k.kategorie) }}</dt>
+                        <dd>
+                            {% for p in k.plaetze %}
+                                {{ p.label }}:
+                                <a class="hover:underline" href="{{ path('app_bestenlisten', p.zeitraum.parameter|merge({kategorie: k.kategorie.value})) }}"
+                                   title="Bestenliste {{ p.label }} öffnen">
+                                    {%- if p.platz %}Platz {{ p.platz }}{% else %}nicht gelistet{% if p.spiele < p.minSpiele %} ({{ p.spiele }} von {{ p.minSpiele }} Spielen){% endif %}{% endif -%}
+                                </a>
+                                {%- if not loop.last %} · {% endif %}
+                            {% endfor %}
+                        </dd>
+                    </div>
+                {% endfor %}
+            </dl>
+        {% endif %}
     </div>
 
-    {# ── Punkte der letzten 6 Monate ───────────────────────────────────── #}
-    {% if statistik.spiele > 0 %}
+    {# ── Punkteverlauf: Nulllinie, Gewinn nach oben, Verlust nach unten ──── #}
+    {% set monate = statistik.verlauf.monate %}
+    {% set maxPlus = 0 %}{% set maxMinus = 0 %}
+    {% for m in monate %}
+        {% if m.punkte > maxPlus %}{% set maxPlus = m.punkte %}{% endif %}
+        {% if -m.punkte > maxMinus %}{% set maxMinus = -m.punkte %}{% endif %}
+    {% endfor %}
+    {% set spanne = max(maxPlus + maxMinus, 1) %}
+    {% set nulllinie = (maxMinus / spanne * 100)|round(2) %}
     <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">Letzte 6 Monate</h2>
-
-        {% set maxPunkte = 1 %}
-        {% for m in statistik.punkteProMonat %}
-            {% if m.punkte|abs > maxPunkte %}{% set maxPunkte = m.punkte|abs %}{% endif %}
-        {% endfor %}
-
-        <div class="flex items-end gap-2 h-24">
-            {% for m in statistik.punkteProMonat %}
-                {% set hoehe = maxPunkte > 0 ? (m.punkte|abs / maxPunkte * 100)|round : 0 %}
-                <div class="flex-1 flex flex-col items-center gap-1">
-                    <div class="w-full relative flex items-end justify-center" style="height: 72px">
-                        {% set barH = hoehe > 4 ? hoehe : 4 %}
-                        {% if m.punkte >= 0 %}
-                            <div class="w-full rounded-t-sm bg-tisch-500 dark:bg-tisch-600 transition-all"
-                                 style="height: {{ barH }}%"
-                                 title="{{ m.label }}: +{{ m.punkte }} Pkt. ({{ m.spiele }} Spiele)"></div>
-                        {% else %}
-                            <div class="w-full rounded-t-sm bg-red-400 dark:bg-red-600 transition-all"
-                                 style="height: {{ barH }}%"
-                                 title="{{ m.label }}: {{ m.punkte }} Pkt. ({{ m.spiele }} Spiele)"></div>
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">{{ statistik.verlauf.titel }}</h2>
+        <div class="relative h-32" role="img"
+             aria-label="Punkte je Monat: {% for m in monate %}{{ m.label }} {{ m.punkte }}{{ not loop.last ? ', ' }}{% endfor %}">
+            <div class="absolute inset-x-0 border-t border-gray-300 dark:border-gray-600" style="bottom: {{ nulllinie }}%"></div>
+            <div class="absolute inset-0 flex gap-1">
+                {% for m in monate %}
+                    {% set hoehe = (m.punkte|abs / spanne * 100)|round(2) %}
+                    <div class="group relative flex-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                         title="{{ m.label }} {{ m.schluessel|slice(0, 4) }}: {{ m.punkte > 0 ? '+' : '' }}{{ m.punkte }} Punkte aus {{ m.spiele }} {{ m.spiele == 1 ? 'Spiel' : 'Spielen' }}">
+                        {% if m.punkte > 0 %}
+                            <div class="absolute inset-x-1/4 rounded-t bg-tisch-500 dark:bg-tisch-400" style="bottom: {{ nulllinie }}%; height: {{ hoehe }}%"></div>
+                        {% elseif m.punkte < 0 %}
+                            <div class="absolute inset-x-1/4 rounded-b bg-red-500 dark:bg-red-400" style="top: {{ 100 - nulllinie }}%; height: {{ hoehe }}%"></div>
                         {% endif %}
                     </div>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 truncate w-full text-center leading-tight">
-                        {{ m.label|split(' ')[0] }}
-                    </span>
-                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="mt-1 flex gap-1">
+            {% for m in monate %}
+                <span class="flex-1 text-center text-[10px] sm:text-xs leading-tight {{ m.markiert ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500' }}">{{ m.label }}</span>
             {% endfor %}
         </div>
-
-        <div class="mt-2 flex justify-between text-xs text-gray-400 dark:text-gray-500">
-            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-tisch-500"></span> Gewinn</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-red-400"></span> Verlust</span>
+        <div class="mt-3 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-tisch-500 dark:bg-tisch-400"></span> Gewinn</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 dark:bg-red-400"></span> Verlust</span>
         </div>
     </div>
-    {% endif %}
 
-    {# ── Leere Statistik-Hinweis ───────────────────────────────────────── #}
-    {% if statistik.spiele == 0 %}
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
-        <p class="text-gray-400 dark:text-gray-500 text-sm">
-            Noch keine abgeschlossenen Spiele.
-        </p>
-    </div>
+    {% if g.spiele == 0 %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
+            <p class="text-gray-400 dark:text-gray-500 text-sm">Keine abgeschlossenen Spiele in dieser Auswahl.</p>
+        </div>
+    {% else %}
+        {% set karte = 'bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6' %}
+        {% set th = 'py-2 text-xs font-medium text-gray-500 dark:text-gray-400' %}
+        {% set td = 'py-2 tabular-nums text-gray-700 dark:text-gray-300' %}
+
+        {# ── Re / Kontra ──────────────────────────────────────────────── #}
+        <div class="{{ karte }}">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Re und Kontra</h2>
+            <table class="w-full text-sm">
+                <thead><tr class="border-b border-gray-100 dark:border-gray-700">
+                    <th class="{{ th }} text-left">Partei</th>
+                    <th class="{{ th }} text-right">Spiele</th>
+                    <th class="{{ th }} text-right">Siegquote</th>
+                    <th class="{{ th }} text-right">Ø Punkte</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {% for team, p in statistik.parteien %}
+                        <tr>
+                            <td class="{{ td }} font-medium text-gray-900 dark:text-gray-100">{{ team == 'RE' ? 'Re' : 'Kontra' }}</td>
+                            <td class="{{ td }} text-right">{{ p.spiele }} <span class="text-gray-400 dark:text-gray-500">({{ p.anteil|number_format(1, ',', '.') }} %)</span></td>
+                            <td class="{{ td }} text-right">{{ p.spiele > 0 ? p.siegquote|number_format(1, ',', '.') ~ ' %' : '–' }}</td>
+                            <td class="{{ td }} text-right">{{ p.spiele > 0 ? (p.schnitt > 0 ? '+' : '') ~ p.schnitt|number_format(2, ',', '.') : '–' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# ── Soli, Hochzeit, Armut ────────────────────────────────────── #}
+        {% set soli = statistik.soli %}
+        <div class="{{ karte }}">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Soli und Sonderspiele</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-3">
+                {{ soli.spiele }} {{ soli.spiele == 1 ? 'eigenes Solo' : 'eigene Soli' }}
+                ({{ soli.anteil|number_format(1, ',', '.') }} % der Spiele){% if soli.spiele > 0 %}, davon {{ soli.siege }} gewonnen{% endif %}.
+            </p>
+            <table class="w-full text-sm">
+                <thead><tr class="border-b border-gray-100 dark:border-gray-700">
+                    <th class="{{ th }} text-left">Spiel</th>
+                    <th class="{{ th }} text-right">Anzahl</th>
+                    <th class="{{ th }} text-right">gewonnen</th>
+                    <th class="{{ th }} text-right">Punkte</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {% for art in soli.arten %}
+                        <tr>
+                            <td class="{{ td }}">{{ art.label }}</td>
+                            <td class="{{ td }} text-right">{{ art.spiele }}</td>
+                            <td class="{{ td }} text-right">{{ art.siege }}</td>
+                            <td class="{{ td }} text-right">{{ art.punkte > 0 ? '+' : '' }}{{ art.punkte }}</td>
+                        </tr>
+                    {% endfor %}
+                    {% for z in statistik.sonder %}
+                        <tr>
+                            <td class="{{ td }}">{{ z.label }}</td>
+                            <td class="{{ td }} text-right">{{ z.spiele }}</td>
+                            <td class="{{ td }} text-right">{{ z.siege }}</td>
+                            <td class="{{ td }} text-right text-gray-400 dark:text-gray-500">–</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# ── Ansagen ──────────────────────────────────────────────────── #}
+        <div class="{{ karte }}">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Ansagen</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-3">Gehalten heißt: Die eigene Partei hat das Spiel gewonnen.</p>
+            <table class="w-full text-sm">
+                <thead><tr class="border-b border-gray-100 dark:border-gray-700">
+                    <th class="{{ th }} text-left">Ansage</th>
+                    <th class="{{ th }} text-right">Anzahl</th>
+                    <th class="{{ th }} text-right">gehalten</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {% for a in statistik.ansagen %}
+                        <tr>
+                            <td class="{{ td }}">{{ a.label }}</td>
+                            <td class="{{ td }} text-right">{{ a.anzahl }}</td>
+                            <td class="{{ td }} text-right">{{ a.anzahl > 0 ? a.gehalten ~ ' (' ~ a.quote|number_format(1, ',', '.') ~ ' %)' : '–' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% endif %}
 
 </div>

@@ -35,58 +35,187 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    /**
-     * Aggregierte Spielstatistik für einen User.
-     *
-     * @return array{spiele: int, siege: int, punkte: int}
-     */
-    public function findeUserStatistik(User $user): array
-    {
-        $conn = $this->getEntityManager()->getConnection();
-        $row  = $conn->executeQuery(
-            'SELECT COUNT(st.id)                            AS spiele,
-                    COUNT(CASE WHEN st.gewonnen THEN 1 END) AS siege,
-                    COALESCE(SUM(st.punkte_delta), 0)       AS punkte
-             FROM spiel_teilnehmer st
-             JOIN spiele s ON s.id = st.spiel_id
-             WHERE st.user_id = ?
-               AND st.ist_bot = false
-               AND s.status   = ?
-               AND s.wertung_details IS NOT NULL',
-            [(string) $user->getId(), SpielStatus::BEENDET->value],
-        )->fetchAssociative();
+    /** Ansagen, die in die Profilstatistik eingehen (ohne die Vorbehalts-Einträge). */
+    public const STATISTIK_ANSAGEN = ['RE', 'CONTRA', 'KEINE_NEUN', 'KEINE_SECHS', 'KEINE_DREI', 'SCHWARZ'];
 
-        return $row ?: ['spiele' => 0, 'siege' => 0, 'punkte' => 0];
+    /**
+     * Profilstatistik eines Menschen: alle beendeten Spiele mit Abrechnung, wahlweise
+     * eingeschränkt auf eine Kategorie, nur global gewertete Spiele und einen Zeitraum
+     * [$von, $bis) (UTC wie in der DB).
+     *
+     * @return array{
+     *     parteien: list<array{team: ?string, spiele: int, siege: int, punkte: int}>,
+     *     soli: list<array{variante: string, spiele: int, siege: int, punkte: int}>,
+     *     sonder: array<string, int>,
+     *     ansagen: list<array{ansage_typ: string, anzahl: int, gehalten: int}>
+     * }
+     */
+    public function findeProfilStatistik(
+        User $user,
+        ?WertungsKategorie $kategorie,
+        bool $nurGewertet,
+        ?\DateTimeImmutable $von = null,
+        ?\DateTimeImmutable $bis = null,
+    ): array {
+        [$wo, $parameter] = self::profilFilter($user, $kategorie, $nurGewertet, $von, $bis);
+        $conn = $this->getEntityManager()->getConnection();
+        $basis = 'FROM spiel_teilnehmer st JOIN spiele s ON s.id = st.spiel_id WHERE ' . $wo;
+
+        $parteien = $conn->executeQuery(
+            'SELECT st.team,
+                    COUNT(*)                                AS spiele,
+                    COUNT(*) FILTER (WHERE st.gewonnen)     AS siege,
+                    COALESCE(SUM(st.punkte_delta), 0)       AS punkte
+             ' . $basis . '
+             GROUP BY st.team',
+            $parameter,
+        )->fetchAllAssociative();
+
+        // Eigene Soli: Der Solist ist der einzige Re-Spieler.
+        $soli = $conn->executeQuery(
+            "SELECT s.variante,
+                    COUNT(*)                                AS spiele,
+                    COUNT(*) FILTER (WHERE st.gewonnen)     AS siege,
+                    COALESCE(SUM(st.punkte_delta), 0)       AS punkte
+             " . $basis . "
+               AND st.team = 'RE'
+               AND s.variante LIKE 'SOLO\\_%'
+             GROUP BY s.variante",
+            $parameter,
+        )->fetchAllAssociative();
+
+        // Hochzeit (angesagt bzw. still, TSR 4.4.5) und Armut (eigene bzw. übernommene).
+        $sonder = $conn->executeQuery(
+            "SELECT COUNT(*) FILTER (WHERE s.variante = 'HOCHZEIT' AND st.vorbehalt_typ = 'HOCHZEIT')                        AS hochzeit,
+                    COUNT(*) FILTER (WHERE s.variante = 'HOCHZEIT' AND st.vorbehalt_typ = 'HOCHZEIT' AND st.gewonnen)       AS hochzeit_siege,
+                    COUNT(*) FILTER (WHERE s.variante = 'NORMALSPIEL' AND s.hochzeit_als_solo AND st.team = 'RE')               AS stille_hochzeit,
+                    COUNT(*) FILTER (WHERE s.variante = 'NORMALSPIEL' AND s.hochzeit_als_solo AND st.team = 'RE' AND st.gewonnen) AS stille_hochzeit_siege,
+                    COUNT(*) FILTER (WHERE s.armut_spieler_sitzplatz = st.sitzplatz)                                         AS armut,
+                    COUNT(*) FILTER (WHERE s.armut_spieler_sitzplatz = st.sitzplatz AND st.gewonnen)                        AS armut_siege,
+                    COUNT(*) FILTER (WHERE s.armut_annehmer_sitzplatz = st.sitzplatz)                                        AS armut_uebernommen,
+                    COUNT(*) FILTER (WHERE s.armut_annehmer_sitzplatz = st.sitzplatz AND st.gewonnen)                       AS armut_uebernommen_siege
+             " . $basis,
+            $parameter,
+        )->fetchAssociative() ?: [];
+
+        // Ansagen des Spielers; gehalten heißt: seine Partei hat gewonnen (TSR 7.1 –
+        // eine Ansage ist eine Verpflichtung, wer sie verfehlt, verliert).
+        $ansagen = $conn->executeQuery(
+            'SELECT a.ansage_typ,
+                    COUNT(*)                                AS anzahl,
+                    COUNT(*) FILTER (WHERE st.gewonnen)     AS gehalten
+             FROM spiel_teilnehmer st
+             JOIN spiele s         ON s.id = st.spiel_id
+             JOIN spiel_ansagen a  ON a.spiel_id = s.id AND a.sitzplatz = st.sitzplatz
+             WHERE ' . $wo . '
+               AND a.ansage_typ IN (' . implode(', ', array_fill(0, count(self::STATISTIK_ANSAGEN), '?')) . ')
+             GROUP BY a.ansage_typ',
+            [...$parameter, ...self::STATISTIK_ANSAGEN],
+        )->fetchAllAssociative();
+
+        return [
+            'parteien' => array_map(static fn(array $z) => [
+                'team'   => $z['team'] !== null ? (string) $z['team'] : null,
+                'spiele' => (int) $z['spiele'],
+                'siege'  => (int) $z['siege'],
+                'punkte' => (int) $z['punkte'],
+            ], $parteien),
+            'soli' => array_map(static fn(array $z) => [
+                'variante' => (string) $z['variante'],
+                'spiele'   => (int) $z['spiele'],
+                'siege'    => (int) $z['siege'],
+                'punkte'   => (int) $z['punkte'],
+            ], $soli),
+            'sonder'  => array_map('intval', $sonder),
+            'ansagen' => array_map(static fn(array $z) => [
+                'ansage_typ' => (string) $z['ansage_typ'],
+                'anzahl'     => (int) $z['anzahl'],
+                'gehalten'   => (int) $z['gehalten'],
+            ], $ansagen),
+        ];
     }
 
     /**
-     * Punkte-Summe und Spiele je Kalendermonat der letzten $monate Monate.
+     * Punkte und Spiele je Kalendermonat nach deutscher Zeit im Zeitraum [$von, $bis).
      *
-     * @return array<int, array{jahr: int, monat: int, punkte: int, spiele: int}>
+     * @return array<string, array{punkte: int, spiele: int}> 'YYYY-MM' => Werte
      */
-    public function findePunkteProMonat(User $user, int $monate = 6): array
-    {
-        $conn = $this->getEntityManager()->getConnection();
-        $von  = (new \DateTimeImmutable('first day of this month'))
-            ->modify('-' . ($monate - 1) . ' months')
-            ->setTime(0, 0, 0);
+    public function findeProfilVerlauf(
+        User $user,
+        ?WertungsKategorie $kategorie,
+        bool $nurGewertet,
+        \DateTimeImmutable $von,
+        \DateTimeImmutable $bis,
+    ): array {
+        [$wo, $parameter] = self::profilFilter($user, $kategorie, $nurGewertet, $von, $bis);
 
-        return $conn->executeQuery(
-            'SELECT EXTRACT(YEAR  FROM s.beendet_am)::int AS jahr,
-                    EXTRACT(MONTH FROM s.beendet_am)::int AS monat,
-                    COALESCE(SUM(st.punkte_delta), 0)     AS punkte,
-                    COUNT(st.id)                           AS spiele
+        $zeilen = $this->getEntityManager()->getConnection()->executeQuery(
+            "SELECT to_char((s.beendet_am AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Berlin', 'YYYY-MM') AS monat,
+                    COALESCE(SUM(st.punkte_delta), 0) AS punkte,
+                    COUNT(*)                          AS spiele
              FROM spiel_teilnehmer st
              JOIN spiele s ON s.id = st.spiel_id
-             WHERE st.user_id = ?
-               AND st.ist_bot = false
-               AND s.status   = ?
-               AND s.wertung_details IS NOT NULL
-               AND s.beendet_am >= ?
-             GROUP BY EXTRACT(YEAR FROM s.beendet_am), EXTRACT(MONTH FROM s.beendet_am)
-             ORDER BY jahr ASC, monat ASC',
-            [(string) $user->getId(), SpielStatus::BEENDET->value, $von->format('Y-m-d')],
+             WHERE " . $wo . '
+             GROUP BY 1',
+            $parameter,
         )->fetchAllAssociative();
+
+        $ergebnis = [];
+        foreach ($zeilen as $z) {
+            $ergebnis[(string) $z['monat']] = ['punkte' => (int) $z['punkte'], 'spiele' => (int) $z['spiele']];
+        }
+
+        return $ergebnis;
+    }
+
+    /**
+     * Spielende des frühesten abgerechneten Spiels eines Menschen in der gewählten
+     * Auswahl (begrenzt das Blättern).
+     */
+    public function findeFruehestesSpielende(User $user, ?WertungsKategorie $kategorie = null, bool $nurGewertet = false): ?\DateTimeImmutable
+    {
+        [$wo, $parameter] = self::profilFilter($user, $kategorie, $nurGewertet);
+
+        $wert = $this->getEntityManager()->getConnection()->executeQuery(
+            'SELECT MIN(s.beendet_am) FROM spiel_teilnehmer st JOIN spiele s ON s.id = st.spiel_id WHERE ' . $wo,
+            $parameter,
+        )->fetchOne();
+
+        return $wert ? new \DateTimeImmutable((string) $wert, new \DateTimeZone('UTC')) : null;
+    }
+
+    /**
+     * Gemeinsame WHERE-Bedingung der Profilabfragen.
+     *
+     * @return array{0: string, 1: list<mixed>}
+     */
+    private static function profilFilter(
+        User $user,
+        ?WertungsKategorie $kategorie,
+        bool $nurGewertet,
+        ?\DateTimeImmutable $von = null,
+        ?\DateTimeImmutable $bis = null,
+    ): array {
+        $wo = 'st.user_id = ? AND st.ist_bot = false AND s.status = ? AND s.wertung_details IS NOT NULL';
+        $parameter = [$user->getId()->toRfc4122(), SpielStatus::BEENDET->value];
+
+        if ($kategorie !== null) {
+            $wo .= ' AND s.kategorie = ?';
+            $parameter[] = $kategorie->value;
+        }
+        if ($nurGewertet) {
+            $wo .= ' AND s.global_gewertet = true';
+        }
+        if ($von !== null) {
+            $wo .= ' AND s.beendet_am >= ?';
+            $parameter[] = $von->format('Y-m-d H:i:s');
+        }
+        if ($bis !== null) {
+            $wo .= ' AND s.beendet_am < ?';
+            $parameter[] = $bis->format('Y-m-d H:i:s');
+        }
+
+        return [$wo, $parameter];
     }
 
     /**

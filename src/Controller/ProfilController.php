@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Application\ProfilService;
-use App\Application\StatistikService;
+use App\Application\Doppelkopf\BestenlistenZeitraum;
+use App\Application\ProfilStatistikService;
+use App\Enum\WertungsKategorie;
+use App\Repository\SpielTeilnehmerRepository;
 use App\Entity\User;
 use App\Enum\AvatarStil;
 use App\Enum\Kartendeck;
@@ -25,15 +28,21 @@ class ProfilController extends AbstractController
 {
     public function __construct(
         private readonly ProfilService $profilService,
-        private readonly StatistikService $statistikService,
+        private readonly ProfilStatistikService $statistikService,
+        private readonly SpielTeilnehmerRepository $teilnehmerRepo,
         private readonly UserRepository $userRepo,
         private readonly Security $security,
     ) {}
 
     // ── Öffentliches Profil ────────────────────────────────────────────────
 
+    /**
+     * Parameter der Statistik (alle optional): kategorie (DDV|OHNE_NEUNER|SONDERREGELN,
+     * fehlt = alle), zeitraum (gesamt|jahr|monat), jahr, monat, gewertet=1 (nur global
+     * gewertete Spiele).
+     */
     #[Route('/profil/{username}', name: 'app_profil')]
-    public function profil(string $username): Response
+    public function profil(string $username, Request $request): Response
     {
         $profilUser = $this->userRepo->findOneBy(['username' => $username]);
         if ($profilUser === null) {
@@ -48,10 +57,47 @@ class ProfilController extends AbstractController
             throw $this->createNotFoundException('Dieses Profil ist nicht öffentlich.');
         }
 
+        $jetzt       = new \DateTimeImmutable();
+        $kategorie   = WertungsKategorie::tryFrom((string) $request->query->get('kategorie', ''));
+        $nurGewertet = $request->query->get('gewertet') === '1';
+        $art         = (string) $request->query->get('zeitraum', 'gesamt');
+        $zeitraum    = in_array($art, [BestenlistenZeitraum::MONAT, BestenlistenZeitraum::JAHR], true)
+            ? BestenlistenZeitraum::ausAnfrage(
+                $art,
+                self::ganzzahl($request->query->get('jahr')),
+                self::ganzzahl($request->query->get('monat')),
+                $jetzt,
+            )
+            : null;
+
+        // Blättern vom ersten Spiel des Spielers bis zum laufenden Zeitraum.
+        $vorheriger = $naechster = null;
+        if ($zeitraum !== null) {
+            $erstes     = $this->teilnehmerRepo->findeFruehestesSpielende($profilUser, $kategorie, $nurGewertet);
+            $erster     = BestenlistenZeitraum::aktuell($zeitraum->art, $erstes ?? $jetzt);
+            $vorheriger = $zeitraum->istNach($erster) ? $zeitraum->vorheriger() : null;
+            $naechster  = BestenlistenZeitraum::aktuell($zeitraum->art, $jetzt)->istNach($zeitraum) ? $zeitraum->naechster() : null;
+        }
+
         return $this->render('profil/profil.html.twig', [
             'profilUser'     => $profilUser,
             'istEigenProfil' => $istEigenProfil,
-            'statistik'      => $this->statistikService->fuerUser($profilUser),
+            'statistik'      => $this->statistikService->fuerUser($profilUser, $kategorie, $zeitraum, $nurGewertet, $jetzt),
+            'listenplaetze'  => $this->statistikService->listenplaetze(
+                $profilUser,
+                $kategorie !== null ? [$kategorie] : WertungsKategorie::cases(),
+                $zeitraum,
+                $jetzt,
+            ),
+            'kategorie'      => $kategorie,
+            'kategorien'     => WertungsKategorie::cases(),
+            'zeitraum'       => $zeitraum,
+            // Ziele der Reiter „Jahr“/„Monat“: im Jahr des angezeigten Zeitraums bleiben.
+            'jahresZiel'     => $zeitraum !== null ? BestenlistenZeitraum::jahr($zeitraum->jahr) : BestenlistenZeitraum::aktuell(BestenlistenZeitraum::JAHR, $jetzt),
+            'monatsZiel'     => $this->monatsZiel($zeitraum, $jetzt),
+            'vorheriger'     => $vorheriger,
+            'naechster'      => $naechster,
+            'nurGewertet'    => $nurGewertet,
         ]);
     }
 
@@ -300,5 +346,24 @@ class ProfilController extends AbstractController
         $this->security->logout(false);
 
         return $this->redirectToRoute('app_start');
+    }
+
+    /** Der angezeigte Monat; aus einem vergangenen Jahr dessen Dezember, sonst der laufende Monat. */
+    private function monatsZiel(?BestenlistenZeitraum $zeitraum, \DateTimeImmutable $jetzt): BestenlistenZeitraum
+    {
+        $aktuell = BestenlistenZeitraum::aktuell(BestenlistenZeitraum::MONAT, $jetzt);
+        if ($zeitraum === null) {
+            return $aktuell;
+        }
+        if ($zeitraum->art === BestenlistenZeitraum::MONAT) {
+            return $zeitraum;
+        }
+
+        return $zeitraum->jahr < $aktuell->jahr ? BestenlistenZeitraum::monat($zeitraum->jahr, 12) : $aktuell;
+    }
+
+    private static function ganzzahl(mixed $wert): ?int
+    {
+        return is_string($wert) && preg_match('/^\d{1,4}$/', $wert) === 1 ? (int) $wert : null;
     }
 }
