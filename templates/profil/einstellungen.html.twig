@@ -101,6 +101,25 @@
                     </p>
                 </div>
             </label>
+            <label class="flex items-start gap-3 cursor-pointer mt-4">
+                <input type="checkbox" name="in_bestenlisten" value="1"
+                       {{ user.inBestenlisten ? 'checked' : '' }}
+                       class="mt-0.5 rounded border-gray-300 dark:border-gray-600 text-tisch-600 dark:bg-gray-700">
+                <div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">In Bestenlisten erscheinen</span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Deine Punkte und dein Platz stehen in den Monats- und Jahresbestenlisten und
+                        neben deinem Namen am Spieltisch. Ohne Haken (oder bei privatem Profil) erscheinst
+                        du in keiner Bestenliste, und am Tisch steht statt deiner Punkte „privat“.
+                        Deine Spiele werden weiterhin gewertet.
+                    </p>
+                    {% if user.inBestenlisten and not user.profilOeffentlich %}
+                        <p class="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                            Wirkt erst, wenn dein Profil öffentlich ist – im Moment erscheinst du in keiner Bestenliste.
+                        </p>
+                    {% endif %}
+                </div>
+            </label>
             <button type="submit" class="btn-primary mt-4">Speichern</button>
         </form>
     </section>

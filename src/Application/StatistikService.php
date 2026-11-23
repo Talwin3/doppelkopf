@@ -51,22 +51,6 @@ final class StatistikService
         ];
     }
 
-    /**
-     * @return array<int, array{id: string, username: string, punkte: int, spiele: int, siege: int, rang: int}>
-     */
-    public function bestelisteGesamt(int $limit = 20): array
-    {
-        return $this->mitRang($this->teilnehmerRepo->findeBestelisteGesamt($limit));
-    }
-
-    /**
-     * @return array<int, array{id: string, username: string, punkte: int, spiele: int, siege: int, rang: int}>
-     */
-    public function bestelisteMonat(int $limit = 20): array
-    {
-        return $this->mitRang($this->teilnehmerRepo->findeBestelisteMonat($limit));
-    }
-
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────
 
     /**
@@ -96,17 +80,5 @@ final class StatistikService
         }
 
         return $liste;
-    }
-
-    private function mitRang(array $zeilen): array
-    {
-        $rang = 1;
-        foreach ($zeilen as &$z) {
-            $z['rang']  = $rang++;
-            $z['punkte'] = (int) $z['punkte'];
-            $z['spiele'] = (int) $z['spiele'];
-            $z['siege']  = (int) $z['siege'];
-        }
-        return $zeilen;
     }
 }

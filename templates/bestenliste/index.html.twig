@@ -1,120 +1,172 @@
 {% extends 'base.html.twig' %}
+{% import '_kategorie_macros.html.twig' as kat %}
 
 {% block title %}Bestenliste – Doppelkopf Online{% endblock %}
 
+{#
+  Variablen: kategorie, kategorien, zeitraum, monatsZeitraum, jahresZeitraum, vorheriger, naechster,
+  sortierung, minSpiele, liste, unterMindest, eigenesKonto (BestenlisteController::index)
+#}
+{% set basis = {kategorie: kategorie.value, sortierung: sortierung} %}
+{% macro link(zeitraum, basis, extra = {}) %}{{ path('app_bestenlisten', zeitraum.parameter|merge(basis)|merge(extra)) }}{% endmacro %}
+{% macro schnitt(punkte, spiele) %}{{ spiele > 0 ? (punkte >= 0 ? '+' : '') ~ (punkte / spiele)|number_format(2, ',', '.') : '–' }}{% endmacro %}
+
 {% block body %}
-<div class="max-w-3xl mx-auto space-y-8">
+<div class="max-w-3xl mx-auto space-y-6">
 
     <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Bestenliste</h1>
 
-    {# ── Monatsrangliste ───────────────────────────────────────────────── #}
+    {# ── Auswahl: Kategorie, Monat/Jahr ─────────────────────────────────── #}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <nav class="flex flex-wrap gap-2" aria-label="Kategorie">
+            {% for k in kategorien %}
+                <a href="{{ _self.link(zeitraum, basis, {kategorie: k.value}) }}"
+                   class="rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors
+                          {{ k == kategorie
+                              ? 'bg-tisch-700 text-white ring-tisch-700 dark:bg-tisch-600 dark:ring-tisch-600'
+                              : 'bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-700' }}"
+                   {% if k == kategorie %}aria-current="page"{% endif %}>
+                    {{ k.label }}
+                </a>
+            {% endfor %}
+        </nav>
+
+        <nav class="inline-flex rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-gray-600 overflow-hidden text-sm" aria-label="Zeitraum">
+            {% for z in [monatsZeitraum, jahresZeitraum] %}
+                {% set aktiv = z.art == zeitraum.art %}
+                <a href="{{ _self.link(z, basis) }}"
+                   class="px-3 py-1 font-medium {{ aktiv ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700' }}"
+                   {% if aktiv %}aria-current="page"{% endif %}>
+                    {{ z.art == 'jahr' ? 'Jahr' : 'Monat' }}
+                </a>
+            {% endfor %}
+        </nav>
+    </div>
+
     <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">
-                Monat — {{ monatLabel }}
-            </h2>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Punkte-Summe im laufenden Kalendermonat</p>
+        {# ── Kopf mit Blättern ─────────────────────────────────────────── #}
+        <div class="px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
+            {% if vorheriger %}
+                <a href="{{ _self.link(vorheriger, basis) }}" class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                   title="{{ vorheriger.label }}" aria-label="Vorheriger Zeitraum: {{ vorheriger.label }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></svg>
+                </a>
+            {% else %}
+                <span class="p-1.5 invisible" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></svg>
+                </span>
+            {% endif %}
+
+            <div class="flex-1 min-w-0 text-center">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2 flex-wrap">
+                    {{ zeitraum.label }} {{ kat.abzeichen(kategorie) }}
+                </h2>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    Gelistet ab {{ minSpiele }} {{ minSpiele == 1 ? 'Spiel' : 'Spielen' }} im {{ zeitraum.art == 'jahr' ? 'Jahr' : 'Monat' }}
+                </p>
+            </div>
+
+            {% if naechster %}
+                <a href="{{ _self.link(naechster, basis) }}" class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                   title="{{ naechster.label }}" aria-label="Nächster Zeitraum: {{ naechster.label }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                </a>
+            {% else %}
+                <span class="p-1.5 invisible" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+                </span>
+            {% endif %}
         </div>
 
-        {% if monat is empty %}
+        {% if liste is empty %}
             <p class="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
-                Noch keine abgeschlossenen Spiele in diesem Monat.
+                Noch niemand hat in diesem Zeitraum genug Spiele für die Liste.
             </p>
         {% else %}
+            {% set sortKlasse = 'inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100' %}
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-                        <th class="py-2 pl-6 text-left font-medium w-10">#</th>
+                        <th class="py-2 pl-4 sm:pl-6 text-left font-medium w-10">#</th>
                         <th class="py-2 text-left font-medium">Spieler</th>
-                        <th class="py-2 pr-4 text-right font-medium">Punkte</th>
-                        <th class="py-2 pr-4 text-right font-medium hidden sm:table-cell">Spiele</th>
-                        <th class="py-2 pr-6 text-right font-medium hidden sm:table-cell">Siege</th>
+                        <th class="py-2 pr-4 text-right font-medium" {% if sortierung == 'schnitt' %}aria-sort="descending"{% endif %}>
+                            <a href="{{ _self.link(zeitraum, basis, {sortierung: 'schnitt'}) }}" class="{{ sortKlasse }} {{ sortierung == 'schnitt' ? 'text-gray-900 dark:text-gray-100 font-semibold' : '' }}">
+                                Punkte/Spiel{% if sortierung == 'schnitt' %} ↓{% endif %}
+                            </a>
+                        </th>
+                        <th class="py-2 pr-4 text-right font-medium" {% if sortierung == 'punkte' %}aria-sort="descending"{% endif %}>
+                            <a href="{{ _self.link(zeitraum, basis, {sortierung: 'punkte'}) }}" class="{{ sortKlasse }} {{ sortierung == 'punkte' ? 'text-gray-900 dark:text-gray-100 font-semibold' : '' }}">
+                                Punkte{% if sortierung == 'punkte' %} ↓{% endif %}
+                            </a>
+                        </th>
+                        <th class="py-2 pr-4 sm:pr-6 text-right font-medium">Spiele</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
-                    {% for zeile in monat %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                            <td class="py-3 pl-6 text-gray-400 dark:text-gray-500 font-mono text-xs">
+                    {% for zeile in liste %}
+                        {% set ich = app.user and app.user.id.toRfc4122 == zeile.user_id %}
+                        <tr class="{{ ich ? 'bg-tisch-50 dark:bg-tisch-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30' }} transition-colors">
+                            <td class="py-3 pl-4 sm:pl-6 text-gray-400 dark:text-gray-500 font-mono text-xs">
                                 {% if zeile.rang == 1 %}🥇
                                 {% elseif zeile.rang == 2 %}🥈
                                 {% elseif zeile.rang == 3 %}🥉
                                 {% else %}{{ zeile.rang }}
                                 {% endif %}
                             </td>
-                            <td class="py-3">
+                            <td class="py-3 min-w-0">
                                 <a href="{{ path('app_profil', {username: zeile.username}) }}"
                                    class="flex items-center gap-2.5 font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
                                     <img src="{{ avatar_url_roh(zeile.avatar_stil, zeile.avatar_seed, 64) }}" alt=""
                                          class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
-                                    {{ zeile.username }}
+                                    <span class="truncate">{{ zeile.username }}</span>
                                 </a>
                             </td>
-                            <td class="py-3 pr-4 text-right font-semibold
-                                {{ zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400' }}">
+                            <td class="py-3 pr-4 text-right tabular-nums {{ sortierung == 'schnitt' ? 'font-semibold' : 'text-gray-500 dark:text-gray-400' }}
+                                {{ sortierung == 'schnitt' ? (zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400') : '' }}">
+                                {{ _self.schnitt(zeile.punkte, zeile.spiele) }}
+                            </td>
+                            <td class="py-3 pr-4 text-right tabular-nums {{ sortierung == 'punkte' ? 'font-semibold' : 'text-gray-500 dark:text-gray-400' }}
+                                {{ sortierung == 'punkte' ? (zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400') : '' }}">
                                 {{ zeile.punkte >= 0 ? '+' : '' }}{{ zeile.punkte }}
                             </td>
-                            <td class="py-3 pr-4 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.spiele }}</td>
-                            <td class="py-3 pr-6 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.siege }}</td>
+                            <td class="py-3 pr-4 sm:pr-6 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ zeile.spiele }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         {% endif %}
-    </section>
 
-    {# ── Gesamtrangliste ───────────────────────────────────────────────── #}
-    <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Gesamtrangliste</h2>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Punkte-Summe aller Zeiten</p>
-        </div>
-
-        {% if gesamt is empty %}
-            <p class="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
-                Noch keine abgeschlossenen Spiele vorhanden.
+        {% if unterMindest > 0 %}
+            <p class="px-6 py-3 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700">
+                {{ unterMindest }} {{ unterMindest == 1 ? 'weiterer Spieler hat' : 'weitere Spieler haben' }} noch zu wenige Spiele für die Liste.
             </p>
-        {% else %}
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-                        <th class="py-2 pl-6 text-left font-medium w-10">#</th>
-                        <th class="py-2 text-left font-medium">Spieler</th>
-                        <th class="py-2 pr-4 text-right font-medium">Punkte</th>
-                        <th class="py-2 pr-4 text-right font-medium hidden sm:table-cell">Spiele</th>
-                        <th class="py-2 pr-6 text-right font-medium hidden sm:table-cell">Siegquote</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-50 dark:divide-gray-700/50">
-                    {% for zeile in gesamt %}
-                        {% set siegquote = zeile.spiele > 0 ? (zeile.siege / zeile.spiele * 100)|round(1) : 0 %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                            <td class="py-3 pl-6 text-gray-400 dark:text-gray-500 font-mono text-xs">
-                                {% if zeile.rang == 1 %}🥇
-                                {% elseif zeile.rang == 2 %}🥈
-                                {% elseif zeile.rang == 3 %}🥉
-                                {% else %}{{ zeile.rang }}
-                                {% endif %}
-                            </td>
-                            <td class="py-3">
-                                <a href="{{ path('app_profil', {username: zeile.username}) }}"
-                                   class="flex items-center gap-2.5 font-medium text-gray-900 dark:text-gray-100 hover:text-tisch-700 dark:hover:text-tisch-400 transition-colors">
-                                    <img src="{{ avatar_url_roh(zeile.avatar_stil, zeile.avatar_seed, 64) }}" alt=""
-                                         class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0">
-                                    {{ zeile.username }}
-                                </a>
-                            </td>
-                            <td class="py-3 pr-4 text-right font-semibold
-                                {{ zeile.punkte >= 0 ? 'text-tisch-700 dark:text-tisch-400' : 'text-red-600 dark:text-red-400' }}">
-                                {{ zeile.punkte >= 0 ? '+' : '' }}{{ zeile.punkte }}
-                            </td>
-                            <td class="py-3 pr-4 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ zeile.spiele }}</td>
-                            <td class="py-3 pr-6 text-right text-gray-500 dark:text-gray-400 hidden sm:table-cell">{{ siegquote }}%</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
         {% endif %}
     </section>
 
+    {# ── Eigener Stand ───────────────────────────────────────────────────── #}
+    {% if eigenesKonto %}
+        <section class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+            <p>
+                <span class="font-medium text-gray-900 dark:text-gray-100">Dein Stand:</span>
+                {{ eigenesKonto.punkte >= 0 ? '+' : '' }}{{ eigenesKonto.punkte }} Punkte aus {{ eigenesKonto.spiele }} {{ eigenesKonto.spiele == 1 ? 'Spiel' : 'Spielen' }}
+                {%- if eigenesKonto.spiele > 0 %} ({{ _self.schnitt(eigenesKonto.punkte, eigenesKonto.spiele) }} je Spiel){% endif %}.
+                {% if not eigenesKonto.gelistet %}
+                    Du erscheinst in keiner Bestenliste –
+                    <a href="{{ path('app_profil_einstellungen') }}" class="underline hover:text-tisch-700 dark:hover:text-tisch-400">ändern in den Einstellungen</a>.
+                {% elseif eigenesKonto.rang %}
+                    Platz {{ eigenesKonto.rang }}.
+                {% else %}
+                    {% set fehlen = max(minSpiele - eigenesKonto.spiele, 1) %}
+                    Noch {{ fehlen }} {{ fehlen == 1 ? 'Spiel' : 'Spiele' }} bis zur Liste.
+                {% endif %}
+            </p>
+        </section>
+    {% endif %}
+
+    <p class="text-xs text-gray-400 dark:text-gray-500">
+        Gewertet werden Spiele mit mindestens drei Menschen am Tisch, in denen höchstens Profi-Bots mitspielen.
+        Die Kategorie richtet sich nach den Regeln des Tisches: DDV (Turnierspielregeln), Ohne Neuner
+        oder Sonderregeln (mindestens eine Regel weicht ab). Maßgeblich ist das Spielende nach deutscher Zeit.
+    </p>
 </div>
 {% endblock %}

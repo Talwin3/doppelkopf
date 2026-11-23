@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Application\Doppelkopf;
 
+use App\Application\Doppelkopf\BestenlisteService;
+use App\Application\Doppelkopf\BestenlistenZeitraum;
 use App\Application\Doppelkopf\TischPunkteService;
 use App\Application\SystemEinstellungService;
 use App\Entity\Spiel;
@@ -131,25 +133,25 @@ final class GesamtkontoTischTest extends DoppelkopfIntegrationTestCase
     public function testMonatsgrenzenFolgenDerDeutschenZeit(): void
     {
         // 30.11. 23:30 UTC ist in Deutschland schon der 1. Dezember.
-        [$von, $bis] = TischPunkteService::monatsGrenzen(new \DateTimeImmutable('2026-11-30 23:30:00', new \DateTimeZone('UTC')));
+        [$von, $bis] = BestenlistenZeitraum::aktuell(BestenlistenZeitraum::MONAT, new \DateTimeImmutable('2026-11-30 23:30:00', new \DateTimeZone('UTC')))->grenzen();
         self::assertSame('2026-11-30 23:00:00', $von->format('Y-m-d H:i:s'));
         self::assertSame('2026-12-31 23:00:00', $bis->format('Y-m-d H:i:s'));
 
         // Sommerzeit: Monatsanfang ist 22:00 UTC am Vortag.
-        [$von, $bis] = TischPunkteService::monatsGrenzen(new \DateTimeImmutable('2026-07-15 12:00:00', new \DateTimeZone('UTC')));
+        [$von, $bis] = BestenlistenZeitraum::aktuell(BestenlistenZeitraum::MONAT, new \DateTimeImmutable('2026-07-15 12:00:00', new \DateTimeZone('UTC')))->grenzen();
         self::assertSame('2026-06-30 22:00:00', $von->format('Y-m-d H:i:s'));
         self::assertSame('2026-07-31 22:00:00', $bis->format('Y-m-d H:i:s'));
     }
 
     public function testListenplaetzeNachPunktenJeSpielMitGleichstandUndMindestanzahl(): void
     {
-        $plaetze = TischPunkteService::listenplaetze([
-            ['user_id' => 'a', 'punkte' => 10, 'spiele' => 5, 'oeffentlich' => true],  // 2,0
-            ['user_id' => 'b', 'punkte' => 30, 'spiele' => 10, 'oeffentlich' => true], // 3,0
-            ['user_id' => 'c', 'punkte' => 6, 'spiele' => 3, 'oeffentlich' => true],   // 2,0
-            ['user_id' => 'd', 'punkte' => 99, 'spiele' => 2, 'oeffentlich' => true],  // zu wenig Spiele
-            ['user_id' => 'e', 'punkte' => 90, 'spiele' => 9, 'oeffentlich' => false], // nicht öffentlich
-            ['user_id' => 'f', 'punkte' => -3, 'spiele' => 3, 'oeffentlich' => true],
+        $plaetze = BestenlisteService::listenplaetze([
+            ['user_id' => 'a', 'punkte' => 10, 'spiele' => 5, 'gelistet' => true],  // 2,0
+            ['user_id' => 'b', 'punkte' => 30, 'spiele' => 10, 'gelistet' => true], // 3,0
+            ['user_id' => 'c', 'punkte' => 6, 'spiele' => 3, 'gelistet' => true],   // 2,0
+            ['user_id' => 'd', 'punkte' => 99, 'spiele' => 2, 'gelistet' => true],  // zu wenig Spiele
+            ['user_id' => 'e', 'punkte' => 90, 'spiele' => 9, 'gelistet' => false], // nicht gelistet
+            ['user_id' => 'f', 'punkte' => -3, 'spiele' => 3, 'gelistet' => true],
         ], 3);
 
         ksort($plaetze);
@@ -224,6 +226,20 @@ final class GesamtkontoTischTest extends DoppelkopfIntegrationTestCase
         self::assertNull($plaetze['gt_anna']['rang']);
         self::assertSame('privat', $plaetze['gt_anna']['ohneRang']);
         self::assertNull($plaetze['gt_anna']['punkte'], 'Bei privatem Profil keine Monatspunkte zeigen.');
+    }
+
+    public function testNichtInBestenlistenZeigtAmTischPrivat(): void
+    {
+        static::getContainer()->get(SystemEinstellungService::class)->set('bestenliste_min_spiele_monat', '1');
+        [$tisch, $anna] = $this->tischMitDreiMenschenUndProfi();
+        $anna->setInBestenlisten(false);
+        $this->em->flush();
+        $this->buche($tisch, WertungsKategorie::DDV, true, new \DateTimeImmutable('2026-11-10 18:00:00'), [[$anna, 2]]);
+
+        $plaetze = $this->nachName($this->punkte($tisch)['plaetze']);
+
+        self::assertSame('privat', $plaetze['gt_anna']['ohneRang']);
+        self::assertNull($plaetze['gt_anna']['punkte']);
     }
 
     public function testTischlisteZaehltAlleBeendetenSpieleDesTischesAuchFuerBots(): void

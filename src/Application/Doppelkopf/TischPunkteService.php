@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Application\Doppelkopf;
 
-use App\Application\SystemEinstellungService;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Enum\TischPunkteAnzeige;
@@ -17,24 +16,18 @@ use App\Repository\SpielTeilnehmerRepository;
  *
  *  - Monatspunkte in der Kategorie des Tisches mit Listenplatz. Gezählt werden nur
  *    global gewertete Spiele, deren Ende in den laufenden Monat (deutsche Zeit) fällt.
- *    Bots haben hier keine Punkte. Einen Listenplatz bekommt nur, wer die Mindestanzahl
- *    Spiele erreicht und sein Profil öffentlich hat; sortiert wird nach Punkten je Spiel.
- *    Bei nicht öffentlichem Profil bleiben auch die Monatspunkte verborgen („privat“).
+ *    Bots haben hier keine Punkte. Der Listenplatz ist der aus der Monatsbestenliste
+ *    ({@see BestenlisteService}): Mindestanzahl Spiele, sortiert nach Punkten je Spiel.
+ *    Wer nicht gelistet werden will ({@see \App\Entity\User::isGelistet()}), bekommt
+ *    auch keine Monatspunkte angezeigt („privat“).
  *  - Tischliste: alle beendeten Spiele dieses Tisches, Menschen über ihren User (bleibt
  *    beim Wiederkommen erhalten), Bots über ihren Tischplatz (jeder Bot eine eigene Zeile).
  */
 final class TischPunkteService
 {
-    public const ZEITZONE = 'Europe/Berlin';
-
-    private const MONATE = [
-        1 => 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-    ];
-
     public function __construct(
         private readonly SpielTeilnehmerRepository $teilnehmerRepo,
-        private readonly SystemEinstellungService $einstellungen,
+        private readonly BestenlisteService $bestenliste,
     ) {}
 
     /**
@@ -60,10 +53,10 @@ final class TischPunkteService
         if ($anzeige === TischPunkteAnzeige::TISCH) {
             $plaetze = $this->tischliste($tisch, $spieler);
         } else {
-            $minSpiele   = $this->einstellungen->getInt('bestenliste_min_spiele_monat');
-            [$von, $bis] = self::monatsGrenzen($jetzt ?? new \DateTimeImmutable());
-            $zeitraum    = self::MONATE[(int) $von->setTimezone(new \DateTimeZone(self::ZEITZONE))->format('n')];
-            $plaetze     = $this->monatspunkte($kategorie, $von, $bis, $minSpiele, $spieler);
+            $monat     = BestenlistenZeitraum::aktuell(BestenlistenZeitraum::MONAT, $jetzt ?? new \DateTimeImmutable());
+            $minSpiele = $this->bestenliste->mindestSpiele($monat);
+            $zeitraum  = $monat->monatsname();
+            $plaetze   = $this->monatspunkte($kategorie, $monat, $minSpiele, $spieler);
         }
 
         return [
@@ -76,65 +69,17 @@ final class TischPunkteService
     }
 
     /**
-     * Anfang (inklusive) und Ende (exklusive) des Kalendermonats nach deutscher Zeit,
-     * umgerechnet in UTC wie in der Datenbank gespeichert.
-     *
-     * @return array{0: \DateTimeImmutable, 1: \DateTimeImmutable}
-     */
-    public static function monatsGrenzen(\DateTimeImmutable $jetzt): array
-    {
-        $berlin = new \DateTimeZone(self::ZEITZONE);
-        $utc    = new \DateTimeZone('UTC');
-
-        $lokal = $jetzt->setTimezone($berlin);
-        $von   = $lokal->setDate((int) $lokal->format('Y'), (int) $lokal->format('n'), 1)->setTime(0, 0);
-        $bis   = $von->modify('first day of next month');
-
-        return [$von->setTimezone($utc), $bis->setTimezone($utc)];
-    }
-
-    /**
-     * Listenplätze nach Punkten je Spiel, gleiche Quote = gleicher Platz.
-     * Nur wer gelistet ist (Mindestanzahl erreicht, Profil öffentlich), zählt mit.
-     *
-     * @param list<array{user_id: string, punkte: int, spiele: int, oeffentlich: bool}> $konten
-     * @return array<string, int> user_id => Platz
-     */
-    public static function listenplaetze(array $konten, int $minSpiele): array
-    {
-        $gelistet = array_values(array_filter(
-            $konten,
-            static fn(array $k) => $k['oeffentlich'] && $k['spiele'] > 0 && $k['spiele'] >= $minSpiele,
-        ));
-
-        // Absteigend nach Punkten je Spiel; a/b > c/d ohne Gleitkomma: a·d > c·b.
-        usort($gelistet, static fn(array $a, array $b) => $b['punkte'] * $a['spiele'] <=> $a['punkte'] * $b['spiele']);
-
-        $plaetze = [];
-        $vorher  = null;
-        foreach ($gelistet as $i => $k) {
-            // Gleiche Quote wie der Vorgänger = gleicher Platz, sonst Position + 1.
-            $gleich = $vorher !== null && $k['punkte'] * $vorher['spiele'] === $vorher['punkte'] * $k['spiele'];
-            $plaetze[$k['user_id']] = $gleich ? $plaetze[$vorher['user_id']] : $i + 1;
-            $vorher = $k;
-        }
-
-        return $plaetze;
-    }
-
-    /**
      * @param list<TischSpieler> $spieler
      * @return list<array{sitzplatz: int, name: string, istBot: bool, punkte: ?int, spiele: int, rang: ?int, ohneRang: ?string}>
      */
     private function monatspunkte(
         WertungsKategorie $kategorie,
-        \DateTimeImmutable $von,
-        \DateTimeImmutable $bis,
+        BestenlistenZeitraum $monat,
         int $minSpiele,
         array $spieler,
     ): array {
-        $konten = $this->teilnehmerRepo->findeKategorieKonten($kategorie, $von, $bis);
-        $plaetze = self::listenplaetze($konten, $minSpiele);
+        $konten  = $this->bestenliste->konten($kategorie, $monat);
+        $plaetze = BestenlisteService::listenplaetze($konten, $minSpiele);
 
         $jeUser = [];
         foreach ($konten as $k) {
@@ -145,8 +90,8 @@ final class TischPunkteService
         foreach ($spieler as $ts) {
             $user = $ts->isIstBot() ? null : $ts->getUser();
 
-            // Nicht öffentliches Profil: Monatspunkte bleiben verborgen, nur „privat“.
-            if ($user !== null && !$user->isProfilOeffentlich()) {
+            // Nicht gelistet (Profil privat oder nicht in Bestenlisten): nur „privat“.
+            if ($user !== null && !$user->isGelistet()) {
                 $ergebnis[] = [
                     'sitzplatz' => (int) $ts->getSitzplatz(),
                     'name'      => $ts->getAnzeigeName(),

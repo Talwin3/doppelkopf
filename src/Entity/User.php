@@ -88,6 +88,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(options: ['default' => true])]
     private bool $profilOeffentlich = true;
 
+    /** Ob Punkte und Platz in den Bestenlisten (und am Tisch) erscheinen dürfen. */
+    #[ORM\Column(options: ['default' => true])]
+    private bool $inBestenlisten = true;
+
     /**
      * Persönliche, im Profil gepflegte Schnell-Chatnachrichten (Vorlagen).
      * @var string[]
@@ -256,6 +260,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function isProfilOeffentlich(): bool { return $this->profilOeffentlich; }
     public function setProfilOeffentlich(bool $oeffentlich): static { $this->profilOeffentlich = $oeffentlich; return $this; }
+
+    public function isInBestenlisten(): bool { return $this->inBestenlisten; }
+    public function setInBestenlisten(bool $inBestenlisten): static { $this->inBestenlisten = $inBestenlisten; return $this; }
+
+    /**
+     * Ob Punkte und Listenplatz öffentlich gezeigt werden (Bestenlisten, Punkteleiste am
+     * Tisch). Dafür braucht es beides: ein öffentliches Profil und den Bestenlisten-Schalter.
+     */
+    public function isGelistet(): bool { return $this->profilOeffentlich && $this->inBestenlisten; }
 
     /** @return string[] */
     public function getChatPhrasen(): array { return $this->chatPhrasen; }

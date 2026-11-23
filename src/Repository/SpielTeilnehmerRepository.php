@@ -8,6 +8,7 @@ use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
 use App\Entity\Tisch;
 use App\Entity\User;
+use App\Enum\AvatarStil;
 use App\Enum\SpielStatus;
 use App\Enum\WertungsKategorie;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -50,7 +51,8 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
              JOIN spiele s ON s.id = st.spiel_id
              WHERE st.user_id = ?
                AND st.ist_bot = false
-               AND s.status   = ?',
+               AND s.status   = ?
+               AND s.wertung_details IS NOT NULL',
             [(string) $user->getId(), SpielStatus::BEENDET->value],
         )->fetchAssociative();
 
@@ -79,72 +81,11 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
              WHERE st.user_id = ?
                AND st.ist_bot = false
                AND s.status   = ?
+               AND s.wertung_details IS NOT NULL
                AND s.beendet_am >= ?
              GROUP BY EXTRACT(YEAR FROM s.beendet_am), EXTRACT(MONTH FROM s.beendet_am)
              ORDER BY jahr ASC, monat ASC',
             [(string) $user->getId(), SpielStatus::BEENDET->value, $von->format('Y-m-d')],
-        )->fetchAllAssociative();
-    }
-
-    /**
-     * Gesamtrangliste (alle Zeiten), nur öffentliche Profile.
-     *
-     * @return array<int, array{id: string, username: string, punkte: int, spiele: int, siege: int}>
-     */
-    public function findeBestelisteGesamt(int $limit = 20): array
-    {
-        $conn = $this->getEntityManager()->getConnection();
-
-        return $conn->executeQuery(
-            'SELECT u.id,
-                    u.username,
-                    u.avatar_stil,
-                    u.avatar_seed,
-                    COALESCE(SUM(st.punkte_delta), 0)       AS punkte,
-                    COUNT(st.id)                             AS spiele,
-                    COUNT(CASE WHEN st.gewonnen THEN 1 END)  AS siege
-             FROM spiel_teilnehmer st
-             JOIN users   u ON u.id  = st.user_id
-             JOIN spiele  s ON s.id  = st.spiel_id
-             WHERE st.ist_bot         = false
-               AND u.profil_oeffentlich = true
-               AND s.status            = ?
-             GROUP BY u.id, u.username, u.avatar_stil, u.avatar_seed
-             ORDER BY punkte DESC, spiele ASC
-             LIMIT ' . $limit,
-            [SpielStatus::BEENDET->value],
-        )->fetchAllAssociative();
-    }
-
-    /**
-     * Monatsrangliste (aktueller Kalendermonat), nur öffentliche Profile.
-     *
-     * @return array<int, array{id: string, username: string, punkte: int, spiele: int, siege: int}>
-     */
-    public function findeBestelisteMonat(int $limit = 20): array
-    {
-        $von  = (new \DateTimeImmutable('first day of this month'))->setTime(0, 0, 0);
-        $conn = $this->getEntityManager()->getConnection();
-
-        return $conn->executeQuery(
-            'SELECT u.id,
-                    u.username,
-                    u.avatar_stil,
-                    u.avatar_seed,
-                    COALESCE(SUM(st.punkte_delta), 0)       AS punkte,
-                    COUNT(st.id)                             AS spiele,
-                    COUNT(CASE WHEN st.gewonnen THEN 1 END)  AS siege
-             FROM spiel_teilnehmer st
-             JOIN users   u ON u.id  = st.user_id
-             JOIN spiele  s ON s.id  = st.spiel_id
-             WHERE st.ist_bot          = false
-               AND u.profil_oeffentlich = true
-               AND s.status             = ?
-               AND s.beendet_am        >= ?
-             GROUP BY u.id, u.username, u.avatar_stil, u.avatar_seed
-             ORDER BY punkte DESC, spiele ASC
-             LIMIT ' . $limit,
-            [SpielStatus::BEENDET->value, $von->format('Y-m-d')],
         )->fetchAllAssociative();
     }
 
@@ -154,15 +95,20 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
      * Nur Spiele mit Abrechnung: Ein nach abgelehnter Armut neu gegebenes Spiel ist auch
      * BEENDET, wurde aber nie gespielt.
      *
-     * @return list<array{user_id: string, punkte: int, spiele: int, oeffentlich: bool}>
+     * `gelistet`: Profil öffentlich UND Bestenlisten-Schalter an ({@see User::isGelistet()}).
+     *
+     * @return list<array{user_id: string, username: string, avatar_stil: string, avatar_seed: string, punkte: int, spiele: int, gelistet: bool}>
      */
     public function findeKategorieKonten(WertungsKategorie $kategorie, \DateTimeImmutable $von, \DateTimeImmutable $bis): array
     {
         $zeilen = $this->getEntityManager()->getConnection()->executeQuery(
             'SELECT st.user_id,
-                    COALESCE(SUM(st.punkte_delta), 0) AS punkte,
-                    COUNT(st.id)                      AS spiele,
-                    u.profil_oeffentlich              AS oeffentlich
+                    u.username,
+                    u.avatar_stil,
+                    u.avatar_seed,
+                    COALESCE(SUM(st.punkte_delta), 0)                AS punkte,
+                    COUNT(st.id)                                     AS spiele,
+                    (u.profil_oeffentlich AND u.in_bestenlisten)     AS gelistet
              FROM spiel_teilnehmer st
              JOIN spiele s ON s.id = st.spiel_id
              JOIN users  u ON u.id = st.user_id
@@ -173,7 +119,7 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
                AND s.kategorie      = ?
                AND s.beendet_am    >= ?
                AND s.beendet_am     < ?
-             GROUP BY st.user_id, u.profil_oeffentlich',
+             GROUP BY st.user_id, u.username, u.avatar_stil, u.avatar_seed, u.profil_oeffentlich, u.in_bestenlisten',
             [
                 SpielStatus::BEENDET->value,
                 $kategorie->value,
@@ -184,10 +130,32 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
 
         return array_map(static fn(array $z): array => [
             'user_id'     => (string) $z['user_id'],
+            'username'    => (string) $z['username'],
+            // Dieselben Ersatzwerte wie User::getAvatarStil()/getAvatarSeed().
+            'avatar_stil' => AvatarStil::vonWert((string) $z['avatar_stil'])->value,
+            'avatar_seed' => (string) $z['avatar_seed'] !== '' ? (string) $z['avatar_seed'] : substr((string) $z['user_id'], 0, 16),
             'punkte'      => (int) $z['punkte'],
             'spiele'      => (int) $z['spiele'],
-            'oeffentlich' => (bool) $z['oeffentlich'],
+            'gelistet'    => (bool) $z['gelistet'],
         ], $zeilen);
+    }
+
+    /**
+     * Spielende des frühesten Spiels, das in eine Bestenliste eingehen kann (beendet,
+     * abgerechnet, global gewertet). Begrenzt das Zurückblättern; null = noch keins.
+     */
+    public function findeFruehestesGewertetesSpielende(): ?\DateTimeImmutable
+    {
+        $wert = $this->getEntityManager()->getConnection()->executeQuery(
+            'SELECT MIN(s.beendet_am)
+             FROM spiele s
+             WHERE s.status = ?
+               AND s.wertung_details IS NOT NULL
+               AND s.global_gewertet = true',
+            [SpielStatus::BEENDET->value],
+        )->fetchOne();
+
+        return $wert ? new \DateTimeImmutable((string) $wert, new \DateTimeZone('UTC')) : null;
     }
 
     /**

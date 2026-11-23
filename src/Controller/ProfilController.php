@@ -186,7 +186,11 @@ class ProfilController extends AbstractController
 
         /** @var User $user */
         $user = $this->getUser();
-        $this->profilService->datenschutzAendern($user, (bool) $request->request->get('profil_oeffentlich'));
+        $this->profilService->datenschutzAendern(
+            $user,
+            (bool) $request->request->get('profil_oeffentlich'),
+            (bool) $request->request->get('in_bestenlisten'),
+        );
         $this->addFlash('success', 'Datenschutz-Einstellung gespeichert.');
 
         return $this->redirectToRoute('app_profil_einstellungen');

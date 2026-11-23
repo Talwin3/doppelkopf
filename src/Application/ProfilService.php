@@ -85,9 +85,10 @@ final class ProfilService
         $this->em->flush();
     }
 
-    public function datenschutzAendern(User $user, bool $oeffentlich): void
+    public function datenschutzAendern(User $user, bool $oeffentlich, bool $inBestenlisten): void
     {
         $user->setProfilOeffentlich($oeffentlich);
+        $user->setInBestenlisten($inBestenlisten);
         $this->em->flush();
     }
 
@@ -146,6 +147,7 @@ final class ProfilService
             'benutzername'     => $user->getUsername(),
             'email'            => $user->getEmail(),
             'profil_oeffentlich' => $user->isProfilOeffentlich(),
+            'in_bestenlisten'  => $user->isInBestenlisten(),
             'mitglied_seit'    => $user->getErstelltAm()->format(\DateTimeInterface::ATOM),
             'letzter_login'    => $user->getLetzterLoginAm()?->format(\DateTimeInterface::ATOM),
             'benutzername_zuletzt_geaendert' => $user->getNutzernameGeaendertAm()?->format(\DateTimeInterface::ATOM),
@@ -198,6 +200,7 @@ final class ProfilService
         $user->setIsVerified(false);
         $user->setNutzernameGeaendertAm(null);
         $user->setProfilOeffentlich(false);
+        $user->setInBestenlisten(false);
 
         $this->em->flush();
 
