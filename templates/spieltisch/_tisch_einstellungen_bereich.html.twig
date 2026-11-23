@@ -1,0 +1,11 @@
+{#
+  Rahmen für das Einstellungs-Panel. Genutzt von der Tischseite und vom
+  Zustands-Reload (Bereich "einstellungen").
+  Variablen: tisch, spiel, botStaerken, meinTischSpieler (vom Controller)
+#}
+{% include 'spieltisch/_tisch_einstellungen.html.twig' with {
+    tisch: tisch,
+    spiel: spiel,
+    istAktiverSpieler: meinTischSpieler is not null,
+    meinTischSpieler: meinTischSpieler,
+} %}

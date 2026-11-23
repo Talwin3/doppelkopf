@@ -63,6 +63,26 @@
         </div>
         {% endif %}
 
+        {# Punkteanzeige — Monatspunkte der Kategorie oder Tischliste #}
+        {% if darfVerwalten %}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white text-sm font-medium">Punkteanzeige</p>
+                <p class="text-tisch-400 text-xs">Monatspunkte mit Listenplatz oder Punkte an diesem Tisch</p>
+            </div>
+            <form method="post"
+                  action="{{ path('app_punkte_anzeige', {id: tisch.id}) }}"
+                  data-action="submit->spieltisch#punkteAnzeige">
+                <input type="hidden" name="_token" value="{{ csrf_token('punkte_anzeige_' ~ tisch.id) }}">
+                <select name="anzeige" onchange="this.form.requestSubmit()"
+                        class="rounded-lg bg-tisch-700 border-tisch-600 text-white text-xs py-1">
+                    <option value="MONAT" {{ tisch.punkteAnzeige.value == 'MONAT' ? 'selected' : '' }}>Monatspunkte</option>
+                    <option value="TISCH" {{ tisch.punkteAnzeige.value == 'TISCH' ? 'selected' : '' }}>Tischliste</option>
+                </select>
+            </form>
+        </div>
+        {% endif %}
+
         {# Nach Spiel verlassen — persönliche Aktion, für jeden aktiven Spieler #}
         {% if spiel and spiel.status.value in ['VORBEHALT', 'LAUFEND', 'ARMUT_ANFRAGE', 'ARMUT_TAUSCH'] %}
         <div class="flex items-center justify-between">
@@ -119,8 +139,14 @@
         {# Regelwerk — nur zwischen Spielen änderbar, nur für Berechtigte #}
         {% if darfVerwalten and (not spiel or spiel.status.value == 'BEENDET') %}
             {% set rw = tisch.regelEinstellungen %}
+            {% set gesperrt = tisch.ddvTisch %}
             <div class="border-t border-tisch-700 pt-3">
                 <p class="text-tisch-300 text-xs font-medium mb-2 uppercase tracking-wider">Regelwerk</p>
+                {% if gesperrt %}
+                <p class="text-blue-200 text-xs bg-blue-900/40 rounded-lg px-3 py-2 mb-2">
+                    DDV-Tisch: Es gelten fest die DDV-Turnierspielregeln. Nur die Anzeige ist änderbar.
+                </p>
+                {% endif %}
                 <form method="post"
                       action="{{ path('app_regelwerk_speichern', {id: tisch.id}) }}"
                       data-action="submit->spieltisch#regelwerkSpeichern">
@@ -140,7 +166,8 @@
                                    name="{{ feld.key }}"
                                    value="1"
                                    {{ rw[feld.key] ?? false ? 'checked' : '' }}
-                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500">
+                                   {{ gesperrt ? 'disabled' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500 disabled:opacity-60">
                             <span class="text-white text-xs">{{ feld.label }}</span>
                         </label>
                         {% endfor %}
@@ -152,12 +179,13 @@
                                    name="schweinchen"
                                    value="1"
                                    {{ rw.schweinchen ?? false ? 'checked' : '' }}
+                                   {{ gesperrt ? 'disabled' : '' }}
                                    onchange="
                                        var sup = document.getElementById('rw_superschweinchen_{{ tisch.id }}');
                                        sup.disabled = !this.checked;
                                        if (!this.checked) sup.checked = false;
                                    "
-                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500">
+                                   class="rounded border-tisch-600 bg-tisch-700 text-green-500 disabled:opacity-60">
                             <span class="text-white text-xs">Schweinchen (Karo-Asse höchste Trumpf)</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer pl-4">
@@ -166,7 +194,7 @@
                                    name="superschweinchen"
                                    value="1"
                                    {{ rw.superschweinchen ?? false ? 'checked' : '' }}
-                                   {{ not (rw.schweinchen ?? false) ? 'disabled' : '' }}
+                                   {{ gesperrt or not (rw.schweinchen ?? false) ? 'disabled' : '' }}
                                    class="rounded border-tisch-600 bg-tisch-700 text-green-500 disabled:opacity-40">
                             <span class="text-white text-xs {{ not (rw.schweinchen ?? false) ? 'opacity-40' : '' }}">
                                 Superschweinchen (beide Asse beim selben Spieler)
@@ -196,14 +224,15 @@
                                    name="soli_erlaubt[]"
                                    value="{{ v }}"
                                    {{ v in (rw.soli_erlaubt ?? alleVarianten) ? 'checked' : '' }}
-                                   class="rounded border-tisch-600 bg-tisch-700 text-yellow-500">
+                                   {{ gesperrt ? 'disabled' : '' }}
+                                   class="rounded border-tisch-600 bg-tisch-700 text-yellow-500 disabled:opacity-60">
                             <span class="text-white text-xs">{{ v|replace({'SOLO_': '', '_': '-'}) }}</span>
                         </label>
                         {% endfor %}
                     </div>
 
                     <button type="submit" class="w-full py-1.5 rounded-lg bg-tisch-600 hover:bg-tisch-500 text-white text-xs font-medium">
-                        Regelwerk speichern
+                        {{ gesperrt ? 'Anzeige speichern' : 'Regelwerk speichern' }}
                     </button>
                 </form>
             </div>

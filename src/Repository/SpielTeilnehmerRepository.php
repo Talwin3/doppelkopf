@@ -6,8 +6,10 @@ namespace App\Repository;
 
 use App\Entity\Spiel;
 use App\Entity\SpielTeilnehmer;
+use App\Entity\Tisch;
 use App\Entity\User;
 use App\Enum\SpielStatus;
+use App\Enum\WertungsKategorie;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -144,5 +146,78 @@ class SpielTeilnehmerRepository extends ServiceEntityRepository
              LIMIT ' . $limit,
             [SpielStatus::BEENDET->value, $von->format('Y-m-d')],
         )->fetchAllAssociative();
+    }
+
+    /**
+     * Punktekonten aller Menschen in einer Kategorie für einen Zeitraum: nur beendete,
+     * global gewertete Spiele, Spielende in [$von, $bis). Zeitpunkte in UTC wie in der DB.
+     * Nur Spiele mit Abrechnung: Ein nach abgelehnter Armut neu gegebenes Spiel ist auch
+     * BEENDET, wurde aber nie gespielt.
+     *
+     * @return list<array{user_id: string, punkte: int, spiele: int, oeffentlich: bool}>
+     */
+    public function findeKategorieKonten(WertungsKategorie $kategorie, \DateTimeImmutable $von, \DateTimeImmutable $bis): array
+    {
+        $zeilen = $this->getEntityManager()->getConnection()->executeQuery(
+            'SELECT st.user_id,
+                    COALESCE(SUM(st.punkte_delta), 0) AS punkte,
+                    COUNT(st.id)                      AS spiele,
+                    u.profil_oeffentlich              AS oeffentlich
+             FROM spiel_teilnehmer st
+             JOIN spiele s ON s.id = st.spiel_id
+             JOIN users  u ON u.id = st.user_id
+             WHERE st.ist_bot       = false
+               AND s.status         = ?
+               AND s.wertung_details IS NOT NULL
+               AND s.global_gewertet = true
+               AND s.kategorie      = ?
+               AND s.beendet_am    >= ?
+               AND s.beendet_am     < ?
+             GROUP BY st.user_id, u.profil_oeffentlich',
+            [
+                SpielStatus::BEENDET->value,
+                $kategorie->value,
+                $von->format('Y-m-d H:i:s'),
+                $bis->format('Y-m-d H:i:s'),
+            ],
+        )->fetchAllAssociative();
+
+        return array_map(static fn(array $z): array => [
+            'user_id'     => (string) $z['user_id'],
+            'punkte'      => (int) $z['punkte'],
+            'spiele'      => (int) $z['spiele'],
+            'oeffentlich' => (bool) $z['oeffentlich'],
+        ], $zeilen);
+    }
+
+    /**
+     * Tischliste: Punkte aller beendeten Spiele an einem Tisch, je Mensch (user_id)
+     * bzw. je Bot (bot_kennung = ID seines Tischplatzes). Abgebrochene und nach abgelehnter
+     * Armut neu gegebene Spiele (ohne Abrechnung) zählen nicht.
+     *
+     * @return list<array{user_id: ?string, bot_kennung: ?string, punkte: int, spiele: int}>
+     */
+    public function findeTischKonten(Tisch $tisch): array
+    {
+        $zeilen = $this->getEntityManager()->getConnection()->executeQuery(
+            'SELECT st.user_id,
+                    CASE WHEN st.ist_bot THEN st.bot_kennung END AS bot_kennung,
+                    COALESCE(SUM(st.punkte_delta), 0)             AS punkte,
+                    COUNT(st.id)                                  AS spiele
+             FROM spiel_teilnehmer st
+             JOIN spiele s ON s.id = st.spiel_id
+             WHERE s.tisch_id = ?
+               AND s.status   = ?
+               AND s.wertung_details IS NOT NULL
+             GROUP BY st.user_id, CASE WHEN st.ist_bot THEN st.bot_kennung END',
+            [$tisch->getId()->toRfc4122(), SpielStatus::BEENDET->value],
+        )->fetchAllAssociative();
+
+        return array_map(static fn(array $z): array => [
+            'user_id'     => $z['user_id'] !== null ? (string) $z['user_id'] : null,
+            'bot_kennung' => $z['bot_kennung'] !== null ? (string) $z['bot_kennung'] : null,
+            'punkte'      => (int) $z['punkte'],
+            'spiele'      => (int) $z['spiele'],
+        ], $zeilen);
     }
 }

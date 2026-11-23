@@ -47,6 +47,11 @@
         {% endif %}
     </div>
 
+    {# ── Punkteleiste (Kategorie + Punkte, via Mercure aktualisiert) ──── #}
+    <div data-spieltisch-target="punkte">
+        {% include 'spieltisch/_punkte_anzeige.html.twig' %}
+    </div>
+
     {# ── Spielzustand (Tisch-Kulisse, via Mercure aktualisiert) ──────── #}
     <div data-spieltisch-target="zustand" class="flex-1 flex flex-col">
         {% include 'spieltisch/_tisch_bereich.html.twig' %}
@@ -88,19 +93,11 @@
         </div>
     </dialog>
 
-    {# ── Tisch-Einstellungen (nur für aktive Spieler, unterhalb des Spielfelds) #}
-    {% set meinTischSpieler = null %}
-    {% for ts in tisch.aktiveSpieler %}
-        {% if ts.user and ts.user.id == app.user.id %}
-            {% set meinTischSpieler = ts %}
-        {% endif %}
-    {% endfor %}
-    {% include 'spieltisch/_tisch_einstellungen.html.twig' with {
-        tisch: tisch,
-        spiel: spiel,
-        istAktiverSpieler: meinTischSpieler is not null,
-        meinTischSpieler: meinTischSpieler,
-    } %}
+    {# ── Tisch-Einstellungen (nur für aktive Spieler, unterhalb des Spielfelds).
+       Wird bei Spielende, Besetzungs- und Einstellungsänderungen live ersetzt. #}
+    <div data-spieltisch-target="einstellungen">
+        {% include 'spieltisch/_tisch_einstellungen_bereich.html.twig' %}
+    </div>
 
     {# ── Tisch-Chat ──────────────────────────────────────────────────── #}
     {% if meinTischSpieler is not null %}

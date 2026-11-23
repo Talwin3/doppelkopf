@@ -1,0 +1,43 @@
+{#
+  Punkteleiste am Tisch: Kategorie-Abzeichen + Punkte je Sitzplatz.
+  Variablen: tisch, punkte (TischPunkteService::fuerTisch)
+  Wird beim Laden gerendert und bei jedem Zustands-Reload (Mercure) ersetzt.
+#}
+{% import '_kategorie_macros.html.twig' as kategorie %}
+{% set monat = punkte.anzeige.value == 'MONAT' %}
+<div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 px-3 py-2 rounded-xl bg-tisch-800/70 border border-tisch-700 text-xs">
+    <div class="flex items-center gap-2 shrink-0">
+        {{ kategorie.abzeichen(punkte.kategorie, tisch.ddvTisch, 'tisch') }}
+        <span class="text-tisch-300">
+            {% if monat %}Monatspunkte {{ punkte.zeitraum }}{% else %}Tischliste{% endif %}
+        </span>
+    </div>
+
+    <ul class="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {% for p in punkte.plaetze %}
+            <li class="flex items-baseline gap-1.5">
+                <span class="text-tisch-200 truncate max-w-32" title="{{ p.name }}">{{ p.name }}</span>
+                {% if p.ohneRang == 'privat' %}
+                    <span class="text-tisch-500" title="Profil nicht öffentlich, Monatspunkte werden nicht angezeigt">privat</span>
+                {% elseif p.punkte is null %}
+                    <span class="text-tisch-500" title="Bots sammeln keine Monatspunkte">–</span>
+                {% else %}
+                    <span class="font-semibold tabular-nums {{ p.punkte > 0 ? 'text-green-300' : (p.punkte < 0 ? 'text-red-300' : 'text-white') }}">
+                        {{ p.punkte > 0 ? '+' : '' }}{{ p.punkte }}
+                    </span>
+                    {% if monat %}
+                        {% if p.rang %}
+                            <span class="text-tisch-400" title="Platz in der Monatsliste ({{ p.spiele }} Spiele)">Platz {{ p.rang }}</span>
+                        {% elseif p.ohneRang == 'spiele' %}
+                            {% if punkte.minSpiele > 0 %}
+                                <span class="text-tisch-500" title="In die Monatsliste kommt, wer mindestens {{ punkte.minSpiele }} gewertete Spiele hat">{{ p.spiele }} von {{ punkte.minSpiele }} Spielen</span>
+                            {% else %}
+                                <span class="text-tisch-500">noch kein Spiel</span>
+                            {% endif %}
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+</div>

@@ -6,6 +6,7 @@ const ICONS = {
 const STYLES = {
   success: 'bg-green-600 text-white',
   error: 'bg-red-600 text-white',
+  info: 'bg-blue-600 text-white',
 }
 
 export function toast(text, typ = 'success', dauerMs = 3000) {

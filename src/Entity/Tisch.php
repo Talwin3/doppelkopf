@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\TischPunkteAnzeige;
 use App\Enum\TischStatus;
 use App\Enum\TischSteuerungsModus;
+use App\Enum\WertungsKategorie;
 use App\Enum\ZugangsModusTyp;
 use App\Repository\TischRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -49,6 +51,17 @@ class Tisch
      */
     #[ORM\Column(length: 20, enumType: TischSteuerungsModus::class, options: ['default' => 'ALLE'])]
     private TischSteuerungsModus $steuerungsModus = TischSteuerungsModus::ALLE;
+
+    /**
+     * DDV-Tisch: beim Eröffnen auf die DDV-Turnierspielregeln festgelegt, die
+     * spielrelevanten Regeln lassen sich danach nicht mehr ändern (nur Darstellung).
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $ddvTisch = false;
+
+    /** Welche Punkte am Tisch angezeigt werden (Monatspunkte oder Tischliste). */
+    #[ORM\Column(length: 10, enumType: TischPunkteAnzeige::class, options: ['default' => 'MONAT'])]
+    private TischPunkteAnzeige $punkteAnzeige = TischPunkteAnzeige::MONAT;
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $naechsterSpielstartAm = null;
@@ -216,6 +229,26 @@ class Tisch
     public function getSteuerungsModus(): TischSteuerungsModus { return $this->steuerungsModus; }
     public function setSteuerungsModus(TischSteuerungsModus $modus): static { $this->steuerungsModus = $modus; return $this; }
 
+    public function isDdvTisch(): bool { return $this->ddvTisch; }
+
+    /** Ein DDV-Tisch übernimmt sofort die DDV-Regeln, siehe {@see self::setRegelEinstellungen()}. */
+    public function setDdvTisch(bool $ddvTisch): static
+    {
+        $this->ddvTisch = $ddvTisch;
+        $this->setRegelEinstellungen($this->regelEinstellungen);
+
+        return $this;
+    }
+
+    public function getPunkteAnzeige(): TischPunkteAnzeige { return $this->punkteAnzeige; }
+    public function setPunkteAnzeige(TischPunkteAnzeige $anzeige): static { $this->punkteAnzeige = $anzeige; return $this; }
+
+    /** Punktekonto, auf das ein mit dem aktuellen Regelwerk gestartetes Spiel gebucht würde. */
+    public function getWertungsKategorie(): WertungsKategorie
+    {
+        return WertungsKategorie::fuerRegelwerk($this->regelEinstellungen);
+    }
+
     public function getNaechsterSpielstartAm(): ?\DateTimeImmutable { return $this->naechsterSpielstartAm; }
     public function setNaechsterSpielstartAm(?\DateTimeImmutable $am): static { $this->naechsterSpielstartAm = $am; return $this; }
 
@@ -225,8 +258,24 @@ class Tisch
     /** @return array<string, mixed> */
     public function getRegelEinstellungen(): array { return $this->regelEinstellungen; }
 
-    /** @param array<string, mixed> $einstellungen */
-    public function setRegelEinstellungen(array $einstellungen): static { $this->regelEinstellungen = $einstellungen; return $this; }
+    /**
+     * Am DDV-Tisch bleiben die Spielregeln auf den DDV-Turnierspielregeln, egal auf
+     * welchem Weg sie gesetzt werden; nur Darstellungs-Schalter werden übernommen.
+     *
+     * @param array<string, mixed> $einstellungen
+     */
+    public function setRegelEinstellungen(array $einstellungen): static
+    {
+        if ($this->ddvTisch) {
+            $einstellungen = array_merge(
+                array_intersect_key($einstellungen, array_flip(WertungsKategorie::DARSTELLUNGS_SCHLUESSEL)),
+                WertungsKategorie::DDV_REGELN,
+            );
+        }
+        $this->regelEinstellungen = $einstellungen;
+
+        return $this;
+    }
 
     public function getRegelEinstellung(string $schluessel, mixed $default = null): mixed
     {

@@ -3,10 +3,25 @@ import { SoundEngine } from '../sound_engine.js'
 import { toast } from '../toast.js'
 import { confirmDialog } from '../dialog.js'
 
+/** Das Regelwerk-Formular im Einstellungs-Panel. */
+const REGELWERK_FORM = 'form[data-action*="regelwerkSpeichern"]'
+
+/**
+ * Ereignisse, nach denen sich die Punkteleiste geändert haben kann (Spielende,
+ * neue Besetzung, Einstellungen). Bei allen anderen – Züge, Ansagen, Vorbehalt –
+ * wird die Leiste nicht neu berechnet.
+ */
+const PUNKTE_EREIGNISSE = new Set([
+  // SPIEL_BEENDET fehlt bewusst: Nach jedem Spielende folgt TISCH_ZUSTAND, erst nach
+  // Rotation und Nachrücken – das lädt Punkte und Panel einmal mit dem richtigen Stand.
+  'TISCH_ZUSTAND', 'TISCH_EINSTELLUNGEN', 'TISCH_BESETZUNG', 'KARTEN_AUSGETEILT',
+])
+
 export default class extends Controller {
   static targets = [
     'zustand', 'dranIndikator', 'spielGewonnen', 'spielVerloren', 'soundToggle',
-    'abrechnungDialog', 'abrechnungInhalt', 'vorbehaltDialog', 'vorbehaltInhalt',
+    'abrechnungDialog', 'abrechnungInhalt', 'vorbehaltDialog', 'vorbehaltInhalt', 'punkte',
+    'einstellungen',
   ]
   static values = {
     mercureUrl: String,
@@ -26,6 +41,26 @@ export default class extends Controller {
     this._stichAbschlussGezeigtAm = null
 
     this._soundToggleAktualisieren()
+
+    // Ungespeicherte Änderungen im Einstellungs-Panel merken, damit ein Live-Reload
+    // sie nicht stillschweigend verwirft (siehe _einstellungenErsetzen).
+    this._einstellungenGeaendert = false
+    // Zählt Nutzereingaben im Regelwerk-Formular: Eine Speicherung macht den Entwurf nur
+    // dann „sauber“, wenn seit dem Abschicken nichts mehr geändert wurde.
+    this._regelwerkEingaben = 0
+    // Kennungen eigener Regelwerk-Speicherungen; das zugehörige Mercure-Event ist keine
+    // fremde Änderung, egal ob es vor oder nach der Antwort ankommt.
+    this._eigeneAenderungen = new Set()
+    if (this.hasEinstellungenTarget) {
+      this.einstellungenTarget.addEventListener('input', (event) => {
+        // Nur das Regelwerk-Formular sammelt Eingaben vor dem Speichern; Select und
+        // Schalter im Panel speichern sofort.
+        if (event.target.closest(REGELWERK_FORM)) {
+          this._einstellungenGeaendert = true
+          this._regelwerkEingaben++
+        }
+      })
+    }
 
     // Vorbehalts-Dialog beim Laden mitten in der Vorbehaltsrunde direkt öffnen.
     if (this.phaseValue === 'VORBEHALT' && this.hasVorbehaltDialogTarget && !this.vorbehaltDialogTarget.open) {
@@ -65,12 +100,16 @@ export default class extends Controller {
     // Sofort-Sounds (bevor DOM-Update)
     this._spieleEreignisSound(daten)
 
+    // Die Punkteleiste nur mitladen, wenn sie sich geändert haben kann.
+    const url = new URL(this.zustandUrlValue, window.location.origin)
+    if (PUNKTE_EREIGNISSE.has(daten.typ)) url.searchParams.set('punkte', '1')
+
     try {
-      const response = await fetch(this.zustandUrlValue, {
+      const response = await fetch(url, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       })
       if (response.ok) {
-        const phase = this._verteileZustand(await response.text())
+        const phase = this._verteileZustand(await response.text(), daten)
         this._dialogeSteuern(phase, daten)
       }
 
@@ -96,7 +135,7 @@ export default class extends Controller {
    * NICHT angefasst – nur ihr Inhalt –, damit ein offener Dialog beim Reload nicht
    * geschlossen wird. Gibt die aktuelle Phase zurück.
    */
-  _verteileZustand(html) {
+  _verteileZustand(html, daten) {
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const root = doc.querySelector('[data-zustand-root]')
     if (!root) {
@@ -108,10 +147,68 @@ export default class extends Controller {
     const inhalt = (bereich) => root.querySelector(`template[data-bereich="${bereich}"]`)?.innerHTML ?? ''
 
     this.zustandTarget.innerHTML = inhalt('tisch')
+    // Fehlt der Bereich (Spielzug ohne ?punkte=1), bleibt die Leiste unverändert.
+    const punkte = root.querySelector('template[data-bereich="punkte"]')
+    if (punkte && this.hasPunkteTarget) this.punkteTarget.innerHTML = punkte.innerHTML
+    const einstellungen = root.querySelector('template[data-bereich="einstellungen"]')
+    if (einstellungen) this._einstellungenErsetzen(einstellungen.innerHTML, daten)
     if (this.hasVorbehaltInhaltTarget) this.vorbehaltInhaltTarget.innerHTML = inhalt('vorbehalt')
     if (this.hasAbrechnungInhaltTarget) this.abrechnungInhaltTarget.innerHTML = inhalt('abrechnung')
 
     return root.dataset.phase ?? ''
+  }
+
+  /**
+   * Ersetzt das Einstellungs-Panel durch den aktuellen Server-Stand (Rechte, Anzeige,
+   * Spielphase …); ein offenes Panel bleibt offen. Ungespeicherte Regelwerk-Häkchen
+   * (Panel offen) werden danach wieder eingesetzt – außer das Regelwerk wurde von jemand
+   * anderem geändert (sonst würde man dessen Änderung mit alten Häkchen zurückdrehen)
+   * oder ein Spiel beginnt (dann ist das Regelwerk gesperrt). Dann gibt es einen Hinweis.
+   */
+  _einstellungenErsetzen(html, daten) {
+    if (!this.hasEinstellungenTarget) return
+    const warOffen = this.einstellungenTarget.querySelector('details')?.open ?? false
+
+    // Ungespeichertes zählt nur, solange das Panel offen ist; zugeklappt = verworfen.
+    let entwurf = null
+    if (this._einstellungenGeaendert && warOffen) {
+      if (daten.typ === 'TISCH_EINSTELLUNGEN' && daten.regelwerk
+          && !this._eigeneAenderungen.has(daten.aenderung)) {
+        toast('Das Regelwerk wurde gerade von jemand anderem geändert – bitte prüfen.', 'info', 5000)
+      } else if (daten.typ === 'KARTEN_AUSGETEILT') {
+        toast('Das Spiel hat begonnen – das Regelwerk ist erst danach wieder änderbar.', 'info', 5000)
+      } else {
+        entwurf = this.#regelwerkEntwurf()
+      }
+    }
+
+    this.einstellungenTarget.innerHTML = html
+    this._einstellungenGeaendert = false
+    const details = this.einstellungenTarget.querySelector('details')
+    if (details && warOffen) details.open = true
+
+    // Entwurf zurückspielen – nur wenn das neue Panel das Regelwerk-Formular noch hat
+    // (fehlt es, darf man es gerade nicht ändern; der Entwurf ist dann hinfällig).
+    const form = this.einstellungenTarget.querySelector(REGELWERK_FORM)
+    if (entwurf && form) {
+      this.#regelwerkAnzeigen(form, entwurf)
+      this._einstellungenGeaendert = true
+    }
+  }
+
+  /** Aktuelle (ungespeicherte) Häkchen des Regelwerk-Formulars im Format der Server-Antwort. */
+  #regelwerkEntwurf() {
+    const form = this.einstellungenTarget.querySelector(REGELWERK_FORM)
+    if (!form) return null
+    const entwurf = { soli_erlaubt: [] }
+    for (const feld of form.querySelectorAll('input[type="checkbox"]')) {
+      if (feld.name === 'soli_erlaubt[]') {
+        if (feld.checked) entwurf.soli_erlaubt.push(feld.value)
+      } else {
+        entwurf[feld.name] = feld.checked
+      }
+    }
+    return entwurf
   }
 
   /** Öffnet/schließt Vorbehalts- und Abrechnungs-Dialog passend zur Phase/zum Event. */
@@ -222,8 +319,29 @@ export default class extends Controller {
   async regelwerkSpeichern(event) {
     event.preventDefault()
     const form = event.currentTarget
-    const ok = await this.#postForm(form, 'Regelwerk konnte nicht gespeichert werden.')
-    if (ok) this.#einstellungenGespeichert(form, 'Regelwerk gespeichert.')
+    const aenderung = Math.random().toString(36).slice(2, 12) || 'x'
+    this._eigeneAenderungen.add(aenderung)
+    const eingabenBeimSenden = this._regelwerkEingaben
+    const antwort = await this.#postForm(form, 'Regelwerk konnte nicht gespeichert werden.', { aenderung })
+    // Fehlgeschlagen: Die Häkchen bleiben als ungespeichert markiert.
+    if (!antwort) return
+
+    if (this._regelwerkEingaben !== eingabenBeimSenden) {
+      // Während der Anfrage weiter geändert: Diese neueren Häkchen bleiben stehen und
+      // ungespeichert, das Panel bleibt offen.
+      toast('Regelwerk gespeichert – neuere Änderungen sind noch nicht gespeichert.')
+      return
+    }
+
+    // Formular auf die tatsächlich gespeicherten Regeln bringen (der Server korrigiert
+    // z. B. Superschweinchen bei „Ohne Neuner“ und hält am DDV-Tisch alles fest). Kam das
+    // eigene Mercure-Event schon vorher, ist das Panel bereits ersetzt.
+    const aktuellesForm = this.hasEinstellungenTarget
+      ? (this.einstellungenTarget.querySelector(REGELWERK_FORM) ?? form)
+      : form
+    if (antwort.regelwerk) this.#regelwerkAnzeigen(aktuellesForm, antwort.regelwerk)
+    this._einstellungenGeaendert = false
+    this.#einstellungenGespeichert(form, 'Regelwerk gespeichert.')
   }
 
   async botsAuffuellen(event) {
@@ -241,6 +359,14 @@ export default class extends Controller {
     const form = event.currentTarget
     const ok = await this.#postForm(form, 'Auto-Start konnte nicht geändert werden.')
     if (ok) this.#einstellungenGespeichert(form, 'Auto-Start geändert.')
+  }
+
+  async punkteAnzeige(event) {
+    event.preventDefault()
+    const form = event.currentTarget
+    // Die Leiste selbst aktualisiert sich über das Mercure-Event TISCH_EINSTELLUNGEN.
+    const ok = await this.#postForm(form, 'Anzeige konnte nicht geändert werden.')
+    if (ok) this.#einstellungenGespeichert(form, 'Punkteanzeige geändert.')
   }
 
   async steuerungModus(event) {
@@ -272,25 +398,51 @@ export default class extends Controller {
 
   // ── Private Helfer ─────────────────────────────────────────────────────
 
-  #einstellungenGespeichert(form, text) {
-    toast(text)
-    const details = form.closest('details')
-    if (details) details.removeAttribute('open')
+  #regelwerkAnzeigen(form, regelwerk) {
+    for (const feld of form.querySelectorAll('input[type="checkbox"]')) {
+      if (feld.name === 'soli_erlaubt[]') {
+        feld.checked = (regelwerk.soli_erlaubt ?? []).includes(feld.value)
+      } else if (feld.name in regelwerk) {
+        feld.checked = Boolean(regelwerk[feld.name])
+      }
+    }
+    // Superschweinchen ist nur mit Schweinchen wählbar (am DDV-Tisch ohnehin gesperrt).
+    const sup = form.querySelector('input[name="superschweinchen"]')
+    const schwein = form.querySelector('input[name="schweinchen"]')
+    if (sup && schwein && !schwein.disabled) {
+      sup.disabled = !schwein.checked
+      sup.closest('label')?.querySelector('span')?.classList.toggle('opacity-40', sup.disabled)
+    }
   }
 
-  async #postForm(form, standardFehler) {
+  #einstellungenGespeichert(form, text) {
+    toast(text)
+    // Panel nur schließen, wenn dabei keine ungespeicherten Regelwerk-Häkchen verloren gehen.
+    if (this._einstellungenGeaendert) return
+    form.closest('details')?.removeAttribute('open')
+    // Kam das eigene Mercure-Event vor der Antwort, ist das Panel schon ersetzt:
+    // dann das neue schließen.
+    if (this.hasEinstellungenTarget) {
+      this.einstellungenTarget.querySelector('details')?.removeAttribute('open')
+    }
+  }
+
+  async #postForm(form, standardFehler, zusatz = {}) {
     this.fehlerHide()
+    const body = new FormData(form)
+    for (const [name, wert] of Object.entries(zusatz)) body.set(name, wert)
     try {
       const response = await fetch(form.action, {
         method: 'POST',
-        body: new FormData(form),
+        body,
       })
       const json = await response.json()
       if (!response.ok) {
         this.fehlerZeigen(json.fehler ?? standardFehler)
         return false
       }
-      return true
+      // Antwort-JSON (immer ein Objekt, also truthy) für Aufrufer, die sie brauchen.
+      return json ?? {}
     } catch {
       this.fehlerZeigen('Verbindungsfehler.')
       return false

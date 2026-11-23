@@ -1,5 +1,5 @@
 {# AJAX-Antwort der Route app_spieltisch_zustand. Der spieltisch-Controller
-   verteilt die drei Sektionen: die Tisch-Kulisse ersetzt #zustand, die Dialog-
+   verteilt die Sektionen: die Tisch-Kulisse ersetzt #zustand, Punkteleiste und Einstellungs-Panel nur mit ?punkte=1, die Dialog-
    Inhalte werden in die persistenten Overlay-Dialoge (#vorbehaltInhalt /
    #abrechnungInhalt) gespiegelt, ohne die <dialog>-Elemente selbst zu zerstören.
    data-phase steuert das Öffnen/Schließen der Dialoge. #}
@@ -7,5 +7,9 @@
 <div data-zustand-root data-phase="{{ phase }}">
     <template data-bereich="tisch">{% include 'spieltisch/_tisch_bereich.html.twig' %}</template>
     <template data-bereich="vorbehalt">{% if phase == 'VORBEHALT' %}{% include 'spieltisch/_vorbehalt_inhalt.html.twig' %}{% endif %}</template>
+    {% if punkte %}
+        <template data-bereich="punkte">{% include 'spieltisch/_punkte_anzeige.html.twig' %}</template>
+        <template data-bereich="einstellungen">{% include 'spieltisch/_tisch_einstellungen_bereich.html.twig' %}</template>
+    {% endif %}
     <template data-bereich="abrechnung">{% if letztesSpiel %}{% include 'spieltisch/_abrechnung_inhalt.html.twig' %}{% endif %}</template>
 </div>

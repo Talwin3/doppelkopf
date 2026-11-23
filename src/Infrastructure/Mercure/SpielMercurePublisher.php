@@ -77,13 +77,37 @@ final class SpielMercurePublisher
     }
 
     /**
+     * Tisch-Einstellungen geändert (Regelwerk, Punkteanzeige): Clients laden den
+     * Zustand neu. Funktioniert auch zwischen den Spielen, wenn kein Spiel läuft.
+     */
+    public function tischAktualisiert(Tisch $tisch, bool $regelwerkGeaendert = false, ?string $aenderung = null): void
+    {
+        // `regelwerk` sagt dem Client, ob ungespeicherte Regelwerk-Häkchen jetzt veraltet sind;
+        // `aenderung` ist die Kennung, die der speichernde Client mitgeschickt hat.
+        $daten = ['typ' => 'TISCH_EINSTELLUNGEN', 'regelwerk' => $regelwerkGeaendert];
+        if ($aenderung !== null) {
+            $daten['aenderung'] = $aenderung;
+        }
+        $this->senden($this->topicFuerTisch($tisch), $daten);
+    }
+
+    /**
+     * Besetzung geändert (Beitritt, Verlassen, Bots, Kontolöschung): Punkteleiste und
+     * Panel nachladen. Bewusst getrennt von TISCH_EINSTELLUNGEN, damit ein Beitritt
+     * keine ungespeicherten Regelwerk-Eingaben verwirft.
+     */
+    public function tischBesetzungGeaendert(Tisch $tisch): void
+    {
+        $this->senden($this->topicFuerTisch($tisch), ['typ' => 'TISCH_BESETZUNG']);
+    }
+
+    /**
      * Veröffentlicht eine Chat-Nachricht auf dem tischbezogenen Topic. Läuft über
      * denselben Kanal wie die Spiel-Events; Clients unterscheiden anhand von `typ`.
      */
     public function chatNachricht(ChatNachricht $nachricht): void
     {
-        $topic   = $this->topicFuerTisch($nachricht->getTisch());
-        $payload = [
+        $this->senden($this->topicFuerTisch($nachricht->getTisch()), [
             'typ'        => 'CHAT_NACHRICHT',
             'id'         => (string) $nachricht->getId(),
             'system'     => $nachricht->istSystem(),
@@ -91,29 +115,26 @@ final class SpielMercurePublisher
             'absenderId' => (string) ($nachricht->getAbsender()?->getId() ?? ''),
             'text'       => $nachricht->getText(),
             'zeit'       => $nachricht->getErstelltAm()->format('H:i'),
-        ];
-
-        try {
-            $this->hub->publish(new Update(
-                $topic,
-                json_encode($payload, JSON_THROW_ON_ERROR),
-            ));
-            $this->logger->updateVeroeffentlicht($topic, 'CHAT_NACHRICHT');
-        } catch (\Throwable $e) {
-            $this->logger->veroeffentlichungFehlgeschlagen($topic, $e->getMessage());
-        }
+        ]);
     }
 
     /** @param array<string, mixed> $extra */
     private function publizieren(Spiel $spiel, string $typ, array $extra = []): void
     {
-        $topic   = $this->topic($spiel);
-        $payload = array_merge(['typ' => $typ, 'spielId' => (string) $spiel->getId()], $extra);
+        $this->senden($this->topic($spiel), array_merge(['typ' => $typ, 'spielId' => (string) $spiel->getId()], $extra));
+    }
+
+    /**
+     * Gemeinsamer Versand: Fehler beim Hub werden nur protokolliert, damit ein
+     * ausgefallener Hub nie die Spiellogik abbricht.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function senden(string $topic, array $payload): void
+    {
+        $typ = (string) ($payload['typ'] ?? '');
         try {
-            $this->hub->publish(new Update(
-                $topic,
-                json_encode($payload, JSON_THROW_ON_ERROR),
-            ));
+            $this->hub->publish(new Update($topic, json_encode($payload, JSON_THROW_ON_ERROR)));
             $this->logger->updateVeroeffentlicht($topic, $typ);
         } catch (\Throwable $e) {
             $this->logger->veroeffentlichungFehlgeschlagen($topic, $e->getMessage());

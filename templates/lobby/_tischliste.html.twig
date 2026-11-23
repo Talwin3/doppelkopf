@@ -1,3 +1,4 @@
+{% import '_kategorie_macros.html.twig' as kategorie %}
 {% if tische is empty %}
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-12 text-center text-gray-400 dark:text-gray-500">
         <p class="text-lg">Noch keine offenen Tische.</p>
@@ -25,6 +26,8 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-semibold text-gray-900 dark:text-gray-100 truncate">{{ tisch.name }}</span>
+
+                        {{ kategorie.abzeichen(tisch.wertungsKategorie, tisch.ddvTisch) }}
 
                         {% if tisch.zugangsmodus.value == 'PRIVAT' %}
                             <span class="inline-flex items-center rounded-full bg-yellow-50 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-300 ring-1 ring-inset ring-yellow-600/20">

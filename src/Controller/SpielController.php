@@ -40,6 +40,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_USER')]
 class SpielController extends AbstractController
 {
+    /** So lange nach Spielende darf ein Mitspieler, der den Tisch verlassen hat, den Zustand noch abrufen. */
+    private const ABRECHNUNG_SICHTBAR_MIN = 15;
+
     public function __construct(
         private readonly SpielRepository $spielRepo,
         private readonly SpielTeilnehmerRepository $teilnehmerRepo,
@@ -57,6 +60,7 @@ class SpielController extends AbstractController
         private readonly \App\Application\Doppelkopf\ChatService $chatService,
         private readonly \App\Application\Doppelkopf\AnwesenheitService $anwesenheit,
         private readonly \App\Application\ChatPhrasenService $chatPhrasenService,
+        private readonly \App\Application\Doppelkopf\TischPunkteService $punkteService,
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')]
         private readonly string $mercurePublicUrl,
     ) {}
@@ -67,13 +71,7 @@ class SpielController extends AbstractController
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
-        $istSpieler = false;
-        foreach ($tisch->getAktiveSpieler() as $ts) {
-            if ($ts->getUser()?->getId() == $user->getId()) {
-                $istSpieler = true;
-                break;
-            }
-        }
+        $istSpieler = $this->meinTischSpieler($tisch, $user) !== null;
 
         if (!$istSpieler) {
             $this->addFlash('error', 'Du sitzt nicht an diesem Tisch.');
@@ -116,19 +114,44 @@ class SpielController extends AbstractController
             'chatPhrasen'            => $this->chatPhrasenService->fuerUser($user),
             'meinUserId'             => (string) $user->getId(),
             'botStaerken'            => \App\Enum\BotStaerke::verfuegbare(),
+            'punkte'                 => $this->punkteService->fuerTisch($tisch),
+            'meinTischSpieler'       => $this->meinTischSpieler($tisch, $user),
         ]);
     }
 
     #[Route('/{id}/zustand', name: 'app_spieltisch_zustand', methods: ['GET'])]
-    public function zustand(Tisch $tisch): Response
+    public function zustand(Tisch $tisch, Request $request): Response
     {
         /** @var \App\Entity\User $user */
         $user  = $this->getUser();
-        $spiel = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+
+        $spiel        = $this->spielRepo->findLaufendesSpielFuerTisch($tisch);
+        $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
+
+        // Nur wer zum Tisch gehört, sieht Zustand und Punkte: sitzend oder wartend
+        // (Rotation) oder Mitspieler des laufenden bzw. gerade beendeten Spiels. Letzteres,
+        // weil „Nach Spiel verlassen“ und Platzverlust den Tischplatz schon beim Spielende
+        // auflösen – die Abrechnung soll der Spieler trotzdem noch sehen, aber nicht ewig.
+        $gehoertDazu = false;
+        foreach ($tisch->getSpieler() as $ts) {   // Collection wird fürs Rendern ohnehin geladen
+            if ($ts->getUser()?->getId()->equals($user->getId())) {
+                $gehoertDazu = true;
+                break;
+            }
+        }
+        if (!$gehoertDazu && $spiel !== null) {
+            $gehoertDazu = $this->teilnehmerRepo->findBySpielAndUser($spiel, $user) !== null;
+        }
+        if (!$gehoertDazu && $letztesSpiel !== null
+            && $letztesSpiel->getBeendetAm() > new \DateTimeImmutable('-' . self::ABRECHNUNG_SICHTBAR_MIN . ' minutes')) {
+            $gehoertDazu = $this->teilnehmerRepo->findBySpielAndUser($letztesSpiel, $user) !== null;
+        }
+        if (!$gehoertDazu) {
+            return new Response('', Response::HTTP_FORBIDDEN);
+        }
 
         [$teilnehmer, $hand, $ansagen, $verfuegbareAnsagen, $vorbehaltOptionen, $armutTauschKarten, $vorbehaltSortierungen] = $this->spielDaten($spiel, $user);
 
-        $letztesSpiel = $this->spielRepo->findLetztesBeendetesSpielFuerTisch($tisch);
         $schweinchen  = $this->schweinchenStatus($spiel);
 
         return $this->render('spieltisch/_spielzustand.html.twig', [
@@ -146,7 +169,25 @@ class SpielController extends AbstractController
             'superschweinchenAktiv'   => $schweinchen['superschweinchen'],
             'gewonneneStiche'        => $this->gewonneneStiche($spiel),
             'augenAnzeige'           => (bool) $tisch->getRegelEinstellung('augen_mouseover', true),
+            // Punkte (und das Einstellungs-Panel) ändern sich nur bei Spielende, Besetzung
+            // oder Einstellungen. Der Client fordert sie dann mit ?punkte=1 an; bei
+            // Kartenzügen bleibt die Abfrage aus.
+            'punkte'                 => $request->query->getBoolean('punkte') ? $this->punkteService->fuerTisch($tisch) : null,
+            'botStaerken'            => \App\Enum\BotStaerke::verfuegbare(),
+            'meinTischSpieler'       => $this->meinTischSpieler($tisch, $user),
         ]);
+    }
+
+    /** Eigener Sitzplatz am Tisch (nicht Warteschlange), sonst null. */
+    private function meinTischSpieler(Tisch $tisch, \App\Entity\User $user): ?\App\Entity\TischSpieler
+    {
+        foreach ($tisch->getAktiveSpieler() as $ts) {
+            if ($ts->getUser()?->getId()->equals($user->getId())) {
+                return $ts;
+            }
+        }
+
+        return null;
     }
 
     #[Route('/{id}/karte-spielen', name: 'app_karte_spielen', methods: ['POST'])]
@@ -355,9 +396,15 @@ class SpielController extends AbstractController
             $regelwerk['superschweinchen'] = false;
         }
 
-        $this->beitrittsService->regelwerkAktualisieren($tisch, $regelwerk, $user);
+        // Kennung dieser Speicherung: kommt im Mercure-Event zurück, damit der eigene Client
+        // seine Änderung erkennt und nicht als fremde behandelt.
+        $aenderung = (string) $request->request->get('aenderung', '');
+        $aenderung = preg_match('/^[a-z0-9]{1,32}$/', $aenderung) === 1 ? $aenderung : null;
 
-        return new JsonResponse(['ok' => true, 'regelwerk' => $regelwerk]);
+        $this->beitrittsService->regelwerkAktualisieren($tisch, $regelwerk, $user, $aenderung);
+
+        // Tatsächlich gespeicherte Regeln (am DDV-Tisch weicht das von der Eingabe ab).
+        return new JsonResponse(['ok' => true, 'regelwerk' => $tisch->getRegelEinstellungen()]);
     }
 
     #[Route('/{id}/nach-spiel-verlassen', name: 'app_nach_spiel_verlassen', methods: ['POST'])]
@@ -395,6 +442,27 @@ class SpielController extends AbstractController
         } catch (\DomainException $e) {
             return new JsonResponse(['fehler' => $e->getMessage()], Response::HTTP_FORBIDDEN);
         }
+    }
+
+    #[Route('/{id}/punkte-anzeige', name: 'app_punkte_anzeige', methods: ['POST'])]
+    public function punkteAnzeige(Tisch $tisch, Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('punkte_anzeige_' . $tisch->getId(), $request->request->get('_token'))) {
+            return new JsonResponse(['fehler' => 'Ungültige Anfrage.'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->isGranted(TischAktionVoter::VERWALTEN, $tisch)) {
+            return new JsonResponse(['fehler' => 'Du darfst die Einstellungen dieses Tisches nicht ändern.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $anzeige = \App\Enum\TischPunkteAnzeige::tryFrom((string) $request->request->get('anzeige', ''));
+        if ($anzeige === null) {
+            return new JsonResponse(['fehler' => 'Unbekannte Anzeige.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->beitrittsService->punkteAnzeigeSetzen($tisch, $anzeige);
+
+        return new JsonResponse(['ok' => true, 'anzeige' => $anzeige->value]);
     }
 
     #[Route('/{id}/auto-start-toggle', name: 'app_auto_start_toggle', methods: ['POST'])]

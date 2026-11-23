@@ -131,15 +131,14 @@ final class SpielAbschlussService
 
         $this->protokolliereErgebnis($spiel, $wertung);
 
-        $platzUmgewidmet = $this->abwesendeDurchBotsErsetzen($spiel);
+        $this->abwesendeDurchBotsErsetzen($spiel);
         $this->nachSpielAbrechnungDurchfuehren($spiel->getTisch());
 
-        // Die Clients am Tisch sollen den Ersatz-Bot schon in der Pause zwischen den
-        // Spielen sehen, nicht erst beim Neustart. Erst nach der Abrechnung senden, damit
-        // Rotation und Nachrücken aus der Warteschlange schon eingerechnet sind.
-        if ($platzUmgewidmet) {
-            $this->mercurePublisher->tischZustandAktualisiert($spiel);
-        }
+        // Die Clients am Tisch sollen die neue Besetzung (Ersatz-Bot, Rotation, Nachrücken
+        // aus der Warteschlange) und die Punkteleiste schon in der Pause zwischen den
+        // Spielen sehen. SPIEL_BEENDET ging vor der Abrechnung raus, daher hier immer
+        // noch einmal nachziehen.
+        $this->mercurePublisher->tischZustandAktualisiert($spiel);
     }
 
     /**
@@ -156,11 +155,11 @@ final class SpielAbschlussService
      * Wer ohnehin nach dem Spiel gehen wollte, wird übersprungen – den räumt
      * {@see vorgemerkteEntfernen()} ab, und ein Wartender kann nachrücken.
      */
-    private function abwesendeDurchBotsErsetzen(Spiel $spiel): bool
+    private function abwesendeDurchBotsErsetzen(Spiel $spiel): void
     {
         $tisch = $spiel->getTisch();
         if ($tisch === null) {
-            return false;
+            return;
         }
 
         $abwesendeUserIds = [];
@@ -171,12 +170,10 @@ final class SpielAbschlussService
             }
         }
         if ($abwesendeUserIds === []) {
-            return false;
+            return;
         }
 
         $vergebeneNamen = $tisch->vergebeneBotNamen();
-
-        $ersetzt = false;
         foreach ($tisch->getAktiveSpieler()->toArray() as $ts) {
             $user = $ts->getUser();
             if ($ts->isIstBot() || $user === null || $ts->isMoechteNachSpielVerlassen()
@@ -202,12 +199,9 @@ final class SpielAbschlussService
                 $menschName,
                 $ts->getAnzeigeName(),
             ));
-            $ersetzt = true;
         }
 
         $this->em->flush();
-
-        return $ersetzt;
     }
 
     /**

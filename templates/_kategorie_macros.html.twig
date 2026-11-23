@@ -1,0 +1,33 @@
+{#
+  Abzeichen für die Wertungskategorie eines Tisches (DDV / Ohne Neuner / Sonderregeln).
+  stil: 'hell' (Lobby, hell/dunkel) oder 'tisch' (grüner Spieltisch).
+  Ein DDV-Tisch mit gesperrten Regeln bekommt ein Schloss.
+#}
+{% macro abzeichen(kategorie, ddvTisch = false, stil = 'hell') %}
+    {% set farben = {
+        hell: {
+            DDV:          'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-300',
+            OHNE_NEUNER:  'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-300',
+            SONDERREGELN: 'bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300',
+        },
+        tisch: {
+            DDV:          'bg-blue-900/60 text-blue-200 ring-blue-400/40',
+            OHNE_NEUNER:  'bg-purple-900/60 text-purple-200 ring-purple-400/40',
+            SONDERREGELN: 'bg-amber-900/60 text-amber-200 ring-amber-400/40',
+        },
+    } %}
+    {% set titel = {
+        DDV:          'Gewertet als DDV: Regeln nach den DDV-Turnierspielregeln',
+        OHNE_NEUNER:  'Gewertet als Ohne Neuner',
+        SONDERREGELN: 'Gewertet als Sonderregeln: mindestens eine Regel weicht vom DDV ab',
+    } %}
+    <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset {{ farben[stil][kategorie.value] }}"
+          title="{{ titel[kategorie.value] }}{{ ddvTisch ? ' – DDV-Tisch, Regeln gesperrt' : '' }}">
+        {% if ddvTisch %}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-label="Regeln gesperrt">
+                <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+            </svg>
+        {% endif %}
+        {{ kategorie.label }}
+    </span>
+{% endmacro %}

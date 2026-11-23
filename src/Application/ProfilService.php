@@ -8,6 +8,7 @@ use App\Entity\SpielTeilnehmer;
 use App\Entity\Tisch;
 use App\Entity\TischSpieler;
 use App\Entity\User;
+use App\Infrastructure\Mercure\SpielMercurePublisher;
 use App\Repository\TischSpielerRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -23,6 +24,7 @@ final class ProfilService
         private readonly UserRepository $userRepo,
         private readonly TischSpielerRepository $tischSpielerRepo,
         private readonly ChatPhrasenService $chatPhrasenService,
+        private readonly SpielMercurePublisher $spielPublisher,
     ) {}
 
     /**
@@ -198,5 +200,10 @@ final class ProfilService
         $user->setProfilOeffentlich(false);
 
         $this->em->flush();
+
+        // Die anderen an den betroffenen Tischen sollen den Abgang gleich sehen.
+        foreach ($betroffeneTische as $tisch) {
+            $this->spielPublisher->tischBesetzungGeaendert($tisch);
+        }
     }
 }
